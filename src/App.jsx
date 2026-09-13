@@ -377,10 +377,7 @@ function savePermissions() {
       permissions: selectedPermissions,
     });
   }
-
-  setShowPermissions(false);
-  setSelectedStaff(null);
-}function savePermissions() {
+function savePermissions() {
   if (!selectedStaff) return;
 
   const updatedStaff = staff.map((person) =>
@@ -403,6 +400,7 @@ function savePermissions() {
 
   setShowPermissions(false);
   setSelectedStaff(null);
+}
 }
   const accessiblePages = [
     "Dashboard",
@@ -792,7 +790,8 @@ function savePermissions() {
   >
     Save Permissions
   </button>
-</div>     
+</div>
+    
             </div>
           </div>
         </div>
