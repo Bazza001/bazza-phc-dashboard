@@ -244,7 +244,10 @@ const defaultPermissions = {
 };
 
 function App() {
-  const [staff, setStaff] = useState(initialStaff);
+  function savePermissions() {
+  if (!selectedStaff) return;
+
+  const updatedStaff = staff.map((person) =>
   const [loggedIn, setLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
 
@@ -329,6 +332,19 @@ function savePermissions() {
         }
       : person
   );
+
+  setStaff(updatedStaff);
+
+  if (currentUser && currentUser.id === selectedStaff.id) {
+    setCurrentUser({
+      ...currentUser,
+      permissions: selectedPermissions,
+    });
+  }
+
+  setShowPermissions(false);
+  setSelectedStaff(null);
+}
 
   setStaff(updatedStaff);
 
@@ -760,18 +776,23 @@ function savePermissions() {
             </div>
 
             <div className="modal-buttons">
-              <button
-                className="secondary"
-                onClick={() =>
-                  setShowPermissions(false)
-                }
-              >
-                Cancel <button
-  className="primary"
-  onClick={savePermissions}
->
-  Save Permissions
-</button>     
+  <button
+    className="secondary"
+    onClick={() => {
+      setShowPermissions(false);
+      setSelectedStaff(null);
+    }}
+  >
+    Cancel
+  </button>
+
+  <button
+    className="primary"
+    onClick={savePermissions}
+  >
+    Save Permissions
+  </button>
+</div>     
             </div>
           </div>
         </div>
