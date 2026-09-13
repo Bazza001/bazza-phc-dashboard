@@ -244,7 +244,7 @@ const defaultPermissions = {
 };
 
 function App() {
-  const [staff] = useState(initialStaff);
+  const [staff, setStaff] = useState(initialStaff);
   const [loggedIn, setLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
 
@@ -318,7 +318,76 @@ function App() {
         : [...old, permission]
     );
   }
+function savePermissions() {
+  if (!selectedStaff) return;
 
+  const updatedStaff = staff.map((person) =>
+    person.id === selectedStaff.id
+      ? {
+          ...person,
+          permissions: selectedPermissions,
+        }
+      : person
+  );
+
+  setStaff(updatedStaff);
+
+  if (currentUser && currentUser.id === selectedStaff.id) {
+    setCurrentUser({
+      ...currentUser,
+      permissions: selectedPermissions,
+    });
+  }
+
+  setShowPermissions(false);
+  setSelectedStaff(null);
+}function savePermissions() {
+  if (!selectedStaff) return;
+
+  const updatedStaff = staff.map((person) =>
+    person.id === selectedStaff.id
+      ? {
+          ...person,
+          permissions: selectedPermissions,
+        }
+      : person
+  );
+
+  setStaff(updatedStaff);
+
+  if (currentUser && currentUser.id === selectedStaff.id) {
+    setCurrentUser({
+      ...currentUser,
+      permissions: selectedPermissions,
+    });
+  }
+
+  setShowPermissions(false);
+  setSelectedStaff(null);
+}function savePermissions() {
+  if (!selectedStaff) return;
+
+  const updatedStaff = staff.map((person) =>
+    person.id === selectedStaff.id
+      ? {
+          ...person,
+          permissions: selectedPermissions,
+        }
+      : person
+  );
+
+  setStaff(updatedStaff);
+
+  if (currentUser && currentUser.id === selectedStaff.id) {
+    setCurrentUser({
+      ...currentUser,
+      permissions: selectedPermissions,
+    });
+  }
+
+  setShowPermissions(false);
+  setSelectedStaff(null);
+}
   const accessiblePages = [
     "Dashboard",
     ...(currentUser?.role === "Super Admin"
@@ -697,17 +766,12 @@ function App() {
                   setShowPermissions(false)
                 }
               >
-                Cancel
-              </button>
-
-              <button
-                className="primary"
-                onClick={() =>
-                  setShowPermissions(false)
-                }
-              >
-                Save Permissions
-              </button>
+                Cancel <button
+  className="primary"
+  onClick={savePermissions}
+>
+  Save Permissions
+</button>     
             </div>
           </div>
         </div>
