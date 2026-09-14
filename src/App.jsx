@@ -255,9 +255,21 @@ function App() {
 
   const [mobileMenu, setMobileMenu] = useState(false);
 
+  const [staff, setStaff] = useState(initialStaff);
   const [search, setSearch] = useState("");
-
   const [showPermissions, setShowPermissions] = useState(false);
+  const [showStaffModal, setShowStaffModal] = useState(false);
+
+const [editingStaff, setEditingStaff] = useState(null);
+
+const [staffForm, setStaffForm] = useState({
+  fullName: "",
+  staffId: "",
+  username: "",
+  password: "",
+  department: "",
+  role: "",
+});
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [selectedPermissions, setSelectedPermissions] = useState([]);
 
@@ -341,6 +353,94 @@ function savePermissions() {
   setShowPermissions(false);
   setSelectedStaff(null);
 }
+}
+function openAddStaff() {
+  setEditingStaff(null);
+
+  setStaffForm({
+    fullName: "",
+    staffId: "",
+    username: "",
+    password: "",
+    department: "",
+    role: "",
+  });
+
+  setShowStaffModal(true);
+}
+
+function openEditStaff(person) {
+  setEditingStaff(person);
+
+  setStaffForm({
+    fullName: person.fullName || "",
+    staffId: person.staffId || "",
+    username: person.username || "",
+    password: "",
+    department: person.department || "",
+    role: person.role || "",
+  });
+
+  setShowStaffModal(true);
+}
+
+function saveStaff() {
+  if (
+    !staffForm.fullName.trim() ||
+    !staffForm.staffId.trim() ||
+    !staffForm.username.trim() ||
+    !staffForm.department ||
+    !staffForm.role
+  ) {
+    alert("Please fill all required fields.");
+    return;
+  }
+
+  if (editingStaff) {
+    const updatedStaff = staff.map((person) =>
+      person.id === editingStaff.id
+        ? {
+            ...person,
+            fullName: staffForm.fullName,
+            staffId: staffForm.staffId,
+            username: staffForm.username,
+            department: staffForm.department,
+            role: staffForm.role,
+            ...(staffForm.password
+              ? { password: staffForm.password }
+              : {}),
+          }
+        : person
+    );
+
+    setStaff(updatedStaff);
+  } else {
+    const newStaff = {
+      id: Date.now(),
+      fullName: staffForm.fullName,
+      staffId: staffForm.staffId,
+      username: staffForm.username,
+      password: staffForm.password || "123456",
+      department: staffForm.department,
+      role: staffForm.role,
+      status: "Active",
+      permissions: [],
+    };
+
+    setStaff([...staff, newStaff]);
+  }
+
+  setShowStaffModal(false);
+  setEditingStaff(null);
+
+  setStaffForm({
+    fullName: "",
+    staffId: "",
+    username: "",
+    password: "",
+    department: "",
+    role: "",
+  });
 }
   const accessiblePages = [
     "Dashboard",
@@ -759,12 +859,179 @@ function StaffManagement({
           <h1>Staff & Roles</h1>
           <p>
             Manage staff access and permissions.
-          </p>
+          </p>{showStaffModal && (
+  <div className="modal-overlay">
+    <div className="modal">
+      <div className="modal-header">
+        <h2>
+          {editingStaff ? "Edit Staff" : "Add New Staff"}
+        </h2>
+
+        <button
+          className="close-button"
+          onClick={() => {
+            setShowStaffModal(false);
+            setEditingStaff(null);
+          }}
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="form-grid">
+
+        <div className="form-group">
+          <label>Staff Full Name *</label>
+
+          <input
+            type="text"
+            value={staffForm.fullName}
+            onChange={(e) =>
+              setStaffForm({
+                ...staffForm,
+                fullName: e.target.value,
+              })
+            }
+            placeholder="Enter full name"
+          />
         </div>
 
-        <button className="primary">
-          + Add New Staff
+        <div className="form-group">
+          <label>Staff ID *</label>
+
+          <input
+            type="text"
+            value={staffForm.staffId}
+            onChange={(e) =>
+              setStaffForm({
+                ...staffForm,
+                staffId: e.target.value,
+              })
+            }
+            placeholder="e.g. BZ005"
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Username *</label>
+
+          <input
+            type="text"
+            value={staffForm.username}
+            onChange={(e) =>
+              setStaffForm({
+                ...staffForm,
+                username: e.target.value,
+              })
+            }
+            placeholder="Enter username"
+          />
+        </div>
+
+        <div className="form-group">
+          <label>
+            {editingStaff
+              ? "New Password (optional)"
+              : "Initial Password"}
+          </label>
+
+          <input
+            type="password"
+            value={staffForm.password}
+            onChange={(e) =>
+              setStaffForm({
+                ...staffForm,
+                password: e.target.value,
+              })
+            }
+            placeholder={
+              editingStaff
+                ? "Leave blank to keep current password"
+                : "Enter password"
+            }
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Main Department *</label>
+
+          <select
+            value={staffForm.department}
+            onChange={(e) =>
+              setStaffForm({
+                ...staffForm,
+                department: e.target.value,
+              })
+            }
+          >
+            <option value="">Select Department</option>
+
+            {departments.map((department) => (
+              <option
+                key={department}
+                value={department}
+              >
+                {department}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label>Role *</label>
+
+          <select
+            value={staffForm.role}
+            onChange={(e) =>
+              setStaffForm({
+                ...staffForm,
+                role: e.target.value,
+              })
+            }
+          >
+            <option value="">Select Role</option>
+
+            {roles.map((role) => (
+              <option
+                key={role}
+                value={role}
+              >
+                {role}
+              </option>
+            ))}
+          </select>
+        </div>
+
+      </div>
+
+      <div className="modal-buttons">
+
+        <button
+          className="secondary"
+          onClick={() => {
+            setShowStaffModal(false);
+            setEditingStaff(null);
+          }}
+        >
+          Cancel
         </button>
+
+        <button
+          className="primary"
+          onClick={saveStaff}
+        >
+          {editingStaff ? "Update Staff" : "Save Staff"}
+        </button>
+
+      </div>
+    </div>
+  </div>
+)}
+        </div>
+
+        <button className="primary" onClick={openAddStaff}>
+  + Add New Staff
+</button>
       </div>
 
       <div className="card">
