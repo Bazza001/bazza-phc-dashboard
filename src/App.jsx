@@ -971,7 +971,7 @@ function StaffManagement({
           note="All staff accounts"
         />
 
-        <StatCard
+      const allPermissions = [const allPermissions = [  <StatCard
           title="Active Staff"
           value={active}
           note="Enabled accounts"
@@ -1184,7 +1184,198 @@ function getIcon(page) {
 
   return icons[page] || "•";
 }
+function Attendance({ staff, currentUser }) {
+  const [attendance, setAttendance] = useState([]);
 
+  const today = new Date().toISOString().split("T")[0];
+
+  const todayRecord = attendance.find(
+    (item) =>
+      item.staffId === currentUser.staffId &&
+      item.date === today
+  );
+
+  function signIn() {
+    if (todayRecord?.signIn) {
+      alert("Ka riga ka yi Sign In yau.");
+      return;
+    }
+
+    const now = new Date();
+
+    const record = {
+      id: Date.now(),
+      staffId: currentUser.staffId,
+      staffName: currentUser.name,
+      department: currentUser.department,
+      role: currentUser.role,
+      date: today,
+      shift: "Morning",
+      signIn: now.toLocaleTimeString(),
+      signOut: "",
+      status: "Present",
+    };
+
+    setAttendance((previous) => [
+      ...previous,
+      record,
+    ]);
+  }
+
+  function signOut() {
+    if (!todayRecord?.signIn) {
+      alert("Sai ka yi Sign In kafin Sign Out.");
+      return;
+    }
+
+    if (todayRecord.signOut) {
+      alert("Ka riga ka yi Sign Out yau.");
+      return;
+    }
+
+    setAttendance((previous) =>
+      previous.map((item) =>
+        item.id === todayRecord.id
+          ? {
+              ...item,
+              signOut: new Date().toLocaleTimeString(),
+            }
+          : item
+      )
+    );
+  }
+
+  const myAttendance = attendance.filter(
+    (item) => item.staffId === currentUser.staffId
+  );
+
+  return (
+    <div>
+      <div className="page-head">
+        <div>
+          <h1>Staff Attendance</h1>
+
+          <p>
+            Sign In, Sign Out da attendance history.
+          </p>
+        </div>
+
+        <div className="status-pill">
+          {todayRecord?.signOut
+            ? "Signed Out"
+            : todayRecord?.signIn
+            ? "Signed In"
+            : "Not Signed In"}
+        </div>
+      </div>
+
+      <div className="stats-grid">
+        <StatCard
+          title="Today"
+          value={todayRecord ? "Present" : "—"}
+          note="Attendance status"
+        />
+
+        <StatCard
+          title="Sign In"
+          value={todayRecord?.signIn || "—"}
+          note="Today's sign-in time"
+        />
+
+        <StatCard
+          title="Sign Out"
+          value={todayRecord?.signOut || "—"}
+          note="Today's sign-out time"
+        />
+
+        <StatCard
+          title="Total Records"
+          value={myAttendance.length}
+          note="Your attendance records"
+        />
+      </div>
+
+      <div className="panel">
+        <div className="panel-heading">
+          <div>
+            <h3>Today's Attendance</h3>
+
+            <p>
+              {currentUser.name} ·{" "}
+              {currentUser.department}
+            </p>
+          </div>
+
+          <div className="attendance-actions">
+            <button
+              className="primary"
+              onClick={signIn}
+              disabled={Boolean(todayRecord?.signIn)}
+            >
+              ✓ Sign In
+            </button>
+
+            <button
+              className="secondary"
+              onClick={signOut}
+              disabled={
+                !todayRecord?.signIn ||
+                Boolean(todayRecord?.signOut)
+              }
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Staff</th>
+                <th>Department</th>
+                <th>Shift</th>
+                <th>Sign In</th>
+                <th>Sign Out</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {myAttendance.map((item) => (
+                <tr key={item.id}>
+                  <td>{item.date}</td>
+                  <td>{item.staffName}</td>
+                  <td>{item.department}</td>
+                  <td>{item.shift}</td>
+                  <td>{item.signIn || "—"}</td>
+                  <td>{item.signOut || "—"}</td>
+                  <td>
+                    <span className="status active-status">
+                      {item.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+
+              {myAttendance.length === 0 && (
+                <tr>
+                  <td
+                    colSpan="7"
+                    className="empty-cell"
+                  >
+                    Babu attendance record tukuna.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
 const styles = `
 * {
   box-sizing: border-box;
