@@ -727,11 +727,20 @@ function saveStaff() {
           {activePage === "Staff & Roles" &&
             currentUser.role === "Super Admin" && (
               <StaffManagement
-                staff={staff}
-                search={search}
-                setSearch={setSearch}
-                openPermissions={openPermissions}
-              />
+  staff={staff}
+  search={search}
+  setSearch={setSearch}
+  openPermissions={openPermissions}
+  openAddStaff={openAddStaff}
+  openEditStaff={openEditStaff}
+  showStaffModal={showStaffModal}
+  editingStaff={editingStaff}
+  staffForm={staffForm}
+  setStaffForm={setStaffForm}
+  setShowStaffModal={setShowStaffModal}
+  setEditingStaff={setEditingStaff}
+  saveStaff={saveStaff}
+/>
             )}
 
           {activePage !== "Dashboard" &&
