@@ -341,62 +341,6 @@ function savePermissions() {
   setShowPermissions(false);
   setSelectedStaff(null);
 }
-
-  setStaff(updatedStaff);
-
-  if (currentUser && currentUser.id === selectedStaff.id) {
-    setCurrentUser({
-      ...currentUser,
-      permissions: selectedPermissions,
-    });
-  }
-
-  setShowPermissions(false);
-  setSelectedStaff(null);
-}function savePermissions() {
-  if (!selectedStaff) return;
-
-  const updatedStaff = staff.map((person) =>
-    person.id === selectedStaff.id
-      ? {
-          ...person,
-          permissions: selectedPermissions,
-        }
-      : person
-  );
-
-  setStaff(updatedStaff);
-
-  if (currentUser && currentUser.id === selectedStaff.id) {
-    setCurrentUser({
-      ...currentUser,
-      permissions: selectedPermissions,
-    });
-  }
-function savePermissions() {
-  if (!selectedStaff) return;
-
-  const updatedStaff = staff.map((person) =>
-    person.id === selectedStaff.id
-      ? {
-          ...person,
-          permissions: selectedPermissions,
-        }
-      : person
-  );
-
-  setStaff(updatedStaff);
-
-  if (currentUser && currentUser.id === selectedStaff.id) {
-    setCurrentUser({
-      ...currentUser,
-      permissions: selectedPermissions,
-    });
-  }
-
-  setShowPermissions(false);
-  setSelectedStaff(null);
-}
 }
   const accessiblePages = [
     "Dashboard",
