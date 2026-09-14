@@ -353,7 +353,7 @@ function savePermissions() {
   setShowPermissions(false);
   setSelectedStaff(null);
 }
-}
+
 function openAddStaff() {
   setEditingStaff(null);
 
