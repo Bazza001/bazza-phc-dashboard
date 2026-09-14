@@ -845,6 +845,15 @@ function StaffManagement({
   search,
   setSearch,
   openPermissions,
+  openAddStaff,
+  openEditStaff,
+  showStaffModal,
+  editingStaff,
+  staffForm,
+  setStaffForm,
+  setShowStaffModal,
+  setEditingStaff,
+  saveStaff,
 }) {
   const filtered = staff.filter((person) =>
     `${person.name} ${person.staffId} ${person.department} ${person.role}`
@@ -1031,6 +1040,19 @@ function StaffManagement({
 
         <button className="primary" onClick={openAddStaff}>
   + Add New Staff
+</button>
+        
+  className="action"
+  onClick={() => openEditStaff(person)}
+>
+  ✏️ Edit
+</button>
+
+<button
+  className="action"
+  onClick={() => openPermissions(person)}
+>
+  🔐 Permissions
 </button>
       </div>
 
