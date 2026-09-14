@@ -244,10 +244,6 @@ const defaultPermissions = {
 };
 
 function App() {
-  function savePermissions() {
-  if (!selectedStaff) return;
-
-  const updatedStaff = staff.map((person) =>
   const [loggedIn, setLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
 
