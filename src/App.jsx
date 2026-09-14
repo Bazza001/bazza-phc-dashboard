@@ -401,7 +401,7 @@ function saveStaff() {
       person.id === editingStaff.id
         ? {
             ...person,
-            fullName: staffForm.fullName,
+            name: staffForm.fullName,
             staffId: staffForm.staffId,
             username: staffForm.username,
             department: staffForm.department,
@@ -417,7 +417,7 @@ function saveStaff() {
   } else {
     const newStaff = {
       id: Date.now(),
-      fullName: staffForm.fullName,
+      name: staffForm.fullName,
       staffId: staffForm.staffId,
       username: staffForm.username,
       password: staffForm.password || "123456",
