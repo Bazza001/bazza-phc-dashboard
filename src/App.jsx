@@ -533,7 +533,12 @@ function App() {
                 currentUser={currentUser}
               />
             )}
-
+{activePage === "Attendance" && (
+  <Attendance
+    staff={staff}
+    currentUser={currentUser}
+  />
+)}
             {activePage === "Staff & Roles" &&
               currentUser.role === "Super Admin" && (
                 <StaffManagement
