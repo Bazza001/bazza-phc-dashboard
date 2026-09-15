@@ -1199,7 +1199,217 @@ function Attendance({ staff, currentUser }) {
       item.staffId === currentUser.staffId &&
       item.date === today
   );
+function Roster({ staff }) {
+  const [selectedMonth, setSelectedMonth] = useState(
+    new Date().toISOString().slice(0, 7)
+  );
 
+  const [roster, setRoster] = useState([]);
+
+  const shifts = ["Morning", "Evening", "Night"];
+
+  function getDaysInMonth(month) {
+    const [year, monthNumber] = month.split("-").map(Number);
+
+    return new Date(year, monthNumber, 0).getDate();
+  }
+
+  function generateRoster() {
+    const days = getDaysInMonth(selectedMonth);
+
+    const generated = [];
+
+    staff.forEach((person, staffIndex) => {
+      for (let day = 1; day <= days; day++) {
+        const date = `${selectedMonth}-${String(day).padStart(
+          2,
+          "0"
+        )}`;
+
+        /*
+         * Basic automatic shift rotation.
+         * Later we will connect this to:
+         * - Married staff
+         * - HOD
+         * - Student
+         * - Volunteer
+         * - 5 ON / 2 OFF
+         * - 5 ON / 3 OFF
+         * - 5 ON / 4 OFF
+         */
+
+        const shiftIndex =
+          (staffIndex + day - 1) % shifts.length;
+
+        const shift = shifts[shiftIndex];
+
+        generated.push({
+          id: `${person.id}-${date}`,
+          date,
+          staffId: person.staffId,
+          staffName: person.name,
+          department: person.department,
+          role: person.role,
+          shift,
+          status: "ON DUTY",
+        });
+      }
+    });
+
+    setRoster(generated);
+  }
+
+  function clearRoster() {
+    setRoster([]);
+  }
+
+  return (
+    <div>
+      <div className="page-head">
+        <div>
+          <h1>Staff Roster</h1>
+
+          <p>
+            Monthly staff duty roster and department assignments.
+          </p>
+        </div>
+
+        <div className="status-pill">
+          {roster.length > 0
+            ? "Roster Generated"
+            : "Not Generated"}
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-heading">
+          <div>
+            <h3>Generate Monthly Roster</h3>
+
+            <p>
+              Select month sannan system ya samar da roster.
+            </p>
+          </div>
+        </div>
+
+        <div className="form-grid">
+          <div className="field">
+            <label>Select Month</label>
+
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) =>
+                setSelectedMonth(e.target.value)
+              }
+            />
+          </div>
+        </div>
+
+        <div className="modal-buttons">
+          <button
+            className="primary"
+            onClick={generateRoster}
+          >
+            Generate Roster
+          </button>
+
+          <button
+            className="secondary"
+            onClick={clearRoster}
+          >
+            Clear Roster
+          </button>
+        </div>
+      </div>
+
+      <div className="stats-grid">
+        <StatCard
+          title="Staff"
+          value={staff.length}
+          note="Staff available"
+        />
+
+        <StatCard
+          title="Days"
+          value={
+            selectedMonth
+              ? getDaysInMonth(selectedMonth)
+              : 0
+          }
+          note="Days in selected month"
+        />
+
+        <StatCard
+          title="Roster Entries"
+          value={roster.length}
+          note="Generated assignments"
+        />
+
+        <StatCard
+          title="Shifts"
+          value={3}
+          note="Morning / Evening / Night"
+        />
+      </div>
+
+      <div className="panel">
+        <div className="panel-heading">
+          <div>
+            <h3>Monthly Roster</h3>
+
+            <p>
+              {selectedMonth}
+            </p>
+          </div>
+        </div>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Staff</th>
+                <th>Department</th>
+                <th>Role</th>
+                <th>Shift</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {roster.map((item) => (
+                <tr key={item.id}>
+                  <td>{item.date}</td>
+                  <td>{item.staffName}</td>
+                  <td>{item.department}</td>
+                  <td>{item.role}</td>
+                  <td>{item.shift}</td>
+                  <td>
+                    <span className="status active-status">
+                      {item.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+
+              {roster.length === 0 && (
+                <tr>
+                  <td
+                    colSpan="6"
+                    className="empty-cell"
+                  >
+                    Babu roster da aka generate tukuna.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
   function signIn() {
     if (todayRecord?.signIn) {
       alert("Ka riga ka yi Sign In yau.");
