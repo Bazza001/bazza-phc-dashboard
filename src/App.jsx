@@ -539,7 +539,11 @@ function App() {
     currentUser={currentUser}
   />
 )}
-            {activePage === "Staff & Roles" &&
+ {activePage === "Roster" && (
+  <Roster
+    staff={staff}
+  />
+)}           {activePage === "Staff & Roles" &&
               currentUser.role === "Super Admin" && (
                 <StaffManagement
                   staff={staff}
