@@ -580,18 +580,10 @@ function App() {
           )}
 
           {page === "Records Unit" && (
-  recordsView === "dashboard" ? (
-    <RecordsDashboard
-      patients={patients}
-      onOpenService={() => setRecordsView("service")}
-    />
-  ) : (
-    <RecordsPage
-      patients={patients}
-      showMessage={showMessage}
-      onSaved={() => setRecordsView("dashboard")}
-    />
-  )
+  <RecordsPage
+    patients={patients}
+    showMessage={showMessage}
+  />
 )}
 
           {page === "Nursing Unit" && (
