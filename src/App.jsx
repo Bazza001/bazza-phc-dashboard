@@ -1390,29 +1390,30 @@ function RecordsPage({ patients, showMessage }) {
     );
   });
 
-  const handlePayment = () => {
-    if (!selectedPatient) {
-      showMessage("Da farko nemo patient.");
-      return;
-    }
+ const handlePayment = () => {
+  if (!selectedPatient) {
+    showMessage("Da farko nemo patient.");
+    return;
+  }
 
-    if (!service) {
-      showMessage("Zaɓi Card, File ko Card + File.");
-      return;
-    }
+  if (!service) {
+    showMessage("Zaɓi Card, File ko Card + File.");
+    return;
+  }
 
-    const amount = prices[service];
+  const amount = prices[service];
 
-    showMessage(
-      `${service} na ${selectedPatient.name} an yi payment ₦${amount}.`
-    );
+  showMessage(
+    `${service} na ${selectedPatient.name} an yi payment ₦${amount}.`
+  );
 
-    setSearch("");
-    setSelectedPatient(null);
-    setService("");
-    setPaymentMethod("Cash");
-    setPaymentStatus("Paid");
-  };
+  // Komawa Records Dashboard bayan an gama transaction
+  setSearch("");
+  setSelectedPatient(null);
+  setService("");
+  setPaymentMethod("Cash");
+  setPaymentStatus("Paid");
+}; 
 
   const printSlip = () => {
     if (!selectedPatient || !service) {
