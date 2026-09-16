@@ -579,18 +579,11 @@ function App() {
           )}
 
           {page === "Records Unit" && (
-            <ModulePage
-              title="Records Unit"
-              subtitle="Patient records, files and registration services"
-              icon="▤"
-              stats={[
-                ["Today's Cards", "12"],
-                ["Files Issued", "18"],
-                ["Pending", "4"],
-                ["Total Records", "1,248"],
-              ]}
-            />
-          )}
+  <RecordsPage
+    patients={patients}
+    showMessage={showMessage}
+  />
+)}
 
           {page === "Nursing Unit" && (
             <ModulePage
