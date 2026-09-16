@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 const departments = [
   "ICT Centre",
@@ -50,508 +50,265 @@ const roles = [
   "Adolescent Staff",
 ];
 
-const rolePermissions = {
-  "Super Admin": permissions,
-
-  "In-Charge": [
-    "View",
-    "Print",
-    "Reports",
-    "SMS",
-    "Alerts",
-  ],
-
-  "General Cashier": [
-    "View",
-    "Create",
-    "Edit",
-    "Print",
-    "Cashier",
-    "Reports",
-  ],
-
-  "ICT Staff": [
-    "View",
-    "Create",
-    "Edit",
-    "Print",
-    "Stock",
-    "SMS",
-    "Alerts",
-  ],
-
-  "Records Staff": [
-    "View",
-    "Create",
-    "Edit",
-    "Print",
-    "Cashier",
-    "Reports",
-  ],
-
-  Nurse: [
-    "View",
-    "Create",
-    "Edit",
-    "Print",
-    "Alerts",
-  ],
-
-  Consultant: [
-    "View",
-    "Create",
-    "Edit",
-    "Print",
-    "Alerts",
-  ],
-
-  "Laboratory Staff": [
-    "View",
-    "Create",
-    "Edit",
-    "Print",
-    "Cashier",
-    "Reports",
-    "Stock",
-    "SMS",
-    "Alerts",
-  ],
-
-  "Pharmacy Staff": [
-    "View",
-    "Create",
-    "Edit",
-    "Print",
-    "Cashier",
-    "Reports",
-    "Stock",
-    "SMS",
-    "Alerts",
-  ],
-
-  "Ultrasound Staff": [
-    "View",
-    "Create",
-    "Edit",
-    "Print",
-    "Cashier",
-    "Reports",
-    "Stock",
-    "SMS",
-    "Alerts",
-  ],
-
-  "Ward Staff": [
-    "View",
-    "Create",
-    "Edit",
-    "Print",
-    "Alerts",
-  ],
-
-  "Immunization Staff": [
-    "View",
-    "Create",
-    "Edit",
-    "Print",
-    "Cashier",
-    "Reports",
-    "SMS",
-    "Alerts",
-  ],
-
-  "Family Planning Staff": [
-    "View",
-    "Create",
-    "Edit",
-    "Print",
-    "Cashier",
-    "Reports",
-    "SMS",
-    "Alerts",
-  ],
-
-  "Adolescent Staff": [
-    "View",
-    "Create",
-    "Edit",
-    "Print",
-    "Cashier",
-    "Reports",
-    "SMS",
-    "Alerts",
-  ],
-};
-
 const initialStaff = [
   {
     id: 1,
-    name: "Super Administrator",
     staffId: "BZ000",
+    name: "Super Administrator",
     username: "admin",
     password: "1234",
     department: "ICT Centre",
     role: "Super Admin",
     status: "Active",
-    permissions: rolePermissions["Super Admin"],
   },
   {
     id: 2,
-    name: "Altini Garba Bazza",
     staffId: "BZ001",
+    name: "Altini Garba Bazza",
     username: "altini",
     password: "1234",
     department: "In-Charge",
     role: "In-Charge",
     status: "Active",
-    permissions: rolePermissions["In-Charge"],
   },
   {
     id: 3,
-    name: "Hadiza Umar",
     staffId: "BZ002",
+    name: "Hadiza Umar",
     username: "hadiza",
     password: "1234",
     department: "Pharmacy Unit",
     role: "Pharmacy Staff",
     status: "Active",
-    permissions: rolePermissions["Pharmacy Staff"],
   },
   {
     id: 4,
-    name: "Abba Yaro",
     staffId: "BZ003",
+    name: "Abba Yaro",
     username: "abbayaro",
     password: "1234",
     department: "Ultrasound Room",
     role: "Ultrasound Staff",
     status: "Active",
-    permissions: rolePermissions["Ultrasound Staff"],
   },
   {
     id: 5,
-    name: "Kabiru Lawal",
     staffId: "BZ004",
+    name: "Kabiru Lawal",
     username: "kabiru",
     password: "1234",
     department: "Laboratory Unit",
     role: "Laboratory Staff",
     status: "Active",
-    permissions: rolePermissions["Laboratory Staff"],
   },
 ];
 
-const menuItems = [
-  { name: "Dashboard", icon: "🏠" },
-  { name: "Patients", icon: "👥" },
-  { name: "Outpatients", icon: "🚶" },
-  { name: "Staff & Roles", icon: "👨‍⚕️" },
-  { name: "Roster / Attendance", icon: "📅" },
-  { name: "Reports", icon: "📊" },
-  { name: "Audit Logs", icon: "🔐" },
-  { name: "SMS / Notifications", icon: "📱" },
-  { name: "Stock", icon: "📦" },
-  { name: "Cashier", icon: "💰" },
-  { name: "Alerts", icon: "🔔" },
+const demoPatients = [
+  {
+    id: 1,
+    card: "BZ-P001",
+    name: "Aisha Musa",
+    phone: "08000000001",
+    sex: "Female",
+    status: "Active",
+  },
+  {
+    id: 2,
+    card: "BZ-P002",
+    name: "Ibrahim Bello",
+    phone: "08000000002",
+    sex: "Male",
+    status: "Active",
+  },
+  {
+    id: 3,
+    card: "BZ-P003",
+    name: "Fatima Umar",
+    phone: "08000000003",
+    sex: "Female",
+    status: "Active",
+  },
 ];
 
 function App() {
-  const [staff, setStaff] = useState(initialStaff);
   const [currentUser, setCurrentUser] = useState(null);
-
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [loginError, setLoginError] = useState("");
-
-  const [activePage, setActivePage] = useState("Dashboard");
-
+  const [page, setPage] = useState("Dashboard");
+  const [staff, setStaff] = useState(initialStaff);
+  const [patients, setPatients] = useState(demoPatients);
   const [search, setSearch] = useState("");
+  const [loginForm, setLoginForm] = useState({
+    username: "",
+    password: "",
+  });
 
   const [showStaffModal, setShowStaffModal] = useState(false);
   const [editingStaff, setEditingStaff] = useState(null);
 
-  const [showPermissionModal, setShowPermissionModal] = useState(false);
-  const [selectedStaff, setSelectedStaff] = useState(null);
-  const [selectedPermissions, setSelectedPermissions] = useState([]);
-
-  const [staffForm, setStaffForm] = useState({
+  const emptyStaffForm = {
     name: "",
-    staffId: "",
     username: "",
     password: "",
-    department: "",
-    role: "",
+    department: "ICT Centre",
+    role: "ICT Staff",
     status: "Active",
-  });
+  };
 
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [staffForm, setStaffForm] = useState(emptyStaffForm);
 
-  function login(event) {
-    event.preventDefault();
+  const [selectedStaff, setSelectedStaff] = useState(null);
+  const [showPermissions, setShowPermissions] = useState(false);
 
-    const found = staff.find(
+  const [enabledPermissions, setEnabledPermissions] = useState(
+    permissions.reduce((acc, item) => {
+      acc[item] = true;
+      return acc;
+    }, {})
+  );
+
+  const [notification, setNotification] = useState("");
+
+  const filteredStaff = useMemo(() => {
+    const q = search.toLowerCase().trim();
+
+    if (!q) return staff;
+
+    return staff.filter(
       (person) =>
-        person.username.toLowerCase() === username.trim().toLowerCase() &&
-        person.password === password
+        person.name.toLowerCase().includes(q) ||
+        person.staffId.toLowerCase().includes(q) ||
+        person.username.toLowerCase().includes(q) ||
+        person.department.toLowerCase().includes(q) ||
+        person.role.toLowerCase().includes(q)
+    );
+  }, [staff, search]);
+
+  const showMessage = (message) => {
+    setNotification(message);
+
+    setTimeout(() => {
+      setNotification("");
+    }, 2500);
+  };
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+
+    const user = staff.find(
+      (person) =>
+        person.username === loginForm.username &&
+        person.password === loginForm.password &&
+        person.status === "Active"
     );
 
-    if (!found) {
-      setLoginError("Username ko Password ba daidai ba.");
+    if (!user) {
+      showMessage("Username ko Password ba daidai ba.");
       return;
     }
 
-    if (found.status !== "Active") {
-      setLoginError("An kashe wannan Staff Account.");
-      return;
-    }
-
-    setCurrentUser(found);
-    setLoginError("");
-    setActivePage("Dashboard");
-  }
-
-  function logout() {
-    setCurrentUser(null);
-    setUsername("");
-    setPassword("");
-    setLoginError("");
-    setActivePage("Dashboard");
-  }
-
-  function hasPermission(permission) {
-    if (!currentUser) return false;
-
-    if (currentUser.role === "Super Admin") {
-      return true;
-    }
-
-    return currentUser.permissions.includes(permission);
-  }
-
-  function openAddStaff() {
-    setEditingStaff(null);
-
-    setStaffForm({
-      name: "",
-      staffId: "",
+    setCurrentUser(user);
+    setPage("Dashboard");
+    setLoginForm({
       username: "",
       password: "",
-      department: "",
-      role: "",
-      status: "Active",
     });
+  };
 
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setPage("Dashboard");
+  };
+
+  const openAddStaff = () => {
+    setEditingStaff(null);
+    setStaffForm(emptyStaffForm);
     setShowStaffModal(true);
-  }
+  };
 
-  function openEditStaff(person) {
+  const openEditStaff = (person) => {
     setEditingStaff(person);
 
     setStaffForm({
-      name: person.name || "",
-      staffId: person.staffId || "",
-      username: person.username || "",
-      password: "",
-      department: person.department || "",
-      role: person.role || "",
-      status: person.status || "Active",
+      name: person.name,
+      username: person.username,
+      password: person.password,
+      department: person.department,
+      role: person.role,
+      status: person.status,
     });
 
     setShowStaffModal(true);
-  }
+  };
 
-  function closeStaffModal() {
-    setShowStaffModal(false);
-    setEditingStaff(null);
-  }
-
-  function saveStaff(event) {
-    event.preventDefault();
+  const saveStaff = (e) => {
+    e.preventDefault();
 
     if (
       !staffForm.name.trim() ||
-      !staffForm.staffId.trim() ||
       !staffForm.username.trim() ||
-      !staffForm.department ||
-      !staffForm.role
+      !staffForm.password.trim()
     ) {
-      alert("Please fill all required fields.");
+      showMessage("Cika dukkan muhimman bayanai.");
       return;
     }
 
     if (editingStaff) {
-      setStaff((oldStaff) =>
-        oldStaff.map((person) => {
-          if (person.id !== editingStaff.id) {
-            return person;
-          }
-
-          return {
-            ...person,
-            name: staffForm.name,
-            staffId: staffForm.staffId,
-            username: staffForm.username,
-            password: staffForm.password
-              ? staffForm.password
-              : person.password,
-            department: staffForm.department,
-            role: staffForm.role,
-            status: staffForm.status,
-            permissions: rolePermissions[staffForm.role] || [],
-          };
-        })
+      setStaff((prev) =>
+        prev.map((person) =>
+          person.id === editingStaff.id
+            ? {
+                ...person,
+                ...staffForm,
+              }
+            : person
+        )
       );
+
+      showMessage("An sabunta ma'aikaci.");
     } else {
       const newStaff = {
         id: Date.now(),
-        name: staffForm.name,
-        staffId: staffForm.staffId,
-        username: staffForm.username,
-        password: staffForm.password || "1234",
-        department: staffForm.department,
-        role: staffForm.role,
-        status: staffForm.status,
-        permissions: rolePermissions[staffForm.role] || [],
+        staffId: `BZ${String(staff.length).padStart(3, "0")}`,
+        ...staffForm,
       };
 
-      setStaff((oldStaff) => [...oldStaff, newStaff]);
+      setStaff((prev) => [...prev, newStaff]);
+      showMessage("An ƙara sabon ma'aikaci.");
     }
 
-    closeStaffModal();
-  }
+    setShowStaffModal(false);
+    setEditingStaff(null);
+    setStaffForm(emptyStaffForm);
+  };
 
-  function openPermissions(person) {
-    setSelectedStaff(person);
-    setSelectedPermissions(person.permissions || []);
-    setShowPermissionModal(true);
-  }
+  const deleteStaff = (id) => {
+    const person = staff.find((item) => item.id === id);
 
-  function togglePermission(permission) {
-    setSelectedPermissions((oldPermissions) => {
-      if (oldPermissions.includes(permission)) {
-        return oldPermissions.filter(
-          (item) => item !== permission
-        );
-      }
+    if (!person) return;
 
-      return [...oldPermissions, permission];
-    });
-  }
-
-  function savePermissions() {
-    if (!selectedStaff) return;
-
-    setStaff((oldStaff) =>
-      oldStaff.map((person) => {
-        if (person.id !== selectedStaff.id) {
-          return person;
-        }
-
-        return {
-          ...person,
-          permissions: selectedPermissions,
-        };
-      })
-    );
-
-    if (currentUser && currentUser.id === selectedStaff.id) {
-      setCurrentUser({
-        ...currentUser,
-        permissions: selectedPermissions,
-      });
-    }
-
-    setShowPermissionModal(false);
-    setSelectedStaff(null);
-  }
-
-  function deleteStaff(person) {
     if (person.role === "Super Admin") {
-      alert("Ba za a iya goge Super Admin ba.");
+      showMessage("Ba za a iya goge Super Admin ba.");
       return;
     }
 
-    const confirmed = window.confirm(
-      `Delete ${person.name}?`
-    );
+    setStaff((prev) => prev.filter((item) => item.id !== id));
+    showMessage("An cire ma'aikacin daga tsarin.");
+  };
 
-    if (!confirmed) return;
-
-    setStaff((oldStaff) =>
-      oldStaff.filter((item) => item.id !== person.id)
-    );
-  }
-
-  const filteredStaff = useMemo(() => {
-    const text = search.toLowerCase();
-
-    return staff.filter((person) =>
-      `${person.name} ${person.staffId} ${person.username} ${person.department} ${person.role}`
-        .toLowerCase()
-        .includes(text)
-    );
-  }, [staff, search]);
+  const togglePermission = (permission) => {
+    setEnabledPermissions((prev) => ({
+      ...prev,
+      [permission]: !prev[permission],
+    }));
+  };
 
   if (!currentUser) {
     return (
-      <div className="login-page">
-        <style>{styles}</style>
-
-        <div className="login-card">
-          <div className="login-logo">🏥</div>
-
-          <h1>Bazza Primary Health Care</h1>
-
-          <p className="login-subtitle">
-            Sokoto North Local Government
-          </p>
-
-          <div className="login-line" />
-
-          <h2>Staff Login</h2>
-
-          <form onSubmit={login}>
-            <label>Username</label>
-
-            <input
-              value={username}
-              onChange={(event) =>
-                setUsername(event.target.value)
-              }
-              placeholder="Enter username"
-            />
-
-            <label>Password</label>
-
-            <input
-              type="password"
-              value={password}
-              onChange={(event) =>
-                setPassword(event.target.value)
-              }
-              placeholder="Enter password"
-            />
-
-            {loginError && (
-              <div className="error-box">
-                {loginError}
-              </div>
-            )}
-
-            <button className="primary-button" type="submit">
-              Login
-            </button>
-          </form>
-
-          <div className="demo-box">
-            <strong>Demo Login</strong>
-            <br />
-            Username: admin
-            <br />
-            Password: 1234
-          </div>
-        </div>
-      </div>
+      <LoginScreen
+        loginForm={loginForm}
+        setLoginForm={setLoginForm}
+        handleLogin={handleLogin}
+        notification={notification}
+      />
     );
   }
 
@@ -559,484 +316,994 @@ function App() {
     <div className="app">
       <style>{styles}</style>
 
-      <aside className={sidebarOpen ? "sidebar" : "sidebar closed"}>
+      <aside className="sidebar">
         <div className="brand">
-          <div className="brand-icon">🏥</div>
-
-          {sidebarOpen && (
-            <div>
-              <strong>Bazza PHC</strong>
-              <small>Sokoto</small>
-            </div>
-          )}
+          <div className="brand-logo">B</div>
+          <div>
+            <div className="brand-title">BAZZA PHC</div>
+            <div className="brand-subtitle">Sokoto</div>
+          </div>
         </div>
 
-        <nav>
-          {menuItems.map((item) => (
-            <button
-              key={item.name}
-              className={
-                activePage === item.name
-                  ? "menu-button active"
-                  : "menu-button"
-              }
-              onClick={() => {
-                setActivePage(item.name);
-                setSidebarOpen(true);
-              }}
-            >
-              <span>{item.icon}</span>
+        <div className="facility-name">
+          <strong>COMPREHENSIVE HEALTH CLINIC BAZZAH</strong>
+          <span>PRIMARY HEALTH CARE DEPARTMENT</span>
+        </div>
 
-              {sidebarOpen && <span>{item.name}</span>}
-            </button>
-          ))}
+        <nav className="menu">
+          <MenuItem
+            label="Dashboard"
+            icon="⌂"
+            active={page === "Dashboard"}
+            onClick={() => setPage("Dashboard")}
+          />
+
+          <div className="menu-section">PATIENT SERVICES</div>
+
+          <MenuItem
+            label="ICT Centre"
+            icon="▣"
+            active={page === "ICT Centre"}
+            onClick={() => setPage("ICT Centre")}
+          />
+
+          <MenuItem
+            label="Records Unit"
+            icon="▤"
+            active={page === "Records Unit"}
+            onClick={() => setPage("Records Unit")}
+          />
+
+          <MenuItem
+            label="Nursing Unit"
+            icon="♙"
+            active={page === "Nursing Unit"}
+            onClick={() => setPage("Nursing Unit")}
+          />
+
+          <MenuItem
+            label="Consultant Room"
+            icon="✚"
+            active={page === "Consultant Room"}
+            onClick={() => setPage("Consultant Room")}
+          />
+
+          <MenuItem
+            label="Laboratory"
+            icon="⚗"
+            active={page === "Laboratory Unit"}
+            onClick={() => setPage("Laboratory Unit")}
+          />
+
+          <MenuItem
+            label="Pharmacy"
+            icon="⚕"
+            active={page === "Pharmacy Unit"}
+            onClick={() => setPage("Pharmacy Unit")}
+          />
+
+          <MenuItem
+            label="Ultrasound"
+            icon="◉"
+            active={page === "Ultrasound Room"}
+            onClick={() => setPage("Ultrasound Room")}
+          />
+
+          <div className="menu-section">WARDS & PROGRAMS</div>
+
+          <MenuItem
+            label="Male Ward"
+            icon="M"
+            active={page === "Male Ward"}
+            onClick={() => setPage("Male Ward")}
+          />
+
+          <MenuItem
+            label="Female Ward"
+            icon="F"
+            active={page === "Female Ward"}
+            onClick={() => setPage("Female Ward")}
+          />
+
+          <MenuItem
+            label="Maternity Ward"
+            icon="♥"
+            active={page === "Maternity Ward"}
+            onClick={() => setPage("Maternity Ward")}
+          />
+
+          <MenuItem
+            label="Child Ward"
+            icon="C"
+            active={page === "Child Ward"}
+            onClick={() => setPage("Child Ward")}
+          />
+
+          <MenuItem
+            label="Labour Room"
+            icon="L"
+            active={page === "Labour Room"}
+            onClick={() => setPage("Labour Room")}
+          />
+
+          <MenuItem
+            label="Immunization"
+            icon="I"
+            active={page === "Immunization Unit"}
+            onClick={() => setPage("Immunization Unit")}
+          />
+
+          <MenuItem
+            label="Family Planning"
+            icon="P"
+            active={page === "Family Planning Unit"}
+            onClick={() => setPage("Family Planning Unit")}
+          />
+
+          <MenuItem
+            label="Adolescent Unit"
+            icon="A"
+            active={page === "Adolescent Unit"}
+            onClick={() => setPage("Adolescent Unit")}
+          />
+
+          <div className="menu-section">ADMINISTRATION</div>
+
+          <MenuItem
+            label="Staff & Permissions"
+            icon="♟"
+            active={page === "Staff & Permissions"}
+            onClick={() => setPage("Staff & Permissions")}
+          />
+
+          <MenuItem
+            label="General Cashier"
+            icon="₦"
+            active={page === "General Cashier"}
+            onClick={() => setPage("General Cashier")}
+          />
+
+          <MenuItem
+            label="Roster & Attendance"
+            icon="▦"
+            active={page === "Roster & Attendance"}
+            onClick={() => setPage("Roster & Attendance")}
+          />
+
+          <MenuItem
+            label="Reports"
+            icon="▥"
+            active={page === "Reports"}
+            onClick={() => setPage("Reports")}
+          />
+
+          <MenuItem
+            label="Alerts"
+            icon="!"
+            active={page === "Alerts"}
+            onClick={() => setPage("Alerts")}
+          />
+
+          <MenuItem
+            label="SMS / Notifications"
+            icon="✉"
+            active={page === "SMS / Notifications"}
+            onClick={() => setPage("SMS / Notifications")}
+          />
+
+          <MenuItem
+            label="Audit Logs"
+            icon="◌"
+            active={page === "Audit Logs"}
+            onClick={() => setPage("Audit Logs")}
+          />
+
+          <MenuItem
+            label="Settings"
+            icon="⚙"
+            active={page === "Settings"}
+            onClick={() => setPage("Settings")}
+          />
         </nav>
 
-        <button
-          className="menu-button logout-button"
-          onClick={logout}
-        >
-          <span>🚪</span>
-
-          {sidebarOpen && <span>Logout</span>}
-        </button>
+        <div className="sidebar-footer">
+          <div className="online-dot"></div>
+          <span>System Online</span>
+        </div>
       </aside>
 
       <main className="main">
         <header className="topbar">
-          <button
-            className="hamburger"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-          >
-            ☰
-          </button>
-
           <div>
-            <strong>{activePage}</strong>
+            <div className="top-title">{page}</div>
+            <div className="top-location">
+              Waziri Maccido Road, Bazza Area, Sokoto
+            </div>
           </div>
 
-          <div className="user-box">
-            <span className="online-dot">●</span>
+          <div className="top-actions">
+            <button className="icon-button" onClick={() => setPage("Alerts")}>
+              🔔
+            </button>
 
-            <div>
-              <strong>{currentUser.name}</strong>
-              <small>
-                {currentUser.role} · {currentUser.department}
-              </small>
+            <div className="user-box">
+              <div className="avatar">
+                {currentUser.name.charAt(0).toUpperCase()}
+              </div>
+
+              <div className="user-details">
+                <strong>{currentUser.name}</strong>
+                <span>{currentUser.role}</span>
+              </div>
             </div>
+
+            <button className="logout-button" onClick={handleLogout}>
+              Logout
+            </button>
           </div>
         </header>
 
+        {notification && <div className="toast">{notification}</div>}
+
         <section className="content">
-          {activePage === "Dashboard" && (
-            <>
-              <div className="welcome-card">
-                <h1>
-                  Welcome, {currentUser.name}
-                </h1>
-
-                <p>
-                  Bazza Primary Health Care — Hospital
-                  Management Dashboard
-                </p>
-              </div>
-
-              <div className="stats-grid">
-                <div className="stat-card">
-                  <span>👥</span>
-                  <small>Patients Today</small>
-                  <strong>0</strong>
-                </div>
-
-                <div className="stat-card">
-                  <span>🚶</span>
-                  <small>Outpatients Today</small>
-                  <strong>0</strong>
-                </div>
-
-                <div className="stat-card">
-                  <span>🛏️</span>
-                  <small>Inpatients</small>
-                  <strong>0</strong>
-                </div>
-
-                <div className="stat-card">
-                  <span>🟢</span>
-                  <small>Staff Signed In</small>
-                  <strong>0</strong>
-                </div>
-
-                <div className="stat-card">
-                  <span>⏳</span>
-                  <small>Pending Work</small>
-                  <strong>0</strong>
-                </div>
-
-                <div className="stat-card">
-                  <span>₦</span>
-                  <small>Revenue Today</small>
-                  <strong>₦0</strong>
-                </div>
-              </div>
-
-              <div className="two-columns">
-                <div className="panel">
-                  <h2>Access Control</h2>
-
-                  <div className="info-row">
-                    <span>Department</span>
-                    <strong>
-                      {currentUser.department}
-                    </strong>
-                  </div>
-
-                  <div className="info-row">
-                    <span>Role</span>
-                    <strong>{currentUser.role}</strong>
-                  </div>
-
-                  <div className="info-row block">
-                    <span>Permissions</span>
-
-                    <div className="tags">
-                      {currentUser.permissions.map(
-                        (permission) => (
-                          <span key={permission}>
-                            {permission}
-                          </span>
-                        )
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="panel">
-                  <h2>System Status</h2>
-
-                  <div className="status-row">
-                    <span>System</span>
-                    <strong className="green">
-                      ● Online
-                    </strong>
-                  </div>
-
-                  <div className="status-row">
-                    <span>Department Separation</span>
-                    <strong className="green">
-                      ● Active
-                    </strong>
-                  </div>
-
-                  <div className="status-row">
-                    <span>Security</span>
-                    <strong className="green">
-                      ● Protected
-                    </strong>
-                  </div>
-                </div>
-              </div>
-            </>
+          {page === "Dashboard" && (
+            <DashboardPage
+              currentUser={currentUser}
+              patients={patients}
+              staff={staff}
+              setPage={setPage}
+            />
           )}
 
-          {activePage === "Staff & Roles" &&
-            currentUser.role === "Super Admin" && (
-              <StaffManagement
-                staff={filteredStaff}
-                search={search}
-                setSearch={setSearch}
-                onAdd={openAddStaff}
-                onEdit={openEditStaff}
-                onDelete={deleteStaff}
-                onPermissions={openPermissions}
-              />
-            )}
+          {page === "Staff & Permissions" && (
+            <StaffManagement
+              staff={filteredStaff}
+              search={search}
+              setSearch={setSearch}
+              openAddStaff={openAddStaff}
+              openEditStaff={openEditStaff}
+              deleteStaff={deleteStaff}
+              openPermissions={(person) => {
+                setSelectedStaff(person);
+                setShowPermissions(true);
+              }}
+            />
+          )}
 
-          {activePage === "Staff & Roles" &&
-            currentUser.role !== "Super Admin" && (
-              <ModulePage
-                title="Staff & Roles"
-                icon="👨‍⚕️"
-                message="Wannan page na Super Admin ne kawai."
-              />
-            )}
+          {page === "ICT Centre" && (
+            <ICTPage
+              patients={patients}
+              setPatients={setPatients}
+              showMessage={showMessage}
+            />
+          )}
 
-          {activePage !== "Dashboard" &&
-            activePage !== "Staff & Roles" && (
-              <ModulePage
-                title={activePage}
-                icon={
-                  menuItems.find(
-                    (item) => item.name === activePage
-                  )?.icon || "🏥"
-                }
-                message={`Wannan module na ${currentUser.department} ne.`}
-              />
-            )}
+          {page === "Records Unit" && (
+            <ModulePage
+              title="Records Unit"
+              subtitle="Patient records, files and registration services"
+              icon="▤"
+              stats={[
+                ["Today's Cards", "12"],
+                ["Files Issued", "18"],
+                ["Pending", "4"],
+                ["Total Records", "1,248"],
+              ]}
+            />
+          )}
+
+          {page === "Nursing Unit" && (
+            <ModulePage
+              title="Nursing Unit"
+              subtitle="Nursing assessment, patient flow and ward assignment"
+              icon="♙"
+              stats={[
+                ["Waiting", "8"],
+                ["Ready for Consultant", "5"],
+                ["In Ward", "21"],
+                ["Completed", "37"],
+              ]}
+            />
+          )}
+
+          {page === "Consultant Room" && (
+            <ModulePage
+              title="Consultant Room"
+              subtitle="Consultation, diagnosis, requests and prescriptions"
+              icon="✚"
+              stats={[
+                ["Waiting", "5"],
+                ["In Consultation", "2"],
+                ["Lab Requests", "6"],
+                ["Completed", "29"],
+              ]}
+            />
+          )}
+
+          {page === "Laboratory Unit" && (
+            <ModulePage
+              title="Laboratory Unit"
+              subtitle="Laboratory requests, samples and results"
+              icon="⚗"
+              stats={[
+                ["New Requests", "7"],
+                ["Samples Received", "5"],
+                ["In Progress", "3"],
+                ["Results Ready", "11"],
+              ]}
+            />
+          )}
+
+          {page === "Pharmacy Unit" && (
+            <ModulePage
+              title="Pharmacy Unit"
+              subtitle="Prescriptions, dispensing and medicine stock"
+              icon="⚕"
+              stats={[
+                ["New Prescriptions", "9"],
+                ["Dispensed Today", "31"],
+                ["Pending", "4"],
+                ["Stock Alerts", "3"],
+              ]}
+            />
+          )}
+
+          {page === "Ultrasound Room" && (
+            <ModulePage
+              title="Ultrasound Room"
+              subtitle="Ultrasound requests, scanning and reports"
+              icon="◉"
+              stats={[
+                ["New Requests", "4"],
+                ["Waiting", "3"],
+                ["Completed", "15"],
+                ["Reports Ready", "7"],
+              ]}
+            />
+          )}
+
+          {[
+            "Male Ward",
+            "Female Ward",
+            "Maternity Ward",
+            "Child Ward",
+            "Labour Room",
+          ].includes(page) && (
+            <ModulePage
+              title={page}
+              subtitle="Ward patient management and monitoring"
+              icon="▣"
+              stats={[
+                ["Occupied Beds", "18"],
+                ["Available Beds", "12"],
+                ["New Admissions", "4"],
+                ["Discharges", "2"],
+              ]}
+            />
+          )}
+
+          {[
+            "Immunization Unit",
+            "Family Planning Unit",
+            "Adolescent Unit",
+          ].includes(page) && (
+            <ModulePage
+              title={page}
+              subtitle="Program services and patient visits"
+              icon="✚"
+              stats={[
+                ["Today's Visits", "14"],
+                ["Pending", "3"],
+                ["Completed", "11"],
+                ["Follow-up", "6"],
+              ]}
+            />
+          )}
+
+          {page === "General Cashier" && (
+            <ModulePage
+              title="General Cashier"
+              subtitle="Central payment and receipt management"
+              icon="₦"
+              stats={[
+                ["Today's Collections", "₦84,500"],
+                ["Cash", "₦32,000"],
+                ["POS", "₦27,500"],
+                ["Bank Transfer", "₦25,000"],
+              ]}
+            />
+          )}
+
+          {page === "Roster & Attendance" && (
+            <RosterPage staff={staff} />
+          )}
+
+          {page === "Reports" && (
+            <ModulePage
+              title="Reports"
+              subtitle="Hospital and department reports"
+              icon="▥"
+              stats={[
+                ["Daily Reports", "12"],
+                ["Monthly Reports", "4"],
+                ["Department Reports", "17"],
+                ["Pending Reports", "2"],
+              ]}
+            />
+          )}
+
+          {page === "Alerts" && (
+            <ModulePage
+              title="Department Alerts"
+              subtitle="Alerts sent between authorized departments"
+              icon="!"
+              stats={[
+                ["New Alerts", "8"],
+                ["Consultant Alerts", "3"],
+                ["Laboratory Alerts", "2"],
+                ["Other Alerts", "3"],
+              ]}
+            />
+          )}
+
+          {page === "SMS / Notifications" && (
+            <ModulePage
+              title="SMS / Notifications"
+              subtitle="Patient messages and department notifications"
+              icon="✉"
+              stats={[
+                ["Sent Today", "38"],
+                ["Result Ready", "12"],
+                ["Follow-up", "15"],
+                ["Appointment", "11"],
+              ]}
+            />
+          )}
+
+          {page === "Audit Logs" && (
+            <AuditPage currentUser={currentUser} />
+          )}
+
+          {page === "Settings" && (
+            <ModulePage
+              title="System Settings"
+              subtitle="Hospital configuration and system controls"
+              icon="⚙"
+              stats={[
+                ["Departments", departments.length],
+                ["Staff", staff.length],
+                ["Permissions", permissions.length],
+                ["System", "Active"],
+              ]}
+            />
+          )}
         </section>
       </main>
 
       {showStaffModal && (
-        <div className="modal-backdrop">
-          <div className="modal">
-            <div className="modal-header">
-              <div>
-                <h2>
-                  {editingStaff
-                    ? "Edit Staff"
-                    : "Add New Staff"}
-                </h2>
+        <Modal
+          title={editingStaff ? "Edit Staff" : "Add New Staff"}
+          onClose={() => setShowStaffModal(false)}
+        >
+          <form onSubmit={saveStaff}>
+            <div className="form-grid">
+              <FormField label="Full Name">
+                <input
+                  value={staffForm.name}
+                  onChange={(e) =>
+                    setStaffForm({
+                      ...staffForm,
+                      name: e.target.value,
+                    })
+                  }
+                  placeholder="Enter full name"
+                />
+              </FormField>
 
-                <p>
-                  Create or update staff account.
-                </p>
-              </div>
+              <FormField label="Username">
+                <input
+                  value={staffForm.username}
+                  onChange={(e) =>
+                    setStaffForm({
+                      ...staffForm,
+                      username: e.target.value,
+                    })
+                  }
+                  placeholder="Login username"
+                />
+              </FormField>
 
-              <button
-                className="close-button"
-                onClick={closeStaffModal}
-              >
-                ×
-              </button>
-            </div>
+              <FormField label="Password">
+                <input
+                  value={staffForm.password}
+                  onChange={(e) =>
+                    setStaffForm({
+                      ...staffForm,
+                      password: e.target.value,
+                    })
+                  }
+                  placeholder="Password"
+                />
+              </FormField>
 
-            <form onSubmit={saveStaff}>
-              <div className="form-grid">
-                <div>
-                  <label>Full Name *</label>
-
-                  <input
-                    value={staffForm.name}
-                    onChange={(event) =>
-                      setStaffForm({
-                        ...staffForm,
-                        name: event.target.value,
-                      })
-                    }
-                    placeholder="Staff full name"
-                  />
-                </div>
-
-                <div>
-                  <label>Staff ID *</label>
-
-                  <input
-                    value={staffForm.staffId}
-                    onChange={(event) =>
-                      setStaffForm({
-                        ...staffForm,
-                        staffId: event.target.value,
-                      })
-                    }
-                    placeholder="e.g. BZ005"
-                  />
-                </div>
-
-                <div>
-                  <label>Username *</label>
-
-                  <input
-                    value={staffForm.username}
-                    onChange={(event) =>
-                      setStaffForm({
-                        ...staffForm,
-                        username: event.target.value,
-                      })
-                    }
-                    placeholder="Username"
-                  />
-                </div>
-
-                <div>
-                  <label>
-                    {editingStaff
-                      ? "New Password"
-                      : "Password"}
-                  </label>
-
-                  <input
-                    type="password"
-                    value={staffForm.password}
-                    onChange={(event) =>
-                      setStaffForm({
-                        ...staffForm,
-                        password: event.target.value,
-                      })
-                    }
-                    placeholder={
-                      editingStaff
-                        ? "Leave blank to keep old password"
-                        : "Password"
-                    }
-                  />
-                </div>
-
-                <div>
-                  <label>Department *</label>
-
-                  <select
-                    value={staffForm.department}
-                    onChange={(event) =>
-                      setStaffForm({
-                        ...staffForm,
-                        department: event.target.value,
-                      })
-                    }
-                  >
-                    <option value="">
-                      Select Department
-                    </option>
-
-                    {departments.map((department) => (
-                      <option
-                        key={department}
-                        value={department}
-                      >
-                        {department}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label>Role *</label>
-
-                  <select
-                    value={staffForm.role}
-                    onChange={(event) =>
-                      setStaffForm({
-                        ...staffForm,
-                        role: event.target.value,
-                      })
-                    }
-                  >
-                    <option value="">
-                      Select Role
-                    </option>
-
-                    {roles.map((role) => (
-                      <option key={role} value={role}>
-                        {role}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label>Status</label>
-
-                  <select
-                    value={staffForm.status}
-                    onChange={(event) =>
-                      setStaffForm({
-                        ...staffForm,
-                        status: event.target.value,
-                      })
-                    }
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Inactive">
-                      Inactive
-                    </option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={closeStaffModal}
+              <FormField label="Department">
+                <select
+                  value={staffForm.department}
+                  onChange={(e) =>
+                    setStaffForm({
+                      ...staffForm,
+                      department: e.target.value,
+                    })
+                  }
                 >
-                  Cancel
-                </button>
+                  {departments.map((department) => (
+                    <option key={department}>{department}</option>
+                  ))}
+                </select>
+              </FormField>
 
-                <button
-                  type="submit"
-                  className="primary-button"
+              <FormField label="Role">
+                <select
+                  value={staffForm.role}
+                  onChange={(e) =>
+                    setStaffForm({
+                      ...staffForm,
+                      role: e.target.value,
+                    })
+                  }
                 >
-                  {editingStaff
-                    ? "Save Changes"
-                    : "Create Staff"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+                  {roles.map((role) => (
+                    <option key={role}>{role}</option>
+                  ))}
+                </select>
+              </FormField>
 
-      {showPermissionModal && selectedStaff && (
-        <div className="modal-backdrop">
-          <div className="modal small-modal">
-            <div className="modal-header">
-              <div>
-                <h2>Manage Permissions</h2>
-
-                <p>{selectedStaff.name}</p>
-              </div>
-
-              <button
-                className="close-button"
-                onClick={() =>
-                  setShowPermissionModal(false)
-                }
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="permission-grid">
-              {permissions.map((permission) => (
-                <label
-                  className="permission-item"
-                  key={permission}
+              <FormField label="Status">
+                <select
+                  value={staffForm.status}
+                  onChange={(e) =>
+                    setStaffForm({
+                      ...staffForm,
+                      status: e.target.value,
+                    })
+                  }
                 >
-                  <input
-                    type="checkbox"
-                    checked={selectedPermissions.includes(
-                      permission
-                    )}
-                    disabled={
-                      selectedStaff.role === "Super Admin"
-                    }
-                    onChange={() =>
-                      togglePermission(permission)
-                    }
-                  />
-
-                  <span>{permission}</span>
-                </label>
-              ))}
+                  <option>Active</option>
+                  <option>Inactive</option>
+                </select>
+              </FormField>
             </div>
-
-            {selectedStaff.role === "Super Admin" && (
-              <div className="security-note">
-                Super Admin yana da dukkan permissions.
-              </div>
-            )}
 
             <div className="modal-actions">
               <button
-                className="secondary-button"
-                onClick={() =>
-                  setShowPermissionModal(false)
-                }
+                type="button"
+                className="button secondary"
+                onClick={() => setShowStaffModal(false)}
               >
                 Cancel
               </button>
 
-              <button
-                className="primary-button"
-                onClick={savePermissions}
-                disabled={
-                  selectedStaff.role === "Super Admin"
-                }
-              >
-                Save Permissions
+              <button type="submit" className="button primary">
+                {editingStaff ? "Save Changes" : "Add Staff"}
               </button>
             </div>
+          </form>
+        </Modal>
+      )}
+
+      {showPermissions && selectedStaff && (
+        <Modal
+          title={`Permissions — ${selectedStaff.name}`}
+          onClose={() => setShowPermissions(false)}
+        >
+          <p className="modal-description">
+            Manage access permissions for this staff account.
+          </p>
+
+          <div className="permission-grid">
+            {permissions.map((permission) => (
+              <label className="permission-item" key={permission}>
+                <input
+                  type="checkbox"
+                  checked={enabledPermissions[permission]}
+                  onChange={() => togglePermission(permission)}
+                />
+                <span>{permission}</span>
+              </label>
+            ))}
+          </div>
+
+          <div className="modal-actions">
+            <button
+              className="button secondary"
+              onClick={() => setShowPermissions(false)}
+            >
+              Close
+            </button>
+
+            <button
+              className="button primary"
+              onClick={() => {
+                setShowPermissions(false);
+                showMessage("An adana permissions.");
+              }}
+            >
+              Save Permissions
+            </button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function LoginScreen({
+  loginForm,
+  setLoginForm,
+  handleLogin,
+  notification,
+}) {
+  return (
+    <div className="login-page">
+      <style>{styles}</style>
+
+      <div className="login-card">
+        <div className="login-logo">B</div>
+
+        <h1>Bazza PHC</h1>
+        <p className="login-subtitle">
+          Comprehensive Health Clinic Bazzah
+        </p>
+
+        <div className="login-line"></div>
+
+        <h2>Staff Login</h2>
+
+        {notification && <div className="login-error">{notification}</div>}
+
+        <form onSubmit={handleLogin}>
+          <label>Username</label>
+          <input
+            value={loginForm.username}
+            onChange={(e) =>
+              setLoginForm({
+                ...loginForm,
+                username: e.target.value,
+              })
+            }
+            placeholder="Enter username"
+          />
+
+          <label>Password</label>
+          <input
+            type="password"
+            value={loginForm.password}
+            onChange={(e) =>
+              setLoginForm({
+                ...loginForm,
+                password: e.target.value,
+              })
+            }
+            placeholder="Enter password"
+          />
+
+          <button className="login-button" type="submit">
+            Login
+          </button>
+        </form>
+
+        <div className="demo-box">
+          <strong>Demo Login</strong>
+          <span>Super Admin: admin / 1234</span>
+          <span>In-Charge: altini / 1234</span>
+          <span>Pharmacy: hadiza / 1234</span>
+          <span>Ultrasound: abbayaro / 1234</span>
+          <span>Laboratory: kabiru / 1234</span>
+        </div>
+
+        <footer>
+          Primary Health Care Department • Sokoto State
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function MenuItem({ label, icon, active, onClick }) {
+  return (
+    <button
+      className={`menu-item ${active ? "active" : ""}`}
+      onClick={onClick}
+    >
+      <span className="menu-icon">{icon}</span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function DashboardPage({ currentUser, patients, staff, setPage }) {
+  return (
+    <div>
+      <div className="welcome">
+        <div>
+          <div className="eyebrow">WELCOME BACK</div>
+          <h1>{currentUser.name}</h1>
+          <p>
+            Here is the current overview of Bazza Primary Health Care.
+          </p>
+        </div>
+
+        <div className="date-box">
+          <strong>{new Date().toLocaleDateString()}</strong>
+          <span>{currentUser.department}</span>
+        </div>
+      </div>
+
+      <div className="stats-grid">
+        <StatCard
+          title="Total Patients"
+          value={patients.length}
+          icon="♙"
+          text="Registered patients"
+        />
+
+        <StatCard
+          title="Staff"
+          value={staff.length}
+          icon="♟"
+          text="Active staff accounts"
+        />
+
+        <StatCard
+          title="Today's Visits"
+          value="42"
+          icon="▣"
+          text="Patient visits today"
+        />
+
+        <StatCard
+          title="Pending Tasks"
+          value="17"
+          icon="!"
+          text="Across departments"
+        />
+      </div>
+
+      <div className="dashboard-grid">
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <h2>Department Overview</h2>
+              <p>Current activity by department</p>
+            </div>
+          </div>
+
+          <div className="department-list">
+            {[
+              ["Records Unit", "12 patients waiting"],
+              ["Nursing Unit", "8 patients waiting"],
+              ["Consultant Room", "5 consultations"],
+              ["Laboratory Unit", "7 new requests"],
+              ["Pharmacy Unit", "9 prescriptions"],
+              ["Ultrasound Room", "4 new requests"],
+            ].map(([name, info]) => (
+              <div className="department-row" key={name}>
+                <div className="dept-icon">+</div>
+
+                <div>
+                  <strong>{name}</strong>
+                  <span>{info}</span>
+                </div>
+
+                <span className="status-dot"></span>
+              </div>
+            ))}
           </div>
         </div>
-      )}
+
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <h2>Quick Actions</h2>
+              <p>Frequently used modules</p>
+            </div>
+          </div>
+
+          <div className="quick-actions">
+            <button onClick={() => setPage("ICT Centre")}>
+              <span>▣</span>
+              Register Patient
+            </button>
+
+            <button onClick={() => setPage("Records Unit")}>
+              <span>▤</span>
+              Patient Records
+            </button>
+
+            <button onClick={() => setPage("General Cashier")}>
+              <span>₦</span>
+              Cashier
+            </button>
+
+            <button onClick={() => setPage("Roster & Attendance")}>
+              <span>▦</span>
+              Attendance
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="panel recent-panel">
+        <div className="panel-header">
+          <div>
+            <h2>Recent Patients</h2>
+            <p>Latest patient registrations</p>
+          </div>
+
+          <button
+            className="text-button"
+            onClick={() => setPage("ICT Centre")}
+          >
+            View All
+          </button>
+        </div>
+
+        <PatientTable patients={patients} />
+      </div>
+    </div>
+  );
+}
+
+function ICTPage({ patients, setPatients, showMessage }) {
+  const [form, setForm] = useState({
+    surname: "",
+    otherNames: "",
+    phone: "",
+    sex: "Female",
+    spouse: "",
+  });
+
+  const registerPatient = (e) => {
+    e.preventDefault();
+
+    if (!form.surname.trim() || !form.otherNames.trim()) {
+      showMessage("Shigar da sunan mara lafiya.");
+      return;
+    }
+
+    const newPatient = {
+      id: Date.now(),
+      card: `BZ-P${String(patients.length + 1).padStart(3, "0")}`,
+      name: `${form.surname} ${form.otherNames}`,
+      phone: form.phone || "N/A",
+      sex: form.sex,
+      status: "Active",
+    };
+
+    setPatients((prev) => [...prev, newPatient]);
+
+    setForm({
+      surname: "",
+      otherNames: "",
+      phone: "",
+      sex: "Female",
+      spouse: "",
+    });
+
+    showMessage(`An yi registration. Card Number: ${newPatient.card}`);
+  };
+
+  return (
+    <div>
+      <PageHeader
+        title="ICT Centre"
+        subtitle="Patient registration and central information technology services"
+        icon="▣"
+      />
+
+      <div className="stats-grid">
+        <StatCard title="Patients" value={patients.length} icon="♙" />
+        <StatCard title="New Today" value="12" icon="+" />
+        <StatCard title="SMS Sent" value="38" icon="✉" />
+        <StatCard title="System Status" value="Online" icon="●" />
+      </div>
+
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Register New Patient</h2>
+            <p>ICT creates the shared Patient/Card Number.</p>
+          </div>
+        </div>
+
+        <form onSubmit={registerPatient}>
+          <div className="form-grid">
+            <FormField label="Surname">
+              <input
+                value={form.surname}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    surname: e.target.value,
+                  })
+                }
+                placeholder="Surname"
+              />
+            </FormField>
+
+            <FormField label="Other Names">
+              <input
+                value={form.otherNames}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    otherNames: e.target.value,
+                  })
+                }
+                placeholder="Other names"
+              />
+            </FormField>
+
+            <FormField label="Phone Number">
+              <input
+                value={form.phone}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    phone: e.target.value,
+                  })
+                }
+                placeholder="Phone number"
+              />
+            </FormField>
+
+            <FormField label="Sex / Gender">
+              <select
+                value={form.sex}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    sex: e.target.value,
+                  })
+                }
+              >
+                <option>Female</option>
+                <option>Male</option>
+              </select>
+            </FormField>
+
+            <FormField label="Spouse Name (if applicable)">
+              <input
+                value={form.spouse}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    spouse: e.target.value,
+                  })
+                }
+                placeholder="Spouse name"
+              />
+            </FormField>
+          </div>
+
+          <div className="modal-actions left">
+            <button className="button primary" type="submit">
+              Register Patient
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div className="panel recent-panel">
+        <div className="panel-header">
+          <div>
+            <h2>Patient Registry</h2>
+            <p>Search and view registered patients.</p>
+          </div>
+        </div>
+
+        <PatientTable patients={patients} />
+      </div>
     </div>
   );
 }
@@ -1045,49 +1312,44 @@ function StaffManagement({
   staff,
   search,
   setSearch,
-  onAdd,
-  onEdit,
-  onDelete,
-  onPermissions,
+  openAddStaff,
+  openEditStaff,
+  deleteStaff,
+  openPermissions,
 }) {
   return (
     <div>
-      <div className="page-heading">
-        <div>
-          <h1>Staff & Roles</h1>
-          <p>
-            Manage staff accounts, departments and
-            permissions.
-          </p>
-        </div>
+      <PageHeader
+        title="Staff & Permissions"
+        subtitle="Manage staff accounts, departments, roles and permissions"
+        icon="♟"
+      />
 
-        <button className="primary-button" onClick={onAdd}>
+      <div className="toolbar">
+        <input
+          className="search-input"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search staff, ID, username or department..."
+        />
+
+        <button className="button primary" onClick={openAddStaff}>
           + Add Staff
         </button>
       </div>
 
       <div className="panel">
-        <div className="search-bar">
-          <input
-            value={search}
-            onChange={(event) =>
-              setSearch(event.target.value)
-            }
-            placeholder="Search name, Staff ID, username, department..."
-          />
-        </div>
-
         <div className="table-wrapper">
           <table>
             <thead>
               <tr>
-                <th>Name</th>
                 <th>Staff ID</th>
+                <th>Name</th>
+                <th>Username</th>
                 <th>Department</th>
                 <th>Role</th>
                 <th>Status</th>
-                <th>Permissions</th>
-                <th>Action</th>
+                <th>Actions</th>
               </tr>
             </thead>
 
@@ -1095,57 +1357,54 @@ function StaffManagement({
               {staff.map((person) => (
                 <tr key={person.id}>
                   <td>
-                    <strong>{person.name}</strong>
-                    <small className="table-small">
-                      @{person.username}
-                    </small>
+                    <strong>{person.staffId}</strong>
                   </td>
 
-                  <td>{person.staffId}</td>
+                  <td>{person.name}</td>
+
+                  <td>
+                    <span className="username-badge">
+                      {person.username}
+                    </span>
+                  </td>
 
                   <td>{person.department}</td>
 
-                  <td>{person.role}</td>
+                  <td>
+                    <span className="role-badge">{person.role}</span>
+                  </td>
 
                   <td>
                     <span
-                      className={
+                      className={`status-badge ${
                         person.status === "Active"
-                          ? "status active-status"
-                          : "status inactive-status"
-                      }
+                          ? "active-status"
+                          : "inactive-status"
+                      }`}
                     >
                       {person.status}
                     </span>
                   </td>
 
                   <td>
-                    <div className="permission-count">
-                      {person.permissions.length} permissions
-                    </div>
-                  </td>
-
-                  <td>
-                    <div className="action-buttons">
+                    <div className="table-actions">
                       <button
                         className="small-button"
-                        onClick={() =>
-                          onPermissions(person)
-                        }
+                        onClick={() => openPermissions(person)}
                       >
                         Permissions
                       </button>
 
                       <button
                         className="small-button"
-                        onClick={() => onEdit(person)}
+                        onClick={() => openEditStaff(person)}
                       >
                         Edit
                       </button>
 
                       <button
                         className="small-button danger"
-                        onClick={() => onDelete(person)}
+                        onClick={() => deleteStaff(person.id)}
                       >
                         Delete
                       </button>
@@ -1153,46 +1412,310 @@ function StaffManagement({
                   </td>
                 </tr>
               ))}
+
+              {staff.length === 0 && (
+                <tr>
+                  <td colSpan="7" className="empty-cell">
+                    No staff found.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
-
-          {staff.length === 0 && (
-            <div className="empty-state">
-              No staff found.
-            </div>
-          )}
         </div>
       </div>
     </div>
   );
 }
 
-function ModulePage({ title, icon, message }) {
+function RosterPage({ staff }) {
+  const shifts = ["Morning", "Evening", "Night"];
+
   return (
     <div>
-      <div className="page-heading">
-        <div>
-          <h1>
-            {icon} {title}
-          </h1>
+      <PageHeader
+        title="Roster & Staff Attendance"
+        subtitle="Monthly duty roster and staff attendance management"
+        icon="▦"
+      />
 
-          <p>{message}</p>
-        </div>
+      <div className="stats-grid">
+        <StatCard title="Total Staff" value={staff.length} icon="♟" />
+        <StatCard title="Present Today" value="14" icon="✓" />
+        <StatCard title="Absent" value="2" icon="!" />
+        <StatCard title="On Duty" value="12" icon="▦" />
       </div>
 
-      <div className="panel module-panel">
-        <div className="large-icon">{icon}</div>
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Current Staff Roster</h2>
+            <p>Morning, Evening and Night shifts</p>
+          </div>
+
+          <button className="button primary">Generate Monthly Roster</button>
+        </div>
+
+        <div className="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Staff</th>
+                <th>Department</th>
+                <th>Role</th>
+                <th>Morning</th>
+                <th>Evening</th>
+                <th>Night</th>
+                <th>Attendance</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {staff.map((person, index) => (
+                <tr key={person.id}>
+                  <td>{person.name}</td>
+                  <td>{person.department}</td>
+                  <td>{person.role}</td>
+                  <td>
+                    <span className="shift-badge">
+                      {index % 2 === 0 ? "Duty" : "Off"}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="shift-badge">
+                      {index % 3 === 0 ? "Duty" : "Off"}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="shift-badge">
+                      {index % 4 === 0 ? "Duty" : "Off"}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="status-badge active-status">
+                      Present
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="shift-rules">
+          {shifts.map((shift) => (
+            <div key={shift}>
+              <strong>{shift}</strong>
+              <span>
+                After 5 {shift} shifts → scheduled off days
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AuditPage({ currentUser }) {
+  const logs = [
+    {
+      action: "Login",
+      user: currentUser.name,
+      module: "Security",
+      time: "Today, 08:05",
+    },
+    {
+      action: "Patient Registration",
+      user: "ICT Staff",
+      module: "ICT Centre",
+      time: "Today, 08:14",
+    },
+    {
+      action: "Lab Request",
+      user: "Consultant",
+      module: "Laboratory",
+      time: "Today, 08:31",
+    },
+    {
+      action: "Prescription",
+      user: "Consultant",
+      module: "Pharmacy",
+      time: "Today, 08:45",
+    },
+  ];
+
+  return (
+    <div>
+      <PageHeader
+        title="Audit Logs"
+        subtitle="System activity and accountability records"
+        icon="◌"
+      />
+
+      <div className="panel">
+        <div className="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Action</th>
+                <th>User</th>
+                <th>Module</th>
+                <th>Date / Time</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {logs.map((log, index) => (
+                <tr key={index}>
+                  <td>{log.action}</td>
+                  <td>{log.user}</td>
+                  <td>{log.module}</td>
+                  <td>{log.time}</td>
+                  <td>
+                    <span className="status-badge active-status">
+                      Recorded
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ModulePage({ title, subtitle, icon, stats }) {
+  return (
+    <div>
+      <PageHeader title={title} subtitle={subtitle} icon={icon} />
+
+      <div className="stats-grid">
+        {stats.map(([name, value], index) => (
+          <StatCard
+            key={name}
+            title={name}
+            value={value}
+            icon={["▣", "✓", "!", "◉"][index % 4]}
+          />
+        ))}
+      </div>
+
+      <div className="panel empty-module">
+        <div className="large-module-icon">{icon}</div>
 
         <h2>{title}</h2>
 
         <p>
-          An shirya wannan module ne domin a
-          ƙara cikakken tsarin aikin department.
+          This module is ready for its full departmental workflow.
+          Department permissions remain separated from other units.
         </p>
 
-        <div className="security-note">
-          🔐 Department Separation yana aiki.
+        <button className="button primary">
+          Open {title}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PageHeader({ title, subtitle, icon }) {
+  return (
+    <div className="page-header">
+      <div className="page-header-icon">{icon}</div>
+
+      <div>
+        <div className="eyebrow">BAZZA PHC</div>
+        <h1>{title}</h1>
+        <p>{subtitle}</p>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ title, value, icon, text }) {
+  return (
+    <div className="stat-card">
+      <div className="stat-icon">{icon}</div>
+
+      <div>
+        <span>{title}</span>
+        <strong>{value}</strong>
+
+        {text && <small>{text}</small>}
+      </div>
+    </div>
+  );
+}
+
+function PatientTable({ patients }) {
+  return (
+    <div className="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Card Number</th>
+            <th>Patient Name</th>
+            <th>Phone</th>
+            <th>Sex</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {patients.map((patient) => (
+            <tr key={patient.id}>
+              <td>
+                <strong>{patient.card}</strong>
+              </td>
+
+              <td>{patient.name}</td>
+
+              <td>{patient.phone}</td>
+
+              <td>{patient.sex}</td>
+
+              <td>
+                <span className="status-badge active-status">
+                  {patient.status}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function FormField({ label, children }) {
+  return (
+    <label className="form-field">
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function Modal({ title, onClose, children }) {
+  return (
+    <div className="modal-overlay" onMouseDown={onClose}>
+      <div
+        className="modal"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="modal-header">
+          <h2>{title}</h2>
+
+          <button className="close-button" onClick={onClose}>
+            ×
+          </button>
         </div>
+
+        <div className="modal-body">{children}</div>
       </div>
     </div>
   );
@@ -1203,11 +1726,18 @@ const styles = `
   box-sizing: border-box;
 }
 
+:root {
+  font-family: Inter, Arial, Helvetica, sans-serif;
+  color: #172033;
+  background: #f5f7fb;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
 body {
   margin: 0;
-  font-family: Arial, Helvetica, sans-serif;
-  background: #f4f7fb;
-  color: #172033;
+  min-width: 320px;
+  background: #f5f7fb;
 }
 
 button,
@@ -1220,631 +1750,3790 @@ button {
   cursor: pointer;
 }
 
-.login-page {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #e8f5ee, #eef4ff);
-  padding: 20px;
-}
-
-.login-card {
-  width: 100%;
-  max-width: 440px;
-  background: white;
-  border-radius: 18px;
-  padding: 32px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.10);
-}
-
-.login-logo {
-  width: 70px;
-  height: 70px;
-  border-radius: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #0b7a45;
-  color: white;
-  font-size: 34px;
-  margin-bottom: 18px;
-}
-
-.login-card h1 {
-  margin: 0;
-  font-size: 25px;
-}
-
-.login-subtitle {
-  color: #657084;
-  margin-top: 8px;
-}
-
-.login-line {
-  height: 1px;
-  background: #e4e8ef;
-  margin: 24px 0;
-}
-
-.login-card h2 {
-  margin-bottom: 20px;
-}
-
-.login-card label,
-.modal label {
-  display: block;
-  font-weight: 700;
-  font-size: 13px;
-  margin: 14px 0 7px;
-}
-
-.login-card input,
-.modal input,
-.modal select,
-.search-bar input {
-  width: 100%;
-  border: 1px solid #d9dfe8;
-  border-radius: 10px;
-  padding: 12px 13px;
-  outline: none;
-  background: white;
-}
-
-.login-card input:focus,
-.modal input:focus,
-.modal select:focus,
-.search-bar input:focus {
-  border-color: #0b7a45;
-}
-
-.primary-button {
-  border: 0;
-  border-radius: 10px;
-  padding: 12px 18px;
-  background: #0b7a45;
-  color: white;
-  font-weight: 700;
-}
-
-.primary-button:hover {
-  opacity: .9;
-}
-
-.login-card .primary-button {
-  width: 100%;
-  margin-top: 18px;
-}
-
-.secondary-button {
-  border: 1px solid #d5dbe5;
-  border-radius: 10px;
-  padding: 11px 18px;
-  background: white;
-  color: #273248;
-  font-weight: 700;
-}
-
-.error-box {
-  margin-top: 14px;
-  background: #fff0f0;
-  color: #b42318;
-  padding: 11px;
-  border-radius: 9px;
-  font-size: 13px;
-}
-
-.demo-box {
-  margin-top: 20px;
-  background: #f4f7fb;
-  border-radius: 10px;
-  padding: 13px;
-  font-size: 13px;
-  color: #596579;
-}
-
 .app {
   min-height: 100vh;
   display: flex;
+  background: #f5f7fb;
 }
 
 .sidebar {
-  width: 250px;
-  background: #092d1d;
-  color: white;
+  width: 265px;
   min-height: 100vh;
-  padding: 16px;
+  background: #102b46;
+  color: white;
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
-  transition: .2s;
-}
-
-.sidebar.closed {
-  width: 76px;
+  z-index: 20;
 }
 
 .brand {
+  height: 76px;
   display: flex;
-  gap: 12px;
   align-items: center;
-  padding: 10px 8px 22px;
+  gap: 12px;
+  padding: 15px 20px;
+  border-bottom: 1px solid rgba(255,255,255,.09);
 }
 
-.brand-icon {
+.brand-logo {
   width: 42px;
   height: 42px;
-  background: #0b7a45;
   border-radius: 11px;
+  background: #18a56b;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-weight: 900;
   font-size: 22px;
 }
 
-.brand strong,
-.brand small {
-  display: block;
+.brand-title {
+  font-size: 18px;
+  font-weight: 900;
 }
 
-.brand small {
-  color: #b9d7c8;
-  margin-top: 3px;
+.brand-subtitle {
+  color: #9eb1c5;
+  font-size: 12px;
+  margin-top: 2px;
 }
 
-.sidebar nav {
+.facility-name {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255,255,255,.09);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.facility-name strong {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.facility-name span {
+  color: #9eb1c5;
+  font-size: 9px;
+}
+
+.menu {
+  padding: 10px 10px 20px;
+  overflow-y: auto;
   flex: 1;
 }
 
-.menu-button {
+.menu-section {
+  color: #6f879f;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  padding: 15px 12px 7px;
+}
+
+.menu-item {
   width: 100%;
+  border: 0;
+  background: transparent;
+  color: #c5d1dc;
   display: flex;
   align-items: center;
   gap: 12px;
-  border: 0;
-  color: #d7e8df;
-  background: transparent;
-  padding: 12px;
-  border-radius: 10px;
-  margin-bottom: 5px;
+  padding: 10px 12px;
+  border-radius: 8px;
   text-align: left;
+  font-size: 13px;
+  margin-bottom: 2px;
 }
 
-.menu-button:hover,
-.menu-button.active {
-  background: #0b7a45;
+.menu-item:hover {
+  background: rgba(255,255,255,.06);
   color: white;
 }
 
-.logout-button {
-  margin-top: 15px;
+.menu-item.active {
+  background: #18a56b;
+  color: white;
+  font-weight: 700;
+}
+
+.menu-icon {
+  width: 22px;
+  text-align: center;
+  font-size: 15px;
+}
+
+.sidebar-footer {
+  padding: 15px 20px;
+  border-top: 1px solid rgba(255,255,255,.09);
+  color: #9eb1c5;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.online-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #27c983;
 }
 
 .main {
-  flex: 1;
-  min-width: 0;
+  margin-left: 265px;
+  width: calc(100% - 265px);
+  min-height: 100vh;
 }
 
 .topbar {
-  height: 72px;
+  height: 76px;
   background: white;
   border-bottom: 1px solid #e5e9ef;
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 18px;
-  padding: 0 24px;
+  padding: 0 30px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
-.hamburger {
-  border: 0;
-  background: #f2f5f8;
-  width: 40px;
-  height: 40px;
+.top-title {
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.top-location {
+  color: #7a8796;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.icon-button {
+  border: 1px solid #e2e7ed;
+  background: white;
+  width: 38px;
+  height: 38px;
   border-radius: 9px;
 }
 
 .user-box {
-  margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
 }
 
-.user-box strong,
-.user-box small {
-  display: block;
+.avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #dff4eb;
+  color: #168258;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
 }
 
-.user-box small {
-  color: #6b7485;
-  margin-top: 3px;
+.user-details {
+  display: flex;
+  flex-direction: column;
 }
 
-.online-dot {
-  color: #16a05d;
+.user-details strong {
+  font-size: 12px;
+}
+
+.user-details span {
+  font-size: 10px;
+  color: #8792a0;
+}
+
+.logout-button {
+  border: 0;
+  background: #fff0f0;
+  color: #c53a3a;
+  padding: 9px 13px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .content {
-  padding: 26px;
-  max-width: 1500px;
-  margin: auto;
+  padding: 28px 30px 50px;
+  max-width: 1600px;
+  margin: 0 auto;
 }
 
-.welcome-card {
-  background: linear-gradient(120deg, #0b7a45, #0f9656);
-  color: white;
-  border-radius: 16px;
-  padding: 25px;
-  margin-bottom: 20px;
+.welcome {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
 }
 
-.welcome-card h1 {
-  margin: 0 0 8px;
+.welcome h1,
+.page-header h1 {
+  margin: 3px 0 5px;
+  font-size: 27px;
 }
 
-.welcome-card p {
+.welcome p,
+.page-header p {
   margin: 0;
-  opacity: .9;
+  color: #7b8794;
+  font-size: 13px;
+}
+
+.eyebrow {
+  color: #18a56b;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+
+.date-box {
+  background: white;
+  border: 1px solid #e3e8ee;
+  border-radius: 10px;
+  padding: 12px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: right;
+}
+
+.date-box strong {
+  font-size: 13px;
+}
+
+.date-box span {
+  color: #84909d;
+  font-size: 10px;
 }
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 14px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 22px;
 }
 
 .stat-card {
   background: white;
   border: 1px solid #e4e9ef;
-  border-radius: 14px;
-  padding: 18px;
+  border-radius: 12px;
+  padding: 19px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  min-height: 100px;
+}
+
+.stat-icon {
+  width: 45px;
+  height: 45px;
+  border-radius: 10px;
+  background: #e5f6ef;
+  color: #168258;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 19px;
+  font-weight: 800;
 }
 
 .stat-card span {
-  font-size: 23px;
+  display: block;
+  color: #7b8794;
+  font-size: 11px;
+  margin-bottom: 4px;
 }
 
-.stat-card small,
 .stat-card strong {
   display: block;
+  font-size: 23px;
 }
 
 .stat-card small {
-  color: #6b7485;
-  margin-top: 10px;
+  display: block;
+  color: #a0a8b2;
+  margin-top: 3px;
+  font-size: 10px;
 }
 
-.stat-card strong {
-  font-size: 23px;
-  margin-top: 7px;
-}
-
-.two-columns {
+.dashboard-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px;
-  margin-top: 18px;
-}
-
-.panel {
-  background: white;
-  border: 1px solid #e3e8ef;
-  border-radius: 15px;
-  padding: 20px;
-}
-
-.panel h2 {
-  margin-top: 0;
-}
-
-.info-row,
-.status-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 13px 0;
-  border-bottom: 1px solid #edf0f4;
-}
-
-.info-row span,
-.status-row span {
-  color: #6c7586;
-}
-
-.info-row.block {
-  display: block;
-}
-
-.info-row.block > span {
-  display: block;
-  margin-bottom: 10px;
-}
-
-.tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.tags span {
-  background: #e8f6ef;
-  color: #08743f;
-  border-radius: 30px;
-  padding: 5px 9px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.green {
-  color: #078447;
-}
-
-.page-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  grid-template-columns: 1.4fr .8fr;
   gap: 20px;
   margin-bottom: 20px;
 }
 
-.page-heading h1 {
-  margin: 0;
+.panel {
+  background: white;
+  border: 1px solid #e4e9ef;
+  border-radius: 12px;
+  padding: 20px;
 }
 
-.page-heading p {
-  margin: 7px 0 0;
-  color: #6a7485;
-}
-
-.search-bar {
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
   margin-bottom: 18px;
 }
 
+.panel-header h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.panel-header p {
+  margin: 0;
+  color: #8a95a1;
+  font-size: 11px;
+}
+
+.department-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.department-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid #edf0f3;
+}
+
+.department-row:last-child {
+  border-bottom: 0;
+}
+
+.dept-icon {
+  width: 36px;
+  height: 36px;
+  background: #eef7f3;
+  color: #168258;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+}
+
+.department-row div:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.department-row strong {
+  font-size: 12px;
+}
+
+.department-row span {
+  color: #8b96a2;
+  font-size: 10px;
+  margin-top: 3px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22b978;
+}
+
+.quick-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.quick-actions button {
+  border: 1px solid #e4e9ef;
+  background: #fafbfd;
+  border-radius: 9px;
+  padding: 17px 10px;
+  color: #263345;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.quick-actions button:hover {
+  border-color: #18a56b;
+}
+
+.quick-actions span {
+  display: block;
+  font-size: 20px;
+  color: #18a56b;
+  margin-bottom: 7px;
+}
+
+.recent-panel {
+  margin-top: 20px;
+}
+
+.text-button {
+  border: 0;
+  background: transparent;
+  color: #168258;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 24px;
+}
+
+.page-header-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: #e5f6ef;
+  color: #168258;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.toolbar {
+  background: white;
+  border: 1px solid #e4e9ef;
+  padding: 15px;
+  border-radius: 11px;
+  margin-bottom: 16px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.search-input {
+  border: 1px solid #dce2e8;
+  border-radius: 8px;
+  padding: 10px 13px;
+  min-width: 300px;
+  outline: none;
+}
+
+.search-input:focus,
+input:focus,
+select:focus {
+  border-color: #18a56b;
+  box-shadow: 0 0 0 3px rgba(24,165,107,.08);
+}
+
+.button {
+  border: 0;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 12px;
+}
+
+.button.primary {
+  background: #18a56b;
+  color: white;
+}
+
+.button.primary:hover {
+  background: #138b59;
+}
+
+.button.secondary {
+  background: #eef1f4;
+  color: #485462;
+}
+
 .table-wrapper {
+  width: 100%;
   overflow-x: auto;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 1000px;
-}
-
-th,
-td {
-  text-align: left;
-  padding: 13px 10px;
-  border-bottom: 1px solid #edf0f4;
-  vertical-align: middle;
 }
 
 th {
-  background: #f7f9fb;
-  font-size: 12px;
-  color: #687286;
+  text-align: left;
+  background: #f8fafc;
+  color: #687585;
+  font-size: 10px;
   text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 12px;
+  border-bottom: 1px solid #e5e9ee;
+  white-space: nowrap;
 }
 
-.table-small {
-  display: block;
-  color: #7b8493;
-  margin-top: 4px;
+td {
+  padding: 13px 12px;
+  border-bottom: 1px solid #edf0f3;
   font-size: 12px;
+  color: #3f4c5b;
 }
 
-.status {
-  padding: 5px 9px;
-  border-radius: 30px;
-  font-size: 12px;
-  font-weight: 700;
+tbody tr:hover {
+  background: #fbfcfd;
 }
 
-.active-status {
-  background: #e8f7ef;
-  color: #087940;
+.username-badge,
+.role-badge,
+.status-badge,
+.shift-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 20px;
+  padding: 5px 8px;
+  font-size: 9px;
+  font-weight: 800;
 }
 
-.inactive-status {
-  background: #fcecec;
-  color: #a42b2b;
+.username-badge {
+  background: #f0f3f6;
+  color: #596675;
 }
 
-.permission-count {
-  color: #596579;
-  font-size: 13px;
+.role-badge {
+  background: #eaf2ff;
+  color: #386ca7;
 }
 
-.action-buttons {
+.status-badge.active-status {
+  background: #e4f7ee;
+  color: #168258;
+}
+
+.status-badge.inactive-status {
+  background: #fff0f0;
+  color: #b84040;
+}
+
+.shift-badge {
+  background: #eef4fb;
+  color: #41698f;
+}
+
+.table-actions {
   display: flex;
-  flex-wrap: wrap;
   gap: 5px;
+  flex-wrap: wrap;
 }
 
 .small-button {
-  border: 1px solid #d9dfe7;
+  border: 1px solid #dfe5eb;
   background: white;
-  border-radius: 7px;
-  padding: 7px 9px;
-  font-size: 12px;
+  color: #455362;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 9px;
+  font-weight: 700;
 }
 
 .small-button:hover {
-  background: #f4f7fa;
+  border-color: #18a56b;
+  color: #168258;
 }
 
 .small-button.danger {
-  color: #b42318;
+  color: #b63c3c;
 }
 
-.empty-state {
+.empty-cell {
   text-align: center;
-  padding: 35px;
-  color: #758094;
-}
-
-.module-panel {
-  text-align: center;
-  padding: 50px 20px;
-}
-
-.large-icon {
-  font-size: 60px;
-}
-
-.module-panel h2 {
-  margin-bottom: 8px;
-}
-
-.module-panel p {
-  color: #6c7586;
-}
-
-.security-note {
-  background: #eef8f3;
-  color: #086f3e;
-  padding: 12px;
-  border-radius: 9px;
-  margin-top: 18px;
-  font-size: 13px;
-}
-
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  z-index: 1000;
-}
-
-.modal {
-  width: 100%;
-  max-width: 720px;
-  max-height: 90vh;
-  overflow-y: auto;
-  background: white;
-  border-radius: 17px;
-  padding: 24px;
-  box-shadow: 0 25px 80px rgba(0,0,0,.2);
-}
-
-.small-modal {
-  max-width: 560px;
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 15px;
-}
-
-.modal-header h2 {
-  margin: 0;
-}
-
-.modal-header p {
-  margin: 5px 0 0;
-  color: #727c8d;
-}
-
-.close-button {
-  border: 0;
-  background: #f1f4f7;
-  width: 36px;
-  height: 36px;
-  border-radius: 9px;
-  font-size: 22px;
+  padding: 30px;
+  color: #8d98a4;
 }
 
 .form-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px 15px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 15px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.form-field span,
+.login-card label {
+  font-size: 11px;
+  font-weight: 800;
+  color: #586575;
+}
+
+input,
+select {
+  width: 100%;
+  border: 1px solid #dce2e8;
+  background: white;
+  border-radius: 8px;
+  padding: 10px 12px;
+  outline: none;
+  color: #263345;
 }
 
 .modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  margin-top: 22px;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.modal-actions.left {
+  justify-content: flex-start;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 27, 42, .56);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.modal {
+  width: min(700px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  background: white;
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.22);
+}
+
+.modal-header {
+  padding: 17px 20px;
+  border-bottom: 1px solid #e8ecf0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.close-button {
+  border: 0;
+  background: #f1f3f5;
+  width: 31px;
+  height: 31px;
+  border-radius: 50%;
+  font-size: 19px;
+  color: #66717e;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-description {
+  color: #7c8794;
+  font-size: 12px;
+  margin-top: 0;
 }
 
 .permission-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 9px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 15px;
 }
 
 .permission-item {
-  display: flex !important;
+  border: 1px solid #e1e6eb;
+  padding: 13px;
+  border-radius: 8px;
+  display: flex;
   align-items: center;
   gap: 9px;
-  padding: 12px;
-  border: 1px solid #e0e5eb;
-  border-radius: 9px;
-  margin: 0 !important;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .permission-item input {
-  width: auto !important;
+  width: auto;
+}
+
+.empty-module {
+  min-height: 330px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.large-module-icon {
+  width: 70px;
+  height: 70px;
+  border-radius: 17px;
+  background: #e5f6ef;
+  color: #168258;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.empty-module h2 {
+  margin: 15px 0 5px;
+}
+
+.empty-module p {
+  max-width: 560px;
+  color: #7d8996;
+  font-size: 12px;
+  line-height: 1.7;
+  margin-bottom: 18px;
+}
+
+.shift-rules {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.shift-rules div {
+  border: 1px solid #e4e9ef;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.shift-rules strong {
+  font-size: 11px;
+}
+
+.shift-rules span {
+  font-size: 10px;
+  color: #84909d;
+}
+
+.toast {
+  position: fixed;
+  right: 25px;
+  top: 90px;
+  background: #172b40;
+  color: white;
+  padding: 12px 16px;
+  border-radius: 8px;
+  z-index: 200;
+  font-size: 12px;
+  box-shadow: 0 10px 25px rgba(0,0,0,.18);
+}
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eef3f6;
+  padding: 25px;
+}
+
+.login-card {
+  width: min(430px, 100%);
+  background: white;
+  border: 1px solid #e2e7ec;
+  border-radius: 17px;
+  padding: 35px;
+  box-shadow: 0 15px 45px rgba(26,48,69,.10);
+}
+
+.login-logo {
+  width: 65px;
+  height: 65px;
+  margin: 0 auto 15px;
+  background: #18a56b;
+  color: white;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  font-weight: 900;
+}
+
+.login-card h1 {
+  text-align: center;
+  margin: 0;
+  text-transform: uppercase;
+  font-size: 25px;
+  color: #102b46;
+}
+
+.login-subtitle {
+  text-align: center;
+  color: #8a95a1;
+  font-size: 11px;
+  margin: 6px 0 17px;
+}
+
+.login-line {
+  height: 1px;
+  background: #e6ebef;
+  margin-bottom: 23px;
+}
+
+.login-card h2 {
+  margin: 0 0 18px;
+  font-size: 17px;
+}
+
+.login-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.login-card input {
+  margin-bottom: 8px;
+}
+
+.login-button {
+  margin-top: 5px;
+  border: 0;
+  border-radius: 8px;
+  background: #18a56b;
+  color: white;
+  padding: 12px;
+  font-weight: 900;
+}
+
+.login-button:hover {
+  background: #138b59;
+}
+
+.login-error {
+  background: #fff0f0;
+  color: #bd3b3b;
+  padding: 10px;
+  border-radius: 7px;
+  margin-bottom: 12px;
+  font-size: 11px;
+}
+
+.demo-box {
+  margin-top: 20px;
+  padding: 13px;
+  background: #f7f9fb;
+  border-radius: 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.demo-box strong {
+  font-size: 11px;
+  color: #344354;
+  margin-bottom: 3px;
+}
+
+.demo-box span {
+  font-size: 10px;
+  color: #758190;
+}
+
+.login-card footer {
+  text-align: center;
+  color: #a0a8b2;
+  font-size: 9px;
+  margin-top: 22px;
 }
 
 @media (max-width: 1100px) {
   .stats-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 800px) {
   .sidebar {
-    width: 76px;
+    width: 220px;
   }
 
-  .sidebar .brand div:last-child,
-  .sidebar nav .menu-button span:last-child,
-  .sidebar .logout-button span:last-child {
-    display: none;
+  .main {
+    margin-left: 220px;
+    width: calc(100% - 220px);
+  }
+
+  .topbar {
+    padding: 0 15px;
   }
 
   .content {
-    padding: 16px;
+    padding: 20px 15px 40px;
   }
 
-  .two-columns {
-    grid-template-columns: 1fr;
+  .user-details {
+    display: none;
   }
 
   .form-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .sidebar {
+    width: 70px;
+  }
+
+  .brand {
+    justify-content: center;
+    padding: 10px;
+  }
+
+  .brand > div:not(.brand-logo),
+  .facility-name,
+  .menu-item span:not(.menu-icon),
+  .menu-section,
+  .sidebar-footer span {
+    display: none;
+  }
+
+  .menu-item {
+    justify-content: center;
+  }
+
+  .main {
+    margin-left: 70px;
+    width: calc(100% - 70px);
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .welcome {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .toolbar {
+    flex-direction: column;
+  }
+
+  .search-input {
+    min-width: 0;
+  }
+
+  .top-location {
+    display: none;
   }
 
   .permission-grid {
     grid-template-columns: 1fr;
   }
 
+  .shift-rules {
+    grid-template-columns: 1fr;
+  }
+}
+`;
+
+export default App;import { useMemo, useState } from "react";
+
+const departments = [
+  "ICT Centre",
+  "Records Unit",
+  "Nursing Unit",
+  "Consultant Room",
+  "Laboratory Unit",
+  "Pharmacy Unit",
+  "Ultrasound Room",
+  "In-Charge",
+  "General Cashier",
+  "Male Ward",
+  "Female Ward",
+  "Maternity Ward",
+  "Child Ward",
+  "Labour Room",
+  "Immunization Unit",
+  "Family Planning Unit",
+  "Adolescent Unit",
+];
+
+const permissions = [
+  "View",
+  "Create",
+  "Edit",
+  "Delete",
+  "Print",
+  "Cashier",
+  "Reports",
+  "Stock",
+  "SMS",
+  "Alerts",
+];
+
+const roles = [
+  "Super Admin",
+  "In-Charge",
+  "General Cashier",
+  "ICT Staff",
+  "Records Staff",
+  "Nurse",
+  "Consultant",
+  "Laboratory Staff",
+  "Pharmacy Staff",
+  "Ultrasound Staff",
+  "Ward Staff",
+  "Immunization Staff",
+  "Family Planning Staff",
+  "Adolescent Staff",
+];
+
+const initialStaff = [
+  {
+    id: 1,
+    staffId: "BZ000",
+    name: "Super Administrator",
+    username: "admin",
+    password: "1234",
+    department: "ICT Centre",
+    role: "Super Admin",
+    status: "Active",
+  },
+  {
+    id: 2,
+    staffId: "BZ001",
+    name: "Altini Garba Bazza",
+    username: "altini",
+    password: "1234",
+    department: "In-Charge",
+    role: "In-Charge",
+    status: "Active",
+  },
+  {
+    id: 3,
+    staffId: "BZ002",
+    name: "Hadiza Umar",
+    username: "hadiza",
+    password: "1234",
+    department: "Pharmacy Unit",
+    role: "Pharmacy Staff",
+    status: "Active",
+  },
+  {
+    id: 4,
+    staffId: "BZ003",
+    name: "Abba Yaro",
+    username: "abbayaro",
+    password: "1234",
+    department: "Ultrasound Room",
+    role: "Ultrasound Staff",
+    status: "Active",
+  },
+  {
+    id: 5,
+    staffId: "BZ004",
+    name: "Kabiru Lawal",
+    username: "kabiru",
+    password: "1234",
+    department: "Laboratory Unit",
+    role: "Laboratory Staff",
+    status: "Active",
+  },
+];
+
+const demoPatients = [
+  {
+    id: 1,
+    card: "BZ-P001",
+    name: "Aisha Musa",
+    phone: "08000000001",
+    sex: "Female",
+    status: "Active",
+  },
+  {
+    id: 2,
+    card: "BZ-P002",
+    name: "Ibrahim Bello",
+    phone: "08000000002",
+    sex: "Male",
+    status: "Active",
+  },
+  {
+    id: 3,
+    card: "BZ-P003",
+    name: "Fatima Umar",
+    phone: "08000000003",
+    sex: "Female",
+    status: "Active",
+  },
+];
+
+function App() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [page, setPage] = useState("Dashboard");
+  const [staff, setStaff] = useState(initialStaff);
+  const [patients, setPatients] = useState(demoPatients);
+  const [search, setSearch] = useState("");
+  const [loginForm, setLoginForm] = useState({
+    username: "",
+    password: "",
+  });
+
+  const [showStaffModal, setShowStaffModal] = useState(false);
+  const [editingStaff, setEditingStaff] = useState(null);
+
+  const emptyStaffForm = {
+    name: "",
+    username: "",
+    password: "",
+    department: "ICT Centre",
+    role: "ICT Staff",
+    status: "Active",
+  };
+
+  const [staffForm, setStaffForm] = useState(emptyStaffForm);
+
+  const [selectedStaff, setSelectedStaff] = useState(null);
+  const [showPermissions, setShowPermissions] = useState(false);
+
+  const [enabledPermissions, setEnabledPermissions] = useState(
+    permissions.reduce((acc, item) => {
+      acc[item] = true;
+      return acc;
+    }, {})
+  );
+
+  const [notification, setNotification] = useState("");
+
+  const filteredStaff = useMemo(() => {
+    const q = search.toLowerCase().trim();
+
+    if (!q) return staff;
+
+    return staff.filter(
+      (person) =>
+        person.name.toLowerCase().includes(q) ||
+        person.staffId.toLowerCase().includes(q) ||
+        person.username.toLowerCase().includes(q) ||
+        person.department.toLowerCase().includes(q) ||
+        person.role.toLowerCase().includes(q)
+    );
+  }, [staff, search]);
+
+  const showMessage = (message) => {
+    setNotification(message);
+
+    setTimeout(() => {
+      setNotification("");
+    }, 2500);
+  };
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+
+    const user = staff.find(
+      (person) =>
+        person.username === loginForm.username &&
+        person.password === loginForm.password &&
+        person.status === "Active"
+    );
+
+    if (!user) {
+      showMessage("Username ko Password ba daidai ba.");
+      return;
+    }
+
+    setCurrentUser(user);
+    setPage("Dashboard");
+    setLoginForm({
+      username: "",
+      password: "",
+    });
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setPage("Dashboard");
+  };
+
+  const openAddStaff = () => {
+    setEditingStaff(null);
+    setStaffForm(emptyStaffForm);
+    setShowStaffModal(true);
+  };
+
+  const openEditStaff = (person) => {
+    setEditingStaff(person);
+
+    setStaffForm({
+      name: person.name,
+      username: person.username,
+      password: person.password,
+      department: person.department,
+      role: person.role,
+      status: person.status,
+    });
+
+    setShowStaffModal(true);
+  };
+
+  const saveStaff = (e) => {
+    e.preventDefault();
+
+    if (
+      !staffForm.name.trim() ||
+      !staffForm.username.trim() ||
+      !staffForm.password.trim()
+    ) {
+      showMessage("Cika dukkan muhimman bayanai.");
+      return;
+    }
+
+    if (editingStaff) {
+      setStaff((prev) =>
+        prev.map((person) =>
+          person.id === editingStaff.id
+            ? {
+                ...person,
+                ...staffForm,
+              }
+            : person
+        )
+      );
+
+      showMessage("An sabunta ma'aikaci.");
+    } else {
+      const newStaff = {
+        id: Date.now(),
+        staffId: `BZ${String(staff.length).padStart(3, "0")}`,
+        ...staffForm,
+      };
+
+      setStaff((prev) => [...prev, newStaff]);
+      showMessage("An ƙara sabon ma'aikaci.");
+    }
+
+    setShowStaffModal(false);
+    setEditingStaff(null);
+    setStaffForm(emptyStaffForm);
+  };
+
+  const deleteStaff = (id) => {
+    const person = staff.find((item) => item.id === id);
+
+    if (!person) return;
+
+    if (person.role === "Super Admin") {
+      showMessage("Ba za a iya goge Super Admin ba.");
+      return;
+    }
+
+    setStaff((prev) => prev.filter((item) => item.id !== id));
+    showMessage("An cire ma'aikacin daga tsarin.");
+  };
+
+  const togglePermission = (permission) => {
+    setEnabledPermissions((prev) => ({
+      ...prev,
+      [permission]: !prev[permission],
+    }));
+  };
+
+  if (!currentUser) {
+    return (
+      <LoginScreen
+        loginForm={loginForm}
+        setLoginForm={setLoginForm}
+        handleLogin={handleLogin}
+        notification={notification}
+      />
+    );
+  }
+
+  return (
+    <div className="app">
+      <style>{styles}</style>
+
+      <aside className="sidebar">
+        <div className="brand">
+          <div className="brand-logo">B</div>
+          <div>
+            <div className="brand-title">BAZZA PHC</div>
+            <div className="brand-subtitle">Sokoto</div>
+          </div>
+        </div>
+
+        <div className="facility-name">
+          <strong>COMPREHENSIVE HEALTH CLINIC BAZZAH</strong>
+          <span>PRIMARY HEALTH CARE DEPARTMENT</span>
+        </div>
+
+        <nav className="menu">
+          <MenuItem
+            label="Dashboard"
+            icon="⌂"
+            active={page === "Dashboard"}
+            onClick={() => setPage("Dashboard")}
+          />
+
+          <div className="menu-section">PATIENT SERVICES</div>
+
+          <MenuItem
+            label="ICT Centre"
+            icon="▣"
+            active={page === "ICT Centre"}
+            onClick={() => setPage("ICT Centre")}
+          />
+
+          <MenuItem
+            label="Records Unit"
+            icon="▤"
+            active={page === "Records Unit"}
+            onClick={() => setPage("Records Unit")}
+          />
+
+          <MenuItem
+            label="Nursing Unit"
+            icon="♙"
+            active={page === "Nursing Unit"}
+            onClick={() => setPage("Nursing Unit")}
+          />
+
+          <MenuItem
+            label="Consultant Room"
+            icon="✚"
+            active={page === "Consultant Room"}
+            onClick={() => setPage("Consultant Room")}
+          />
+
+          <MenuItem
+            label="Laboratory"
+            icon="⚗"
+            active={page === "Laboratory Unit"}
+            onClick={() => setPage("Laboratory Unit")}
+          />
+
+          <MenuItem
+            label="Pharmacy"
+            icon="⚕"
+            active={page === "Pharmacy Unit"}
+            onClick={() => setPage("Pharmacy Unit")}
+          />
+
+          <MenuItem
+            label="Ultrasound"
+            icon="◉"
+            active={page === "Ultrasound Room"}
+            onClick={() => setPage("Ultrasound Room")}
+          />
+
+          <div className="menu-section">WARDS & PROGRAMS</div>
+
+          <MenuItem
+            label="Male Ward"
+            icon="M"
+            active={page === "Male Ward"}
+            onClick={() => setPage("Male Ward")}
+          />
+
+          <MenuItem
+            label="Female Ward"
+            icon="F"
+            active={page === "Female Ward"}
+            onClick={() => setPage("Female Ward")}
+          />
+
+          <MenuItem
+            label="Maternity Ward"
+            icon="♥"
+            active={page === "Maternity Ward"}
+            onClick={() => setPage("Maternity Ward")}
+          />
+
+          <MenuItem
+            label="Child Ward"
+            icon="C"
+            active={page === "Child Ward"}
+            onClick={() => setPage("Child Ward")}
+          />
+
+          <MenuItem
+            label="Labour Room"
+            icon="L"
+            active={page === "Labour Room"}
+            onClick={() => setPage("Labour Room")}
+          />
+
+          <MenuItem
+            label="Immunization"
+            icon="I"
+            active={page === "Immunization Unit"}
+            onClick={() => setPage("Immunization Unit")}
+          />
+
+          <MenuItem
+            label="Family Planning"
+            icon="P"
+            active={page === "Family Planning Unit"}
+            onClick={() => setPage("Family Planning Unit")}
+          />
+
+          <MenuItem
+            label="Adolescent Unit"
+            icon="A"
+            active={page === "Adolescent Unit"}
+            onClick={() => setPage("Adolescent Unit")}
+          />
+
+          <div className="menu-section">ADMINISTRATION</div>
+
+          <MenuItem
+            label="Staff & Permissions"
+            icon="♟"
+            active={page === "Staff & Permissions"}
+            onClick={() => setPage("Staff & Permissions")}
+          />
+
+          <MenuItem
+            label="General Cashier"
+            icon="₦"
+            active={page === "General Cashier"}
+            onClick={() => setPage("General Cashier")}
+          />
+
+          <MenuItem
+            label="Roster & Attendance"
+            icon="▦"
+            active={page === "Roster & Attendance"}
+            onClick={() => setPage("Roster & Attendance")}
+          />
+
+          <MenuItem
+            label="Reports"
+            icon="▥"
+            active={page === "Reports"}
+            onClick={() => setPage("Reports")}
+          />
+
+          <MenuItem
+            label="Alerts"
+            icon="!"
+            active={page === "Alerts"}
+            onClick={() => setPage("Alerts")}
+          />
+
+          <MenuItem
+            label="SMS / Notifications"
+            icon="✉"
+            active={page === "SMS / Notifications"}
+            onClick={() => setPage("SMS / Notifications")}
+          />
+
+          <MenuItem
+            label="Audit Logs"
+            icon="◌"
+            active={page === "Audit Logs"}
+            onClick={() => setPage("Audit Logs")}
+          />
+
+          <MenuItem
+            label="Settings"
+            icon="⚙"
+            active={page === "Settings"}
+            onClick={() => setPage("Settings")}
+          />
+        </nav>
+
+        <div className="sidebar-footer">
+          <div className="online-dot"></div>
+          <span>System Online</span>
+        </div>
+      </aside>
+
+      <main className="main">
+        <header className="topbar">
+          <div>
+            <div className="top-title">{page}</div>
+            <div className="top-location">
+              Waziri Maccido Road, Bazza Area, Sokoto
+            </div>
+          </div>
+
+          <div className="top-actions">
+            <button className="icon-button" onClick={() => setPage("Alerts")}>
+              🔔
+            </button>
+
+            <div className="user-box">
+              <div className="avatar">
+                {currentUser.name.charAt(0).toUpperCase()}
+              </div>
+
+              <div className="user-details">
+                <strong>{currentUser.name}</strong>
+                <span>{currentUser.role}</span>
+              </div>
+            </div>
+
+            <button className="logout-button" onClick={handleLogout}>
+              Logout
+            </button>
+          </div>
+        </header>
+
+        {notification && <div className="toast">{notification}</div>}
+
+        <section className="content">
+          {page === "Dashboard" && (
+            <DashboardPage
+              currentUser={currentUser}
+              patients={patients}
+              staff={staff}
+              setPage={setPage}
+            />
+          )}
+
+          {page === "Staff & Permissions" && (
+            <StaffManagement
+              staff={filteredStaff}
+              search={search}
+              setSearch={setSearch}
+              openAddStaff={openAddStaff}
+              openEditStaff={openEditStaff}
+              deleteStaff={deleteStaff}
+              openPermissions={(person) => {
+                setSelectedStaff(person);
+                setShowPermissions(true);
+              }}
+            />
+          )}
+
+          {page === "ICT Centre" && (
+            <ICTPage
+              patients={patients}
+              setPatients={setPatients}
+              showMessage={showMessage}
+            />
+          )}
+
+          {page === "Records Unit" && (
+            <ModulePage
+              title="Records Unit"
+              subtitle="Patient records, files and registration services"
+              icon="▤"
+              stats={[
+                ["Today's Cards", "12"],
+                ["Files Issued", "18"],
+                ["Pending", "4"],
+                ["Total Records", "1,248"],
+              ]}
+            />
+          )}
+
+          {page === "Nursing Unit" && (
+            <ModulePage
+              title="Nursing Unit"
+              subtitle="Nursing assessment, patient flow and ward assignment"
+              icon="♙"
+              stats={[
+                ["Waiting", "8"],
+                ["Ready for Consultant", "5"],
+                ["In Ward", "21"],
+                ["Completed", "37"],
+              ]}
+            />
+          )}
+
+          {page === "Consultant Room" && (
+            <ModulePage
+              title="Consultant Room"
+              subtitle="Consultation, diagnosis, requests and prescriptions"
+              icon="✚"
+              stats={[
+                ["Waiting", "5"],
+                ["In Consultation", "2"],
+                ["Lab Requests", "6"],
+                ["Completed", "29"],
+              ]}
+            />
+          )}
+
+          {page === "Laboratory Unit" && (
+            <ModulePage
+              title="Laboratory Unit"
+              subtitle="Laboratory requests, samples and results"
+              icon="⚗"
+              stats={[
+                ["New Requests", "7"],
+                ["Samples Received", "5"],
+                ["In Progress", "3"],
+                ["Results Ready", "11"],
+              ]}
+            />
+          )}
+
+          {page === "Pharmacy Unit" && (
+            <ModulePage
+              title="Pharmacy Unit"
+              subtitle="Prescriptions, dispensing and medicine stock"
+              icon="⚕"
+              stats={[
+                ["New Prescriptions", "9"],
+                ["Dispensed Today", "31"],
+                ["Pending", "4"],
+                ["Stock Alerts", "3"],
+              ]}
+            />
+          )}
+
+          {page === "Ultrasound Room" && (
+            <ModulePage
+              title="Ultrasound Room"
+              subtitle="Ultrasound requests, scanning and reports"
+              icon="◉"
+              stats={[
+                ["New Requests", "4"],
+                ["Waiting", "3"],
+                ["Completed", "15"],
+                ["Reports Ready", "7"],
+              ]}
+            />
+          )}
+
+          {[
+            "Male Ward",
+            "Female Ward",
+            "Maternity Ward",
+            "Child Ward",
+            "Labour Room",
+          ].includes(page) && (
+            <ModulePage
+              title={page}
+              subtitle="Ward patient management and monitoring"
+              icon="▣"
+              stats={[
+                ["Occupied Beds", "18"],
+                ["Available Beds", "12"],
+                ["New Admissions", "4"],
+                ["Discharges", "2"],
+              ]}
+            />
+          )}
+
+          {[
+            "Immunization Unit",
+            "Family Planning Unit",
+            "Adolescent Unit",
+          ].includes(page) && (
+            <ModulePage
+              title={page}
+              subtitle="Program services and patient visits"
+              icon="✚"
+              stats={[
+                ["Today's Visits", "14"],
+                ["Pending", "3"],
+                ["Completed", "11"],
+                ["Follow-up", "6"],
+              ]}
+            />
+          )}
+
+          {page === "General Cashier" && (
+            <ModulePage
+              title="General Cashier"
+              subtitle="Central payment and receipt management"
+              icon="₦"
+              stats={[
+                ["Today's Collections", "₦84,500"],
+                ["Cash", "₦32,000"],
+                ["POS", "₦27,500"],
+                ["Bank Transfer", "₦25,000"],
+              ]}
+            />
+          )}
+
+          {page === "Roster & Attendance" && (
+            <RosterPage staff={staff} />
+          )}
+
+          {page === "Reports" && (
+            <ModulePage
+              title="Reports"
+              subtitle="Hospital and department reports"
+              icon="▥"
+              stats={[
+                ["Daily Reports", "12"],
+                ["Monthly Reports", "4"],
+                ["Department Reports", "17"],
+                ["Pending Reports", "2"],
+              ]}
+            />
+          )}
+
+          {page === "Alerts" && (
+            <ModulePage
+              title="Department Alerts"
+              subtitle="Alerts sent between authorized departments"
+              icon="!"
+              stats={[
+                ["New Alerts", "8"],
+                ["Consultant Alerts", "3"],
+                ["Laboratory Alerts", "2"],
+                ["Other Alerts", "3"],
+              ]}
+            />
+          )}
+
+          {page === "SMS / Notifications" && (
+            <ModulePage
+              title="SMS / Notifications"
+              subtitle="Patient messages and department notifications"
+              icon="✉"
+              stats={[
+                ["Sent Today", "38"],
+                ["Result Ready", "12"],
+                ["Follow-up", "15"],
+                ["Appointment", "11"],
+              ]}
+            />
+          )}
+
+          {page === "Audit Logs" && (
+            <AuditPage currentUser={currentUser} />
+          )}
+
+          {page === "Settings" && (
+            <ModulePage
+              title="System Settings"
+              subtitle="Hospital configuration and system controls"
+              icon="⚙"
+              stats={[
+                ["Departments", departments.length],
+                ["Staff", staff.length],
+                ["Permissions", permissions.length],
+                ["System", "Active"],
+              ]}
+            />
+          )}
+        </section>
+      </main>
+
+      {showStaffModal && (
+        <Modal
+          title={editingStaff ? "Edit Staff" : "Add New Staff"}
+          onClose={() => setShowStaffModal(false)}
+        >
+          <form onSubmit={saveStaff}>
+            <div className="form-grid">
+              <FormField label="Full Name">
+                <input
+                  value={staffForm.name}
+                  onChange={(e) =>
+                    setStaffForm({
+                      ...staffForm,
+                      name: e.target.value,
+                    })
+                  }
+                  placeholder="Enter full name"
+                />
+              </FormField>
+
+              <FormField label="Username">
+                <input
+                  value={staffForm.username}
+                  onChange={(e) =>
+                    setStaffForm({
+                      ...staffForm,
+                      username: e.target.value,
+                    })
+                  }
+                  placeholder="Login username"
+                />
+              </FormField>
+
+              <FormField label="Password">
+                <input
+                  value={staffForm.password}
+                  onChange={(e) =>
+                    setStaffForm({
+                      ...staffForm,
+                      password: e.target.value,
+                    })
+                  }
+                  placeholder="Password"
+                />
+              </FormField>
+
+              <FormField label="Department">
+                <select
+                  value={staffForm.department}
+                  onChange={(e) =>
+                    setStaffForm({
+                      ...staffForm,
+                      department: e.target.value,
+                    })
+                  }
+                >
+                  {departments.map((department) => (
+                    <option key={department}>{department}</option>
+                  ))}
+                </select>
+              </FormField>
+
+              <FormField label="Role">
+                <select
+                  value={staffForm.role}
+                  onChange={(e) =>
+                    setStaffForm({
+                      ...staffForm,
+                      role: e.target.value,
+                    })
+                  }
+                >
+                  {roles.map((role) => (
+                    <option key={role}>{role}</option>
+                  ))}
+                </select>
+              </FormField>
+
+              <FormField label="Status">
+                <select
+                  value={staffForm.status}
+                  onChange={(e) =>
+                    setStaffForm({
+                      ...staffForm,
+                      status: e.target.value,
+                    })
+                  }
+                >
+                  <option>Active</option>
+                  <option>Inactive</option>
+                </select>
+              </FormField>
+            </div>
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() => setShowStaffModal(false)}
+              >
+                Cancel
+              </button>
+
+              <button type="submit" className="button primary">
+                {editingStaff ? "Save Changes" : "Add Staff"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {showPermissions && selectedStaff && (
+        <Modal
+          title={`Permissions — ${selectedStaff.name}`}
+          onClose={() => setShowPermissions(false)}
+        >
+          <p className="modal-description">
+            Manage access permissions for this staff account.
+          </p>
+
+          <div className="permission-grid">
+            {permissions.map((permission) => (
+              <label className="permission-item" key={permission}>
+                <input
+                  type="checkbox"
+                  checked={enabledPermissions[permission]}
+                  onChange={() => togglePermission(permission)}
+                />
+                <span>{permission}</span>
+              </label>
+            ))}
+          </div>
+
+          <div className="modal-actions">
+            <button
+              className="button secondary"
+              onClick={() => setShowPermissions(false)}
+            >
+              Close
+            </button>
+
+            <button
+              className="button primary"
+              onClick={() => {
+                setShowPermissions(false);
+                showMessage("An adana permissions.");
+              }}
+            >
+              Save Permissions
+            </button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function LoginScreen({
+  loginForm,
+  setLoginForm,
+  handleLogin,
+  notification,
+}) {
+  return (
+    <div className="login-page">
+      <style>{styles}</style>
+
+      <div className="login-card">
+        <div className="login-logo">B</div>
+
+        <h1>Bazza PHC</h1>
+        <p className="login-subtitle">
+          Comprehensive Health Clinic Bazzah
+        </p>
+
+        <div className="login-line"></div>
+
+        <h2>Staff Login</h2>
+
+        {notification && <div className="login-error">{notification}</div>}
+
+        <form onSubmit={handleLogin}>
+          <label>Username</label>
+          <input
+            value={loginForm.username}
+            onChange={(e) =>
+              setLoginForm({
+                ...loginForm,
+                username: e.target.value,
+              })
+            }
+            placeholder="Enter username"
+          />
+
+          <label>Password</label>
+          <input
+            type="password"
+            value={loginForm.password}
+            onChange={(e) =>
+              setLoginForm({
+                ...loginForm,
+                password: e.target.value,
+              })
+            }
+            placeholder="Enter password"
+          />
+
+          <button className="login-button" type="submit">
+            Login
+          </button>
+        </form>
+
+        <div className="demo-box">
+          <strong>Demo Login</strong>
+          <span>Super Admin: admin / 1234</span>
+          <span>In-Charge: altini / 1234</span>
+          <span>Pharmacy: hadiza / 1234</span>
+          <span>Ultrasound: abbayaro / 1234</span>
+          <span>Laboratory: kabiru / 1234</span>
+        </div>
+
+        <footer>
+          Primary Health Care Department • Sokoto State
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function MenuItem({ label, icon, active, onClick }) {
+  return (
+    <button
+      className={`menu-item ${active ? "active" : ""}`}
+      onClick={onClick}
+    >
+      <span className="menu-icon">{icon}</span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function DashboardPage({ currentUser, patients, staff, setPage }) {
+  return (
+    <div>
+      <div className="welcome">
+        <div>
+          <div className="eyebrow">WELCOME BACK</div>
+          <h1>{currentUser.name}</h1>
+          <p>
+            Here is the current overview of Bazza Primary Health Care.
+          </p>
+        </div>
+
+        <div className="date-box">
+          <strong>{new Date().toLocaleDateString()}</strong>
+          <span>{currentUser.department}</span>
+        </div>
+      </div>
+
+      <div className="stats-grid">
+        <StatCard
+          title="Total Patients"
+          value={patients.length}
+          icon="♙"
+          text="Registered patients"
+        />
+
+        <StatCard
+          title="Staff"
+          value={staff.length}
+          icon="♟"
+          text="Active staff accounts"
+        />
+
+        <StatCard
+          title="Today's Visits"
+          value="42"
+          icon="▣"
+          text="Patient visits today"
+        />
+
+        <StatCard
+          title="Pending Tasks"
+          value="17"
+          icon="!"
+          text="Across departments"
+        />
+      </div>
+
+      <div className="dashboard-grid">
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <h2>Department Overview</h2>
+              <p>Current activity by department</p>
+            </div>
+          </div>
+
+          <div className="department-list">
+            {[
+              ["Records Unit", "12 patients waiting"],
+              ["Nursing Unit", "8 patients waiting"],
+              ["Consultant Room", "5 consultations"],
+              ["Laboratory Unit", "7 new requests"],
+              ["Pharmacy Unit", "9 prescriptions"],
+              ["Ultrasound Room", "4 new requests"],
+            ].map(([name, info]) => (
+              <div className="department-row" key={name}>
+                <div className="dept-icon">+</div>
+
+                <div>
+                  <strong>{name}</strong>
+                  <span>{info}</span>
+                </div>
+
+                <span className="status-dot"></span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <h2>Quick Actions</h2>
+              <p>Frequently used modules</p>
+            </div>
+          </div>
+
+          <div className="quick-actions">
+            <button onClick={() => setPage("ICT Centre")}>
+              <span>▣</span>
+              Register Patient
+            </button>
+
+            <button onClick={() => setPage("Records Unit")}>
+              <span>▤</span>
+              Patient Records
+            </button>
+
+            <button onClick={() => setPage("General Cashier")}>
+              <span>₦</span>
+              Cashier
+            </button>
+
+            <button onClick={() => setPage("Roster & Attendance")}>
+              <span>▦</span>
+              Attendance
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="panel recent-panel">
+        <div className="panel-header">
+          <div>
+            <h2>Recent Patients</h2>
+            <p>Latest patient registrations</p>
+          </div>
+
+          <button
+            className="text-button"
+            onClick={() => setPage("ICT Centre")}
+          >
+            View All
+          </button>
+        </div>
+
+        <PatientTable patients={patients} />
+      </div>
+    </div>
+  );
+}
+
+function ICTPage({ patients, setPatients, showMessage }) {
+  const [form, setForm] = useState({
+    surname: "",
+    otherNames: "",
+    phone: "",
+    sex: "Female",
+    spouse: "",
+  });
+
+  const registerPatient = (e) => {
+    e.preventDefault();
+
+    if (!form.surname.trim() || !form.otherNames.trim()) {
+      showMessage("Shigar da sunan mara lafiya.");
+      return;
+    }
+
+    const newPatient = {
+      id: Date.now(),
+      card: `BZ-P${String(patients.length + 1).padStart(3, "0")}`,
+      name: `${form.surname} ${form.otherNames}`,
+      phone: form.phone || "N/A",
+      sex: form.sex,
+      status: "Active",
+    };
+
+    setPatients((prev) => [...prev, newPatient]);
+
+    setForm({
+      surname: "",
+      otherNames: "",
+      phone: "",
+      sex: "Female",
+      spouse: "",
+    });
+
+    showMessage(`An yi registration. Card Number: ${newPatient.card}`);
+  };
+
+  return (
+    <div>
+      <PageHeader
+        title="ICT Centre"
+        subtitle="Patient registration and central information technology services"
+        icon="▣"
+      />
+
+      <div className="stats-grid">
+        <StatCard title="Patients" value={patients.length} icon="♙" />
+        <StatCard title="New Today" value="12" icon="+" />
+        <StatCard title="SMS Sent" value="38" icon="✉" />
+        <StatCard title="System Status" value="Online" icon="●" />
+      </div>
+
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Register New Patient</h2>
+            <p>ICT creates the shared Patient/Card Number.</p>
+          </div>
+        </div>
+
+        <form onSubmit={registerPatient}>
+          <div className="form-grid">
+            <FormField label="Surname">
+              <input
+                value={form.surname}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    surname: e.target.value,
+                  })
+                }
+                placeholder="Surname"
+              />
+            </FormField>
+
+            <FormField label="Other Names">
+              <input
+                value={form.otherNames}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    otherNames: e.target.value,
+                  })
+                }
+                placeholder="Other names"
+              />
+            </FormField>
+
+            <FormField label="Phone Number">
+              <input
+                value={form.phone}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    phone: e.target.value,
+                  })
+                }
+                placeholder="Phone number"
+              />
+            </FormField>
+
+            <FormField label="Sex / Gender">
+              <select
+                value={form.sex}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    sex: e.target.value,
+                  })
+                }
+              >
+                <option>Female</option>
+                <option>Male</option>
+              </select>
+            </FormField>
+
+            <FormField label="Spouse Name (if applicable)">
+              <input
+                value={form.spouse}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    spouse: e.target.value,
+                  })
+                }
+                placeholder="Spouse name"
+              />
+            </FormField>
+          </div>
+
+          <div className="modal-actions left">
+            <button className="button primary" type="submit">
+              Register Patient
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div className="panel recent-panel">
+        <div className="panel-header">
+          <div>
+            <h2>Patient Registry</h2>
+            <p>Search and view registered patients.</p>
+          </div>
+        </div>
+
+        <PatientTable patients={patients} />
+      </div>
+    </div>
+  );
+}
+
+function StaffManagement({
+  staff,
+  search,
+  setSearch,
+  openAddStaff,
+  openEditStaff,
+  deleteStaff,
+  openPermissions,
+}) {
+  return (
+    <div>
+      <PageHeader
+        title="Staff & Permissions"
+        subtitle="Manage staff accounts, departments, roles and permissions"
+        icon="♟"
+      />
+
+      <div className="toolbar">
+        <input
+          className="search-input"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search staff, ID, username or department..."
+        />
+
+        <button className="button primary" onClick={openAddStaff}>
+          + Add Staff
+        </button>
+      </div>
+
+      <div className="panel">
+        <div className="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Staff ID</th>
+                <th>Name</th>
+                <th>Username</th>
+                <th>Department</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {staff.map((person) => (
+                <tr key={person.id}>
+                  <td>
+                    <strong>{person.staffId}</strong>
+                  </td>
+
+                  <td>{person.name}</td>
+
+                  <td>
+                    <span className="username-badge">
+                      {person.username}
+                    </span>
+                  </td>
+
+                  <td>{person.department}</td>
+
+                  <td>
+                    <span className="role-badge">{person.role}</span>
+                  </td>
+
+                  <td>
+                    <span
+                      className={`status-badge ${
+                        person.status === "Active"
+                          ? "active-status"
+                          : "inactive-status"
+                      }`}
+                    >
+                      {person.status}
+                    </span>
+                  </td>
+
+                  <td>
+                    <div className="table-actions">
+                      <button
+                        className="small-button"
+                        onClick={() => openPermissions(person)}
+                      >
+                        Permissions
+                      </button>
+
+                      <button
+                        className="small-button"
+                        onClick={() => openEditStaff(person)}
+                      >
+                        Edit
+                      </button>
+
+                      <button
+                        className="small-button danger"
+                        onClick={() => deleteStaff(person.id)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+
+              {staff.length === 0 && (
+                <tr>
+                  <td colSpan="7" className="empty-cell">
+                    No staff found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RosterPage({ staff }) {
+  const shifts = ["Morning", "Evening", "Night"];
+
+  return (
+    <div>
+      <PageHeader
+        title="Roster & Staff Attendance"
+        subtitle="Monthly duty roster and staff attendance management"
+        icon="▦"
+      />
+
+      <div className="stats-grid">
+        <StatCard title="Total Staff" value={staff.length} icon="♟" />
+        <StatCard title="Present Today" value="14" icon="✓" />
+        <StatCard title="Absent" value="2" icon="!" />
+        <StatCard title="On Duty" value="12" icon="▦" />
+      </div>
+
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Current Staff Roster</h2>
+            <p>Morning, Evening and Night shifts</p>
+          </div>
+
+          <button className="button primary">Generate Monthly Roster</button>
+        </div>
+
+        <div className="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Staff</th>
+                <th>Department</th>
+                <th>Role</th>
+                <th>Morning</th>
+                <th>Evening</th>
+                <th>Night</th>
+                <th>Attendance</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {staff.map((person, index) => (
+                <tr key={person.id}>
+                  <td>{person.name}</td>
+                  <td>{person.department}</td>
+                  <td>{person.role}</td>
+                  <td>
+                    <span className="shift-badge">
+                      {index % 2 === 0 ? "Duty" : "Off"}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="shift-badge">
+                      {index % 3 === 0 ? "Duty" : "Off"}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="shift-badge">
+                      {index % 4 === 0 ? "Duty" : "Off"}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="status-badge active-status">
+                      Present
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="shift-rules">
+          {shifts.map((shift) => (
+            <div key={shift}>
+              <strong>{shift}</strong>
+              <span>
+                After 5 {shift} shifts → scheduled off days
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AuditPage({ currentUser }) {
+  const logs = [
+    {
+      action: "Login",
+      user: currentUser.name,
+      module: "Security",
+      time: "Today, 08:05",
+    },
+    {
+      action: "Patient Registration",
+      user: "ICT Staff",
+      module: "ICT Centre",
+      time: "Today, 08:14",
+    },
+    {
+      action: "Lab Request",
+      user: "Consultant",
+      module: "Laboratory",
+      time: "Today, 08:31",
+    },
+    {
+      action: "Prescription",
+      user: "Consultant",
+      module: "Pharmacy",
+      time: "Today, 08:45",
+    },
+  ];
+
+  return (
+    <div>
+      <PageHeader
+        title="Audit Logs"
+        subtitle="System activity and accountability records"
+        icon="◌"
+      />
+
+      <div className="panel">
+        <div className="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Action</th>
+                <th>User</th>
+                <th>Module</th>
+                <th>Date / Time</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {logs.map((log, index) => (
+                <tr key={index}>
+                  <td>{log.action}</td>
+                  <td>{log.user}</td>
+                  <td>{log.module}</td>
+                  <td>{log.time}</td>
+                  <td>
+                    <span className="status-badge active-status">
+                      Recorded
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ModulePage({ title, subtitle, icon, stats }) {
+  return (
+    <div>
+      <PageHeader title={title} subtitle={subtitle} icon={icon} />
+
+      <div className="stats-grid">
+        {stats.map(([name, value], index) => (
+          <StatCard
+            key={name}
+            title={name}
+            value={value}
+            icon={["▣", "✓", "!", "◉"][index % 4]}
+          />
+        ))}
+      </div>
+
+      <div className="panel empty-module">
+        <div className="large-module-icon">{icon}</div>
+
+        <h2>{title}</h2>
+
+        <p>
+          This module is ready for its full departmental workflow.
+          Department permissions remain separated from other units.
+        </p>
+
+        <button className="button primary">
+          Open {title}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PageHeader({ title, subtitle, icon }) {
+  return (
+    <div className="page-header">
+      <div className="page-header-icon">{icon}</div>
+
+      <div>
+        <div className="eyebrow">BAZZA PHC</div>
+        <h1>{title}</h1>
+        <p>{subtitle}</p>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ title, value, icon, text }) {
+  return (
+    <div className="stat-card">
+      <div className="stat-icon">{icon}</div>
+
+      <div>
+        <span>{title}</span>
+        <strong>{value}</strong>
+
+        {text && <small>{text}</small>}
+      </div>
+    </div>
+  );
+}
+
+function PatientTable({ patients }) {
+  return (
+    <div className="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Card Number</th>
+            <th>Patient Name</th>
+            <th>Phone</th>
+            <th>Sex</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {patients.map((patient) => (
+            <tr key={patient.id}>
+              <td>
+                <strong>{patient.card}</strong>
+              </td>
+
+              <td>{patient.name}</td>
+
+              <td>{patient.phone}</td>
+
+              <td>{patient.sex}</td>
+
+              <td>
+                <span className="status-badge active-status">
+                  {patient.status}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function FormField({ label, children }) {
+  return (
+    <label className="form-field">
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function Modal({ title, onClose, children }) {
+  return (
+    <div className="modal-overlay" onMouseDown={onClose}>
+      <div
+        className="modal"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="modal-header">
+          <h2>{title}</h2>
+
+          <button className="close-button" onClick={onClose}>
+            ×
+          </button>
+        </div>
+
+        <div className="modal-body">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+const styles = `
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  font-family: Inter, Arial, Helvetica, sans-serif;
+  color: #172033;
+  background: #f5f7fb;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #f5f7fb;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  background: #f5f7fb;
+}
+
+.sidebar {
+  width: 265px;
+  min-height: 100vh;
+  background: #102b46;
+  color: white;
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+}
+
+.brand {
+  height: 76px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 20px;
+  border-bottom: 1px solid rgba(255,255,255,.09);
+}
+
+.brand-logo {
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  background: #18a56b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 22px;
+}
+
+.brand-title {
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.brand-subtitle {
+  color: #9eb1c5;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.facility-name {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255,255,255,.09);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.facility-name strong {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.facility-name span {
+  color: #9eb1c5;
+  font-size: 9px;
+}
+
+.menu {
+  padding: 10px 10px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.menu-section {
+  color: #6f879f;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  padding: 15px 12px 7px;
+}
+
+.menu-item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #c5d1dc;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.menu-item:hover {
+  background: rgba(255,255,255,.06);
+  color: white;
+}
+
+.menu-item.active {
+  background: #18a56b;
+  color: white;
+  font-weight: 700;
+}
+
+.menu-icon {
+  width: 22px;
+  text-align: center;
+  font-size: 15px;
+}
+
+.sidebar-footer {
+  padding: 15px 20px;
+  border-top: 1px solid rgba(255,255,255,.09);
+  color: #9eb1c5;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.online-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #27c983;
+}
+
+.main {
+  margin-left: 265px;
+  width: calc(100% - 265px);
+  min-height: 100vh;
+}
+
+.topbar {
+  height: 76px;
+  background: white;
+  border-bottom: 1px solid #e5e9ef;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 30px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.top-title {
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.top-location {
+  color: #7a8796;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.icon-button {
+  border: 1px solid #e2e7ed;
+  background: white;
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+}
+
+.user-box {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #dff4eb;
+  color: #168258;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+}
+
+.user-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-details strong {
+  font-size: 12px;
+}
+
+.user-details span {
+  font-size: 10px;
+  color: #8792a0;
+}
+
+.logout-button {
+  border: 0;
+  background: #fff0f0;
+  color: #c53a3a;
+  padding: 9px 13px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.content {
+  padding: 28px 30px 50px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.welcome {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+}
+
+.welcome h1,
+.page-header h1 {
+  margin: 3px 0 5px;
+  font-size: 27px;
+}
+
+.welcome p,
+.page-header p {
+  margin: 0;
+  color: #7b8794;
+  font-size: 13px;
+}
+
+.eyebrow {
+  color: #18a56b;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+
+.date-box {
+  background: white;
+  border: 1px solid #e3e8ee;
+  border-radius: 10px;
+  padding: 12px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: right;
+}
+
+.date-box strong {
+  font-size: 13px;
+}
+
+.date-box span {
+  color: #84909d;
+  font-size: 10px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.stat-card {
+  background: white;
+  border: 1px solid #e4e9ef;
+  border-radius: 12px;
+  padding: 19px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  min-height: 100px;
+}
+
+.stat-icon {
+  width: 45px;
+  height: 45px;
+  border-radius: 10px;
+  background: #e5f6ef;
+  color: #168258;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 19px;
+  font-weight: 800;
+}
+
+.stat-card span {
+  display: block;
+  color: #7b8794;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.stat-card strong {
+  display: block;
+  font-size: 23px;
+}
+
+.stat-card small {
+  display: block;
+  color: #a0a8b2;
+  margin-top: 3px;
+  font-size: 10px;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1.4fr .8fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.panel {
+  background: white;
+  border: 1px solid #e4e9ef;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 18px;
+}
+
+.panel-header h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.panel-header p {
+  margin: 0;
+  color: #8a95a1;
+  font-size: 11px;
+}
+
+.department-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.department-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid #edf0f3;
+}
+
+.department-row:last-child {
+  border-bottom: 0;
+}
+
+.dept-icon {
+  width: 36px;
+  height: 36px;
+  background: #eef7f3;
+  color: #168258;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+}
+
+.department-row div:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.department-row strong {
+  font-size: 12px;
+}
+
+.department-row span {
+  color: #8b96a2;
+  font-size: 10px;
+  margin-top: 3px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22b978;
+}
+
+.quick-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.quick-actions button {
+  border: 1px solid #e4e9ef;
+  background: #fafbfd;
+  border-radius: 9px;
+  padding: 17px 10px;
+  color: #263345;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.quick-actions button:hover {
+  border-color: #18a56b;
+}
+
+.quick-actions span {
+  display: block;
+  font-size: 20px;
+  color: #18a56b;
+  margin-bottom: 7px;
+}
+
+.recent-panel {
+  margin-top: 20px;
+}
+
+.text-button {
+  border: 0;
+  background: transparent;
+  color: #168258;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 24px;
+}
+
+.page-header-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: #e5f6ef;
+  color: #168258;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.toolbar {
+  background: white;
+  border: 1px solid #e4e9ef;
+  padding: 15px;
+  border-radius: 11px;
+  margin-bottom: 16px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.search-input {
+  border: 1px solid #dce2e8;
+  border-radius: 8px;
+  padding: 10px 13px;
+  min-width: 300px;
+  outline: none;
+}
+
+.search-input:focus,
+input:focus,
+select:focus {
+  border-color: #18a56b;
+  box-shadow: 0 0 0 3px rgba(24,165,107,.08);
+}
+
+.button {
+  border: 0;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 12px;
+}
+
+.button.primary {
+  background: #18a56b;
+  color: white;
+}
+
+.button.primary:hover {
+  background: #138b59;
+}
+
+.button.secondary {
+  background: #eef1f4;
+  color: #485462;
+}
+
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th {
+  text-align: left;
+  background: #f8fafc;
+  color: #687585;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 12px;
+  border-bottom: 1px solid #e5e9ee;
+  white-space: nowrap;
+}
+
+td {
+  padding: 13px 12px;
+  border-bottom: 1px solid #edf0f3;
+  font-size: 12px;
+  color: #3f4c5b;
+}
+
+tbody tr:hover {
+  background: #fbfcfd;
+}
+
+.username-badge,
+.role-badge,
+.status-badge,
+.shift-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 20px;
+  padding: 5px 8px;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.username-badge {
+  background: #f0f3f6;
+  color: #596675;
+}
+
+.role-badge {
+  background: #eaf2ff;
+  color: #386ca7;
+}
+
+.status-badge.active-status {
+  background: #e4f7ee;
+  color: #168258;
+}
+
+.status-badge.inactive-status {
+  background: #fff0f0;
+  color: #b84040;
+}
+
+.shift-badge {
+  background: #eef4fb;
+  color: #41698f;
+}
+
+.table-actions {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.small-button {
+  border: 1px solid #dfe5eb;
+  background: white;
+  color: #455362;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.small-button:hover {
+  border-color: #18a56b;
+  color: #168258;
+}
+
+.small-button.danger {
+  color: #b63c3c;
+}
+
+.empty-cell {
+  text-align: center;
+  padding: 30px;
+  color: #8d98a4;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 15px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.form-field span,
+.login-card label {
+  font-size: 11px;
+  font-weight: 800;
+  color: #586575;
+}
+
+input,
+select {
+  width: 100%;
+  border: 1px solid #dce2e8;
+  background: white;
+  border-radius: 8px;
+  padding: 10px 12px;
+  outline: none;
+  color: #263345;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.modal-actions.left {
+  justify-content: flex-start;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 27, 42, .56);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.modal {
+  width: min(700px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  background: white;
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.22);
+}
+
+.modal-header {
+  padding: 17px 20px;
+  border-bottom: 1px solid #e8ecf0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.close-button {
+  border: 0;
+  background: #f1f3f5;
+  width: 31px;
+  height: 31px;
+  border-radius: 50%;
+  font-size: 19px;
+  color: #66717e;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-description {
+  color: #7c8794;
+  font-size: 12px;
+  margin-top: 0;
+}
+
+.permission-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.permission-item {
+  border: 1px solid #e1e6eb;
+  padding: 13px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.permission-item input {
+  width: auto;
+}
+
+.empty-module {
+  min-height: 330px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.large-module-icon {
+  width: 70px;
+  height: 70px;
+  border-radius: 17px;
+  background: #e5f6ef;
+  color: #168258;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.empty-module h2 {
+  margin: 15px 0 5px;
+}
+
+.empty-module p {
+  max-width: 560px;
+  color: #7d8996;
+  font-size: 12px;
+  line-height: 1.7;
+  margin-bottom: 18px;
+}
+
+.shift-rules {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.shift-rules div {
+  border: 1px solid #e4e9ef;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.shift-rules strong {
+  font-size: 11px;
+}
+
+.shift-rules span {
+  font-size: 10px;
+  color: #84909d;
+}
+
+.toast {
+  position: fixed;
+  right: 25px;
+  top: 90px;
+  background: #172b40;
+  color: white;
+  padding: 12px 16px;
+  border-radius: 8px;
+  z-index: 200;
+  font-size: 12px;
+  box-shadow: 0 10px 25px rgba(0,0,0,.18);
+}
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eef3f6;
+  padding: 25px;
+}
+
+.login-card {
+  width: min(430px, 100%);
+  background: white;
+  border: 1px solid #e2e7ec;
+  border-radius: 17px;
+  padding: 35px;
+  box-shadow: 0 15px 45px rgba(26,48,69,.10);
+}
+
+.login-logo {
+  width: 65px;
+  height: 65px;
+  margin: 0 auto 15px;
+  background: #18a56b;
+  color: white;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  font-weight: 900;
+}
+
+.login-card h1 {
+  text-align: center;
+  margin: 0;
+  text-transform: uppercase;
+  font-size: 25px;
+  color: #102b46;
+}
+
+.login-subtitle {
+  text-align: center;
+  color: #8a95a1;
+  font-size: 11px;
+  margin: 6px 0 17px;
+}
+
+.login-line {
+  height: 1px;
+  background: #e6ebef;
+  margin-bottom: 23px;
+}
+
+.login-card h2 {
+  margin: 0 0 18px;
+  font-size: 17px;
+}
+
+.login-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.login-card input {
+  margin-bottom: 8px;
+}
+
+.login-button {
+  margin-top: 5px;
+  border: 0;
+  border-radius: 8px;
+  background: #18a56b;
+  color: white;
+  padding: 12px;
+  font-weight: 900;
+}
+
+.login-button:hover {
+  background: #138b59;
+}
+
+.login-error {
+  background: #fff0f0;
+  color: #bd3b3b;
+  padding: 10px;
+  border-radius: 7px;
+  margin-bottom: 12px;
+  font-size: 11px;
+}
+
+.demo-box {
+  margin-top: 20px;
+  padding: 13px;
+  background: #f7f9fb;
+  border-radius: 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.demo-box strong {
+  font-size: 11px;
+  color: #344354;
+  margin-bottom: 3px;
+}
+
+.demo-box span {
+  font-size: 10px;
+  color: #758190;
+}
+
+.login-card footer {
+  text-align: center;
+  color: #a0a8b2;
+  font-size: 9px;
+  margin-top: 22px;
+}
+
+@media (max-width: 1100px) {
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
-@media (max-width: 500px) {
+@media (max-width: 800px) {
+  .sidebar {
+    width: 220px;
+  }
+
+  .main {
+    margin-left: 220px;
+    width: calc(100% - 220px);
+  }
+
+  .topbar {
+    padding: 0 15px;
+  }
+
+  .content {
+    padding: 20px 15px 40px;
+  }
+
+  .user-details {
+    display: none;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .sidebar {
+    width: 70px;
+  }
+
+  .brand {
+    justify-content: center;
+    padding: 10px;
+  }
+
+  .brand > div:not(.brand-logo),
+  .facility-name,
+  .menu-item span:not(.menu-icon),
+  .menu-section,
+  .sidebar-footer span {
+    display: none;
+  }
+
+  .menu-item {
+    justify-content: center;
+  }
+
+  .main {
+    margin-left: 70px;
+    width: calc(100% - 70px);
+  }
+
   .stats-grid {
     grid-template-columns: 1fr;
   }
 
-  .topbar {
-    padding: 0 12px;
+  .welcome {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 15px;
   }
 
-  .user-box {
+  .toolbar {
+    flex-direction: column;
+  }
+
+  .search-input {
+    min-width: 0;
+  }
+
+  .top-location {
     display: none;
   }
 
-  .page-heading {
-    align-items: flex-start;
-    flex-direction: column;
+  .permission-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .shift-rules {
+    grid-template-columns: 1fr;
   }
 }
 `;
