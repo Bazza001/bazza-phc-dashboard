@@ -291,6 +291,11 @@ const [staffForm, setStaffForm] = useState({
   const [selectedPermissions, setSelectedPermissions] = useState([]);
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [attendanceShift, setAttendanceShift] = useState("Morning");
+  const [rosterMonth, setRosterMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [rosterRecords, setRosterRecords] = useState([]);
+  const [rosterDepartment, setRosterDepartment] = useState("All Departments");
+  const [rosterShift, setRosterShift] = useState("All Shifts");
+  const [rosterSearch, setRosterSearch] = useState("");
 
   function login(e) {
     e.preventDefault();
@@ -678,6 +683,227 @@ function saveStaff() {
     );
   }
 
+  function getRosterDays(monthValue) {
+    const [year, month] = monthValue.split("-").map(Number);
+    return new Date(year, month, 0).getDate();
+  }
+
+  function getStaffShiftOptions(person) {
+    const isHod = /hod|2ic/i.test(`${person.role} ${person.name}`);
+    const isMarried = Boolean(person.maritalStatus === "Married");
+    const allowed = person.allowedShifts || ["Morning", "Evening", "Night"];
+
+    if (isMarried && !isHod) {
+      return allowed.filter((shift) => shift !== "Night");
+    }
+
+    return allowed.length ? allowed : ["Morning", "Evening", "Night"];
+  }
+
+  function generateRoster() {
+    const activeStaff = staff.filter((person) => person.status === "Active");
+    if (!activeStaff.length) {
+      alert("Babu active staff da za a saka cikin roster ba.");
+      return;
+    }
+
+    const days = getRosterDays(rosterMonth);
+    const generated = [];
+
+    activeStaff.forEach((person) => {
+      const shifts = getStaffShiftOptions(person);
+      const isHod = /hod|2ic/i.test(`${person.role} ${person.name}`);
+      let workCount = 0;
+      let shiftIndex = 0;
+      let offRemaining = 0;
+
+      for (let day = 1; day <= days; day += 1) {
+        let assignment = "Off Duty";
+
+        if (offRemaining > 0) {
+          offRemaining -= 1;
+        } else {
+          const shift = shifts[shiftIndex % shifts.length];
+          assignment = shift;
+          workCount += 1;
+
+          if (workCount >= 5) {
+            if (shift === "Morning") offRemaining = 2;
+            if (shift === "Evening") offRemaining = 3;
+            if (shift === "Night") offRemaining = 4;
+            workCount = 0;
+          }
+
+          // HODs rotate through eligible shifts instead of being assigned
+          // multiple shifts on the same day.
+          if (isHod) shiftIndex += 1;
+        }
+
+        generated.push({
+          id: `${person.id}-${rosterMonth}-${day}`,
+          staffId: person.staffId,
+          staffName: person.name,
+          department: person.department,
+          role: person.role,
+          date: `${rosterMonth}-${String(day).padStart(2, "0")}`,
+          shift: assignment,
+        });
+      }
+    });
+
+    setRosterRecords(generated);
+  }
+
+  function RosterPage() {
+    const visibleRoster = rosterRecords.filter((item) => {
+      const matchesDepartment =
+        rosterDepartment === "All Departments" || item.department === rosterDepartment;
+      const matchesShift =
+        rosterShift === "All Shifts" || item.shift === rosterShift;
+      const matchesSearch = `${item.staffName} ${item.staffId} ${item.department} ${item.role}`
+        .toLowerCase()
+        .includes(rosterSearch.toLowerCase());
+      return matchesDepartment && matchesShift && matchesSearch;
+    });
+
+    const workDays = rosterRecords.filter((item) => item.shift !== "Off Duty").length;
+    const offDays = rosterRecords.filter((item) => item.shift === "Off Duty").length;
+
+    return (
+      <div>
+        <div className="page-head">
+          <div>
+            <h1>Staff Roster</h1>
+            <p>Monthly roster, shifts and off-duty schedule.</p>
+          </div>
+          <button className="primary" onClick={generateRoster}>
+            📋 Generate Monthly Roster
+          </button>
+        </div>
+
+        <div className="stats">
+          <div className="stat">
+            <span>👥</span>
+            <small>Staff in Roster</small>
+            <strong>{staff.filter((x) => x.status === "Active").length}</strong>
+          </div>
+          <div className="stat">
+            <span>🟢</span>
+            <small>Work Assignments</small>
+            <strong>{workDays}</strong>
+          </div>
+          <div className="stat">
+            <span>🔵</span>
+            <small>Off Duty</small>
+            <strong>{offDays}</strong>
+          </div>
+          <div className="stat">
+            <span>📅</span>
+            <small>Month</small>
+            <strong>{rosterMonth}</strong>
+          </div>
+        </div>
+
+        <div className="card" style={{ marginBottom: "18px" }}>
+          <h2>Roster Settings</h2>
+          <p style={{ color: "#718078", marginTop: "5px" }}>
+            5 Morning → 2 Off · 5 Evening → 3 Off · 5 Night → 4 Off.
+          </p>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "12px", marginTop: "18px" }}>
+            <label>
+              <span style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px" }}>Month</span>
+              <input
+                type="month"
+                value={rosterMonth}
+                onChange={(e) => setRosterMonth(e.target.value)}
+                style={{ width: "100%", padding: "11px", border: "1px solid #d7e0da", borderRadius: "9px" }}
+              />
+            </label>
+
+            <label>
+              <span style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px" }}>Department</span>
+              <select
+                value={rosterDepartment}
+                onChange={(e) => setRosterDepartment(e.target.value)}
+                style={{ width: "100%", padding: "11px", border: "1px solid #d7e0da", borderRadius: "9px" }}
+              >
+                <option>All Departments</option>
+                {departments.map((department) => <option key={department}>{department}</option>)}
+              </select>
+            </label>
+
+            <label>
+              <span style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px" }}>Shift</span>
+              <select
+                value={rosterShift}
+                onChange={(e) => setRosterShift(e.target.value)}
+                style={{ width: "100%", padding: "11px", border: "1px solid #d7e0da", borderRadius: "9px" }}
+              >
+                <option>All Shifts</option>
+                <option>Morning</option>
+                <option>Evening</option>
+                <option>Night</option>
+                <option>Off Duty</option>
+              </select>
+            </label>
+
+            <label>
+              <span style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px" }}>Search Staff</span>
+              <input
+                value={rosterSearch}
+                onChange={(e) => setRosterSearch(e.target.value)}
+                placeholder="Name / Staff ID"
+                style={{ width: "100%", padding: "11px", border: "1px solid #d7e0da", borderRadius: "9px" }}
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="table-card">
+          <div className="table-top">
+            <strong>{visibleRoster.length} roster entries</strong>
+          </div>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Staff</th>
+                  <th>Staff ID</th>
+                  <th>Department</th>
+                  <th>Role</th>
+                  <th>Shift</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleRoster.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.date}</td>
+                    <td><strong>{item.staffName}</strong></td>
+                    <td>{item.staffId}</td>
+                    <td>{item.department}</td>
+                    <td>{item.role}</td>
+                    <td>
+                      <span className="active-badge">{item.shift}</span>
+                    </td>
+                  </tr>
+                ))}
+                {!visibleRoster.length && (
+                  <tr>
+                    <td colSpan="6" style={{ textAlign: "center", padding: "35px", color: "#718078" }}>
+                      Ba a samar da roster ba tukuna. Zaɓi wata sannan ka danna “Generate Monthly Roster”.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const accessiblePages = [
     "Dashboard",
     ...(currentUser ? ["Attendance"] : []),
@@ -984,9 +1210,12 @@ function saveStaff() {
 
           {activePage === "Attendance" && <AttendancePage />}
 
+          {activePage === "Roster" && <RosterPage />}
+
           {activePage !== "Dashboard" &&
             activePage !== "Staff & Roles" &&
-            activePage !== "Attendance" && (
+            activePage !== "Attendance" &&
+            activePage !== "Roster" && (
               <div className="card module">
                 <div className="module-icon">
                   {menuIcons[activePage] || "🏥"}
@@ -1085,7 +1314,6 @@ function saveStaff() {
     
             </div>
           </div>
-        </div>
       )}
     </div>
   );
