@@ -132,7 +132,8 @@ const demoPatients = [
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
-  const [page, setPage] = useState("Dashboard");
+  const [page, setPage] = useState("Dashboard"); 
+  const [recordsView, setRecordsView] = useState("dashboard");
   const [staff, setStaff] = useState(initialStaff);
   const [patients, setPatients] = useState(demoPatients);
   const [search, setSearch] = useState("");
