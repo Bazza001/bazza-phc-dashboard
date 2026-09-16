@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 
 const departments = [
   "ICT Centre",
@@ -17,7 +17,6 @@ const departments = [
   "Family Planning Unit",
   "Adolescent Unit",
   "General Cashier",
-  "In-Charge",
 ];
 
 const roles = [
@@ -37,21 +36,17 @@ const roles = [
   "Adolescent Staff",
 ];
 
-const allPermissions = [
-  "Dashboard",
-  "Patients",
-  "Departments",
-  "Staff & Roles",
-  "Attendance",
-  "Roster",
-  "General Cashier",
-  "Stock",
-  "Wards & Beds",
-  "Alerts",
-  "SMS / Email",
+const permissions = [
+  "View",
+  "Create",
+  "Edit",
+  "Delete",
+  "Print",
+  "Cashier",
   "Reports",
-  "Audit Logs",
-  "Settings",
+  "Stock",
+  "SMS",
+  "Alerts",
 ];
 
 const initialStaff = [
@@ -64,20 +59,7 @@ const initialStaff = [
     department: "In-Charge",
     role: "In-Charge",
     status: "Active",
-    permissions: [
-      "Dashboard",
-      "Patients",
-      "Departments",
-      "Attendance",
-      "Roster",
-      "General Cashier",
-      "Stock",
-      "Wards & Beds",
-      "Alerts",
-      "SMS / Email",
-      "Reports",
-      "Audit Logs",
-    ],
+    permissions: ["View", "Print", "Reports", "Alerts"],
   },
   {
     id: 2,
@@ -89,12 +71,13 @@ const initialStaff = [
     role: "Pharmacy Staff",
     status: "Active",
     permissions: [
-      "Dashboard",
-      "Patients",
+      "View",
+      "Create",
+      "Edit",
+      "Print",
       "Stock",
+      "SMS",
       "Alerts",
-      "SMS / Email",
-      "Reports",
     ],
   },
   {
@@ -107,12 +90,15 @@ const initialStaff = [
     role: "Ultrasound Staff",
     status: "Active",
     permissions: [
-      "Dashboard",
-      "Patients",
-      "Stock",
-      "Alerts",
-      "SMS / Email",
+      "View",
+      "Create",
+      "Edit",
+      "Print",
+      "Cashier",
       "Reports",
+      "Stock",
+      "SMS",
+      "Alerts",
     ],
   },
   {
@@ -125,29 +111,157 @@ const initialStaff = [
     role: "Laboratory Staff",
     status: "Active",
     permissions: [
-      "Dashboard",
-      "Patients",
-      "Stock",
-      "Alerts",
-      "SMS / Email",
+      "View",
+      "Create",
+      "Edit",
+      "Print",
+      "Cashier",
       "Reports",
+      "Stock",
+      "SMS",
+      "Alerts",
     ],
-  },
-  {
-    id: 5,
-    name: "Super Admin",
-    staffId: "ADMIN001",
-    username: "admin",
-    password: "admin123",
-    department: "Administration",
-    role: "Super Admin",
-    status: "Active",
-    permissions: [...allPermissions],
   },
 ];
 
+const defaultPermissions = {
+  "Super Admin": permissions,
+
+  "In-Charge": [
+    "View",
+    "Print",
+    "Reports",
+    "SMS",
+    "Alerts",
+  ],
+
+  "General Cashier": [
+    "View",
+    "Create",
+    "Print",
+    "Cashier",
+    "Reports",
+    "Alerts",
+  ],
+
+  "ICT Staff": [
+    "View",
+    "Create",
+    "Edit",
+    "Print",
+    "Reports",
+    "Stock",
+    "SMS",
+    "Alerts",
+  ],
+
+  "Records Staff": [
+    "View",
+    "Create",
+    "Edit",
+    "Print",
+    "Reports",
+    "SMS",
+    "Alerts",
+  ],
+
+  Nurse: [
+    "View",
+    "Create",
+    "Edit",
+    "Print",
+    "SMS",
+    "Alerts",
+  ],
+
+  Consultant: [
+    "View",
+    "Create",
+    "Edit",
+    "Print",
+    "Reports",
+    "SMS",
+    "Alerts",
+  ],
+
+  "Laboratory Staff": [
+    "View",
+    "Create",
+    "Edit",
+    "Print",
+    "Cashier",
+    "Reports",
+    "Stock",
+    "SMS",
+    "Alerts",
+  ],
+
+  "Pharmacy Staff": [
+    "View",
+    "Create",
+    "Edit",
+    "Print",
+    "Cashier",
+    "Reports",
+    "Stock",
+    "SMS",
+    "Alerts",
+  ],
+
+  "Ultrasound Staff": [
+    "View",
+    "Create",
+    "Edit",
+    "Print",
+    "Cashier",
+    "Reports",
+    "Stock",
+    "SMS",
+    "Alerts",
+  ],
+
+  "Ward Staff": [
+    "View",
+    "Create",
+    "Edit",
+    "Print",
+    "Reports",
+    "Alerts",
+  ],
+
+  "Immunization Staff": [
+    "View",
+    "Create",
+    "Edit",
+    "Print",
+    "Reports",
+    "SMS",
+    "Alerts",
+  ],
+
+  "Family Planning Staff": [
+    "View",
+    "Create",
+    "Edit",
+    "Print",
+    "Reports",
+    "SMS",
+    "Alerts",
+  ],
+
+  "Adolescent Staff": [
+    "View",
+    "Create",
+    "Edit",
+    "Print",
+    "Reports",
+    "SMS",
+    "Alerts",
+  ],
+};
+
 function App() {
-  const [staff, setStaff] = useState(initialStaff);
+  const [loggedIn, setLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
 
   const [username, setUsername] = useState("");
@@ -155,204 +269,70 @@ function App() {
   const [loginError, setLoginError] = useState("");
 
   const [activePage, setActivePage] = useState("Dashboard");
+
+  const [mobileMenu, setMobileMenu] = useState(false);
+
+  const [staff, setStaff] = useState(initialStaff);
   const [search, setSearch] = useState("");
-
-  const [showStaffModal, setShowStaffModal] = useState(false);
-  const [editingStaff, setEditingStaff] = useState(null);
-
-  const [staffForm, setStaffForm] = useState({
-    name: "",
-    staffId: "",
-    username: "",
-    password: "",
-    department: "",
-    role: "",
-  });
-
   const [showPermissions, setShowPermissions] = useState(false);
+  const [showStaffModal, setShowStaffModal] = useState(false);
+
+const [editingStaff, setEditingStaff] = useState(null);
+
+const [staffForm, setStaffForm] = useState({
+  fullName: "",
+  staffId: "",
+  username: "",
+  password: "",
+  department: "",
+  role: "",
+});
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [selectedPermissions, setSelectedPermissions] = useState([]);
+  const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const [attendanceShift, setAttendanceShift] = useState("Morning");
 
-  function handleLogin(e) {
+  function login(e) {
     e.preventDefault();
 
-    const foundUser = staff.find(
-      (person) =>
-        person.username.trim().toLowerCase() ===
-          username.trim().toLowerCase() &&
-        person.password === password &&
-        person.status === "Active"
+    const user = staff.find(
+      (item) =>
+        item.username.toLowerCase() === username.toLowerCase() &&
+        item.password === password
     );
 
-    if (!foundUser) {
-      setLoginError("Username/Staff ID ko Password ba daidai ba ne.");
+    if (!user) {
+      setLoginError("Username ko Password ba daidai ba.");
       return;
     }
 
-    setCurrentUser(foundUser);
-    setActivePage("Dashboard");
+    if (user.status !== "Active") {
+      setLoginError("An kashe wannan Staff Account.");
+      return;
+    }
+
+    setCurrentUser(user);
+    setLoggedIn(true);
     setLoginError("");
+    setActivePage("Dashboard");
+  }
+
+  function logout() {
+    setLoggedIn(false);
+    setCurrentUser(null);
     setUsername("");
     setPassword("");
-  }
-
-  function handleLogout() {
-    setCurrentUser(null);
     setActivePage("Dashboard");
   }
 
-  function openAddStaff() {
-    setEditingStaff(null);
+  function hasPermission(permission) {
+    if (!currentUser) return false;
 
-    setStaffForm({
-      name: "",
-      staffId: "",
-      username: "",
-      password: "",
-      department: "",
-      role: "",
-    });
-
-    setShowStaffModal(true);
-  }
-
-  function openEditStaff(person) {
-    setEditingStaff(person);
-
-    setStaffForm({
-      name: person.name,
-      staffId: person.staffId,
-      username: person.username,
-      password: "",
-      department: person.department,
-      role: person.role,
-    });
-
-    setShowStaffModal(true);
-  }
-
-  function saveStaff(e) {
-    e.preventDefault();
-
-    if (
-      !staffForm.name ||
-      !staffForm.staffId ||
-      !staffForm.username ||
-      !staffForm.department ||
-      !staffForm.role
-    ) {
-      alert("Ka cika duk fields masu muhimmanci.");
-      return;
+    if (currentUser.role === "Super Admin") {
+      return true;
     }
 
-    if (!editingStaff && !staffForm.password) {
-      alert("Ka saka password ga sabon staff.");
-      return;
-    }
-
-    const duplicateStaffId = staff.some(
-      (person) =>
-        person.staffId.toLowerCase() === staffForm.staffId.toLowerCase() &&
-        person.id !== editingStaff?.id
-    );
-
-    if (duplicateStaffId) {
-      alert("Wannan Staff ID yana amfani.");
-      return;
-    }
-
-    const duplicateUsername = staff.some(
-      (person) =>
-        person.username.toLowerCase() === staffForm.username.toLowerCase() &&
-        person.id !== editingStaff?.id
-    );
-
-    if (duplicateUsername) {
-      alert("Wannan Username yana amfani.");
-      return;
-    }
-
-    if (editingStaff) {
-      const updatedStaff = staff.map((person) =>
-        person.id === editingStaff.id
-          ? {
-              ...person,
-              name: staffForm.name,
-              staffId: staffForm.staffId,
-              username: staffForm.username,
-              department: staffForm.department,
-              role: staffForm.role,
-              password: staffForm.password
-                ? staffForm.password
-                : person.password,
-            }
-          : person
-      );
-
-      setStaff(updatedStaff);
-
-      if (currentUser?.id === editingStaff.id) {
-        const updatedCurrentUser = updatedStaff.find(
-          (person) => person.id === editingStaff.id
-        );
-
-        setCurrentUser(updatedCurrentUser);
-      }
-    } else {
-      const newStaff = {
-        id: Date.now(),
-        name: staffForm.name,
-        staffId: staffForm.staffId,
-        username: staffForm.username,
-        password: staffForm.password,
-        department: staffForm.department,
-        role: staffForm.role,
-        status: "Active",
-        permissions:
-          staffForm.role === "Super Admin"
-            ? [...allPermissions]
-            : ["Dashboard"],
-      };
-
-      setStaff((previous) => [...previous, newStaff]);
-    }
-
-    setShowStaffModal(false);
-    setEditingStaff(null);
-  }
-
-  function toggleStaffStatus(person) {
-    const updatedStaff = staff.map((item) =>
-      item.id === person.id
-        ? {
-            ...item,
-            status: item.status === "Active" ? "Disabled" : "Active",
-          }
-        : item
-    );
-
-    setStaff(updatedStaff);
-  }
-
-  function resetPassword(person) {
-    const newPassword = window.prompt(
-      `Saka sabon password ga ${person.name}:`
-    );
-
-    if (!newPassword) return;
-
-    const updatedStaff = staff.map((item) =>
-      item.id === person.id
-        ? {
-            ...item,
-            password: newPassword,
-          }
-        : item
-    );
-
-    setStaff(updatedStaff);
-
-    alert(`An canza password na ${person.name}.`);
+    return currentUser.permissions.includes(permission);
   }
 
   function openPermissions(person) {
@@ -362,563 +342,751 @@ function App() {
   }
 
   function togglePermission(permission) {
-    setSelectedPermissions((previous) =>
-      previous.includes(permission)
-        ? previous.filter((item) => item !== permission)
-        : [...previous, permission]
+    setSelectedPermissions((old) =>
+      old.includes(permission)
+        ? old.filter((item) => item !== permission)
+        : [...old, permission]
     );
   }
+function savePermissions() {
+  if (!selectedStaff) return;
 
-  function savePermissions() {
-    if (!selectedStaff) return;
+  const updatedStaff = staff.map((person) =>
+    person.id === selectedStaff.id
+      ? {
+          ...person,
+          permissions: selectedPermissions,
+        }
+      : person
+  );
 
+  setStaff(updatedStaff);
+
+  if (currentUser && currentUser.id === selectedStaff.id) {
+    setCurrentUser({
+      ...currentUser,
+      permissions: selectedPermissions,
+    });
+  }
+
+  setShowPermissions(false);
+  setSelectedStaff(null);
+}
+
+function openAddStaff() {
+  setEditingStaff(null);
+
+  setStaffForm({
+    fullName: "",
+    staffId: "",
+    username: "",
+    password: "",
+    department: "",
+    role: "",
+  });
+
+  setShowStaffModal(true);
+}
+
+function openEditStaff(person) {
+  setEditingStaff(person);
+
+  setStaffForm({
+    fullName: person.name || "",
+    staffId: person.staffId || "",
+    username: person.username || "",
+    password: "",
+    department: person.department || "",
+    role: person.role || "",
+  });
+
+  setShowStaffModal(true);
+}
+
+function saveStaff() {
+  if (
+    !staffForm.fullName.trim() ||
+    !staffForm.staffId.trim() ||
+    !staffForm.username.trim() ||
+    !staffForm.department ||
+    !staffForm.role
+  ) {
+    alert("Please fill all required fields.");
+    return;
+  }
+
+  if (editingStaff) {
     const updatedStaff = staff.map((person) =>
-      person.id === selectedStaff.id
+      person.id === editingStaff.id
         ? {
             ...person,
-            permissions:
-              person.role === "Super Admin"
-                ? [...allPermissions]
-                : selectedPermissions,
+            name: staffForm.fullName,
+            staffId: staffForm.staffId,
+            username: staffForm.username,
+            department: staffForm.department,
+            role: staffForm.role,
+            ...(staffForm.password
+              ? { password: staffForm.password }
+              : {}),
           }
         : person
     );
 
     setStaff(updatedStaff);
+  } else {
+    const newStaff = {
+      id: Date.now(),
+      name: staffForm.fullName,
+      staffId: staffForm.staffId,
+      username: staffForm.username,
+      password: staffForm.password || "123456",
+      department: staffForm.department,
+      role: staffForm.role,
+      status: "Active",
+      permissions: [],
+    };
 
-    if (currentUser?.id === selectedStaff.id) {
-      const updatedCurrentUser = updatedStaff.find(
-        (person) => person.id === selectedStaff.id
-      );
-
-      setCurrentUser(updatedCurrentUser);
-    }
-
-    setShowPermissions(false);
-    setSelectedStaff(null);
+    setStaff([...staff, newStaff]);
   }
 
-  const accessiblePages = useMemo(() => {
-    if (!currentUser) return [];
+  setShowStaffModal(false);
+  setEditingStaff(null);
 
-    if (currentUser.role === "Super Admin") {
-      return allPermissions;
+  setStaffForm({
+    fullName: "",
+    staffId: "",
+    username: "",
+    password: "",
+    department: "",
+    role: "",
+  });
+}
+  function getToday() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function getTodayAttendance() {
+    if (!currentUser) return null;
+    return attendanceRecords.find(
+      (item) =>
+        item.staffId === currentUser.staffId &&
+        item.date === getToday()
+    );
+  }
+
+  function signInAttendance() {
+    if (!currentUser) return;
+
+    const today = getToday();
+    const existing = attendanceRecords.find(
+      (item) =>
+        item.staffId === currentUser.staffId &&
+        item.date === today
+    );
+
+    if (existing?.signIn) {
+      alert("Ka riga ka yi Sign In yau.");
+      return;
     }
 
-    return allPermissions.filter((page) =>
-      currentUser.permissions?.includes(page)
+    const now = new Date();
+
+    setAttendanceRecords((old) => [
+      ...old,
+      {
+        id: Date.now(),
+        staffId: currentUser.staffId,
+        staffName: currentUser.name,
+        department: currentUser.department,
+        role: currentUser.role,
+        date: today,
+        shift: attendanceShift,
+        signIn: now.toLocaleTimeString(),
+        signOut: "",
+        status: "Signed In",
+      },
+    ]);
+  }
+
+  function signOutAttendance() {
+    if (!currentUser) return;
+
+    const today = getToday();
+    const existing = attendanceRecords.find(
+      (item) =>
+        item.staffId === currentUser.staffId &&
+        item.date === today
     );
-  }, [currentUser]);
 
-  if (!currentUser) {
+    if (!existing?.signIn) {
+      alert("Sai ka yi Sign In kafin Sign Out.");
+      return;
+    }
+
+    if (existing.signOut) {
+      alert("Ka riga ka yi Sign Out yau.");
+      return;
+    }
+
+    setAttendanceRecords((old) =>
+      old.map((item) =>
+        item.id === existing.id
+          ? {
+              ...item,
+              signOut: new Date().toLocaleTimeString(),
+              status: "Signed Out",
+            }
+          : item
+      )
+    );
+  }
+
+  function AttendancePage() {
+    const todayRecord = getTodayAttendance();
+    const canSeeAll =
+      currentUser?.role === "Super Admin" ||
+      currentUser?.role === "In-Charge";
+
+    const visibleRecords = canSeeAll
+      ? attendanceRecords
+      : attendanceRecords.filter(
+          (item) => item.staffId === currentUser?.staffId
+        );
+
     return (
-      <>
-        <style>{styles}</style>
+      <div>
+        <div className="page-head">
+          <div>
+            <h1>Staff Attendance</h1>
+            <p>Staff Sign In / Sign Out and attendance records.</p>
+          </div>
+          <span className="active-badge">
+            {todayRecord?.signOut
+              ? "Signed Out"
+              : todayRecord?.signIn
+              ? "Signed In"
+              : "Not Signed In"}
+          </span>
+        </div>
 
-        <div className="login-screen">
-          <div className="login-card">
-            <div className="brand-mark">BPHC</div>
-
-            <h1>BAZZA PHC</h1>
-
-            <p className="subtitle">
-              Hospital Management System
-            </p>
-
-            <form onSubmit={handleLogin}>
-              <label>Username / Staff ID</label>
-
-              <input
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter username"
-              />
-
-              <label>Password</label>
-
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
-              />
-
-              {loginError && (
-                <div className="error-box">{loginError}</div>
-              )}
-
-              <button className="login-button" type="submit">
-                Sign In
-              </button>
-            </form>
-
-            <div className="login-footer">
-              <strong>24 Hours · 7 Days</strong>
-              <span>Waziri Maccido Road, Bazza Area, Sokoto</span>
-            </div>
+        <div className="stats">
+          <div className="stat">
+            <span>👥</span>
+            <small>Total Records</small>
+            <strong>{visibleRecords.length}</strong>
+          </div>
+          <div className="stat">
+            <span>🟢</span>
+            <small>Signed In</small>
+            <strong>{visibleRecords.filter((x) => x.signIn && !x.signOut).length}</strong>
+          </div>
+          <div className="stat">
+            <span>🔴</span>
+            <small>Signed Out</small>
+            <strong>{visibleRecords.filter((x) => x.signOut).length}</strong>
+          </div>
+          <div className="stat">
+            <span>📅</span>
+            <small>Today</small>
+            <strong>{getToday()}</strong>
           </div>
         </div>
-      </>
+
+        <div className="card">
+          <h2>My Attendance</h2>
+          <p>
+            {currentUser.name} · {currentUser.role} · {currentUser.department}
+          </p>
+
+          <div style={{display:"flex",gap:"10px",flexWrap:"wrap",alignItems:"end",marginTop:"18px"}}>
+            <div style={{minWidth:"180px"}}>
+              <label style={{display:"block",fontSize:"12px",fontWeight:"bold",marginBottom:"7px"}}>Shift</label>
+              <select
+                value={attendanceShift}
+                onChange={(e) => setAttendanceShift(e.target.value)}
+                disabled={Boolean(todayRecord?.signIn)}
+                style={{width:"100%",padding:"11px",border:"1px solid #d7e0da",borderRadius:"9px"}}
+              >
+                <option>Morning</option>
+                <option>Evening</option>
+                <option>Night</option>
+              </select>
+            </div>
+
+            <button
+              className="primary"
+              onClick={signInAttendance}
+              disabled={Boolean(todayRecord?.signIn)}
+              style={{opacity: todayRecord?.signIn ? 0.5 : 1}}
+            >
+              ✓ Sign In
+            </button>
+
+            <button
+              className="secondary"
+              onClick={signOutAttendance}
+              disabled={!todayRecord?.signIn || Boolean(todayRecord?.signOut)}
+              style={{opacity: !todayRecord?.signIn || todayRecord?.signOut ? 0.5 : 1}}
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+
+        <div className="table-card">
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Staff</th>
+                  <th>Department</th>
+                  <th>Role</th>
+                  <th>Shift</th>
+                  <th>Sign In</th>
+                  <th>Sign Out</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleRecords.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.date}</td>
+                    <td>{item.staffName}</td>
+                    <td>{item.department}</td>
+                    <td>{item.role}</td>
+                    <td>{item.shift}</td>
+                    <td>{item.signIn || "—"}</td>
+                    <td>{item.signOut || "—"}</td>
+                    <td>
+                      <span className="active-badge">{item.status}</span>
+                    </td>
+                  </tr>
+                ))}
+                {visibleRecords.length === 0 && (
+                  <tr>
+                    <td colSpan="8" style={{textAlign:"center",padding:"30px",color:"#718078"}}>
+                      Babu attendance record tukuna.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const accessiblePages = [
+    "Dashboard",
+    ...(currentUser ? ["Attendance"] : []),
+    ...(currentUser?.role === "Super Admin"
+      ? [
+          "Patients",
+          "Departments",
+          "Staff & Roles",
+          "Roster",
+          "General Cashier",
+          "Stock",
+          "Wards & Beds",
+          "Alerts",
+          "SMS / Email",
+          "Reports",
+          "Audit Logs",
+          "Settings",
+        ]
+      : currentUser?.role === "In-Charge"
+      ? ["Roster", "Reports", "Alerts"]
+      : []),
+  ];
+
+  if (currentUser && currentUser.role !== "Super Admin") {
+    if (currentUser.department) {
+      accessiblePages.push(currentUser.department);
+    }
+
+    if (hasPermission("Cashier")) {
+      accessiblePages.push("Cashier");
+    }
+
+    if (hasPermission("Stock")) {
+      accessiblePages.push("Stock");
+    }
+
+    if (hasPermission("Reports")) {
+      accessiblePages.push("Reports");
+    }
+
+    if (hasPermission("SMS")) {
+      accessiblePages.push("SMS");
+    }
+
+    if (hasPermission("Alerts")) {
+      accessiblePages.push("Alerts");
+    }
+  }
+
+  const menuIcons = {
+    Dashboard: "⌂",
+    Patients: "👥",
+    Departments: "🏢",
+    "Staff & Roles": "👨‍⚕️",
+    Attendance: "🕐",
+    Roster: "📋",
+    "General Cashier": "💰",
+    Cashier: "💰",
+    Stock: "📦",
+    "Wards & Beds": "🛏️",
+    Alerts: "🔔",
+    "SMS / Email": "📱",
+    SMS: "📱",
+    Reports: "📊",
+    "Audit Logs": "🔐",
+    Settings: "⚙️",
+  };
+
+  if (!loggedIn) {
+    return (
+      <div className="login-page">
+        <style>{loginStyles}</style>
+
+        <div className="login-card">
+          <div className="logo">B</div>
+
+          <h1>BAZZA PHC</h1>
+
+          <p className="subtitle">
+            Hospital Management System
+          </p>
+
+          <form onSubmit={login}>
+            <label>Username / Staff ID</label>
+
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Enter username"
+            />
+
+            <label>Password</label>
+
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter password"
+            />
+
+            {loginError && (
+              <div className="login-error">
+                {loginError}
+              </div>
+            )}
+
+            <button className="login-button">
+              Sign In
+            </button>
+          </form>
+
+          <div className="login-footer">
+            <strong>24 Hours · 7 Days</strong>
+            <br />
+            Waziri Maccido Road, Bazza Area, Sokoto
+            <br />
+            08169640287
+          </div>
+
+          <div className="demo">
+            <strong>Demo Login</strong>
+            <br />
+            Super Admin: <b>altini / 1234</b>
+            <br />
+            Pharmacy: <b>hadiza / 1234</b>
+            <br />
+            Ultrasound: <b>abbayaro / 1234</b>
+            <br />
+            Laboratory: <b>kabiru / 1234</b>
+          </div>
+        </div>
+      </div>
     );
   }
 
   return (
-    <>
-      <style>{styles}</style>
+    <div className="app">
+      <style>{dashboardStyles}</style>
 
-      <div className="app-shell">
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <div className="small-logo">B</div>
+      <aside className={`sidebar ${mobileMenu ? "open" : ""}`}>
+        <div className="brand">
+          <div className="brand-logo">B</div>
 
-            <div>
-              <strong>BAZZA PHC</strong>
-              <span>Hospital System</span>
-            </div>
+          <h2>BAZZA PHC</h2>
+
+          <p>Hospital Management System</p>
+        </div>
+
+        <div className="user-info">
+          <strong>{currentUser.name}</strong>
+          <span>{currentUser.role}</span>
+          <small>{currentUser.department}</small>
+        </div>
+
+        <nav className="menu">
+          {accessiblePages.map((page) => (
+            <button
+              key={page}
+              className={
+                activePage === page ? "active" : ""
+              }
+              onClick={() => {
+                setActivePage(page);
+                setMobileMenu(false);
+              }}
+            >
+              <span>{menuIcons[page] || "•"}</span>
+              {page}
+            </button>
+          ))}
+        </nav>
+
+        <button className="logout" onClick={logout}>
+          🚪 Sign Out
+        </button>
+      </aside>
+
+      <main className="main">
+        <header className="topbar">
+          <div className="top-left">
+            <button
+              className="mobile-menu"
+              onClick={() =>
+                setMobileMenu(!mobileMenu)
+              }
+            >
+              ☰
+            </button>
+
+            <strong>{activePage}</strong>
           </div>
 
-          <div className="user-box">
+          <div className="top-user">
+            <span>🟢 Online</span>
+
+            <div>
+              <strong>{currentUser.name}</strong>
+              <small>{currentUser.role}</small>
+            </div>
+
             <div className="avatar">
-              {currentUser.name.charAt(0)}
-            </div>
-
-            <div>
-              <strong>{currentUser.name}</strong>
-              <span>{currentUser.role}</span>
-              <small>{currentUser.department}</small>
+              {currentUser.name
+                .split(" ")
+                .map((x) => x[0])
+                .slice(0, 2)
+                .join("")}
             </div>
           </div>
+        </header>
 
-          <nav className="nav-menu">
-            {accessiblePages.map((page) => (
-              <button
-                key={page}
-                className={
-                  activePage === page
-                    ? "nav-button active"
-                    : "nav-button"
-                }
-                onClick={() => setActivePage(page)}
-              >
-                {getIcon(page)}
-                <span>{page}</span>
-              </button>
-            ))}
-          </nav>
-
-          <button className="logout-button" onClick={handleLogout}>
-            Sign Out
-          </button>
-        </aside>
-
-        <main className="main-area">
-          <header className="topbar">
-            <div>
-              <h2>{activePage}</h2>
-              <p>
-                Bazza Primary Health Care Sokoto
-              </p>
-            </div>
-
-            <div className="topbar-user">
-              <strong>{currentUser.name}</strong>
-              <span>{currentUser.staffId}</span>
-            </div>
-          </header>
-
-          <div className="page-content">
-            {activePage === "Dashboard" && (
-              <Dashboard
-                staff={staff}
-                currentUser={currentUser}
-              />
-            )}
-{activePage === "Attendance" && (
-  <Attendance
-    staff={staff}
-    currentUser={currentUser}
-  />
-)}
- {activePage === "Roster" && (
-  <Roster
-    staff={staff}
-  />
-)}           {activePage === "Staff & Roles" &&
-              currentUser.role === "Super Admin" && (
-                <StaffManagement
-                  staff={staff}
-                  search={search}
-                  setSearch={setSearch}
-                  openAddStaff={openAddStaff}
-                  openEditStaff={openEditStaff}
-                  toggleStaffStatus={toggleStaffStatus}
-                  resetPassword={resetPassword}
-                  openPermissions={openPermissions}
-                />
-              )}
-
-            {activePage !== "Dashboard" &&
-              activePage !== "Staff & Roles" && (
-                <ModulePlaceholder
-                  title={activePage}
-                  currentUser={currentUser}
-                />
-              )}
-          </div>
-        </main>
-      </div>
-
-      {showStaffModal && (
-        <div className="overlay">
-          <div className="modal">
-            <div className="modal-header">
-              <div>
-                <h3>
-                  {editingStaff
-                    ? "Edit Staff"
-                    : "Add New Staff"}
-                </h3>
+        <section className="content">
+          {activePage === "Dashboard" && (
+            <>
+              <div className="welcome">
+                <h1>
+                  Welcome, {currentUser.name}
+                </h1>
 
                 <p>
-                  Staff account and role information
+                  {currentUser.role} ·{" "}
+                  {currentUser.department}
                 </p>
               </div>
 
-              <button
-                className="close-button"
-                onClick={() => {
-                  setShowStaffModal(false);
-                  setEditingStaff(null);
-                }}
-              >
-                ×
-              </button>
-            </div>
-
-            <form onSubmit={saveStaff}>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label>Staff Full Name</label>
-
-                  <input
-                    value={staffForm.name}
-                    onChange={(e) =>
-                      setStaffForm({
-                        ...staffForm,
-                        name: e.target.value,
-                      })
-                    }
-                    placeholder="Enter staff full name"
-                  />
+              <div className="stats">
+                <div className="stat">
+                  <span>👥</span>
+                  <small>Patients Today</small>
+                  <strong>0</strong>
                 </div>
 
-                <div className="form-group">
-                  <label>Staff ID</label>
-
-                  <input
-                    value={staffForm.staffId}
-                    onChange={(e) =>
-                      setStaffForm({
-                        ...staffForm,
-                        staffId: e.target.value,
-                      })
-                    }
-                    placeholder="Example: BZ005"
-                  />
+                <div className="stat">
+                  <span>⏳</span>
+                  <small>Pending Work</small>
+                  <strong>0</strong>
                 </div>
 
-                <div className="form-group">
-                  <label>Username</label>
-
-                  <input
-                    value={staffForm.username}
-                    onChange={(e) =>
-                      setStaffForm({
-                        ...staffForm,
-                        username: e.target.value,
-                      })
-                    }
-                    placeholder="Enter username"
-                  />
+                <div className="stat">
+                  <span>✅</span>
+                  <small>Completed</small>
+                  <strong>0</strong>
                 </div>
 
-                <div className="form-group">
-                  <label>
-                    {editingStaff
-                      ? "New Password (optional)"
-                      : "Password"}
-                  </label>
-
-                  <input
-                    type="password"
-                    value={staffForm.password}
-                    onChange={(e) =>
-                      setStaffForm({
-                        ...staffForm,
-                        password: e.target.value,
-                      })
-                    }
-                    placeholder={
-                      editingStaff
-                        ? "Leave blank to keep old password"
-                        : "Enter password"
-                    }
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Main Department</label>
-
-                  <select
-                    value={staffForm.department}
-                    onChange={(e) =>
-                      setStaffForm({
-                        ...staffForm,
-                        department: e.target.value,
-                      })
-                    }
-                  >
-                    <option value="">
-                      Select department
-                    </option>
-
-                    {departments.map((department) => (
-                      <option
-                        key={department}
-                        value={department}
-                      >
-                        {department}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label>Role</label>
-
-                  <select
-                    value={staffForm.role}
-                    onChange={(e) =>
-                      setStaffForm({
-                        ...staffForm,
-                        role: e.target.value,
-                      })
-                    }
-                  >
-                    <option value="">
-                      Select role
-                    </option>
-
-                    {roles.map((role) => (
-                      <option key={role} value={role}>
-                        {role}
-                      </option>
-                    ))}
-                  </select>
+                <div className="stat">
+                  <span>🔔</span>
+                  <small>Alerts</small>
+                  <strong>0</strong>
                 </div>
               </div>
 
-              <div className="modal-buttons">
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => {
-                    setShowStaffModal(false);
-                    setEditingStaff(null);
-                  }}
-                >
-                  Cancel
-                </button>
+              <div className="card">
+                <h2>Access Control</h2>
 
-                <button
-                  type="submit"
-                  className="primary"
-                >
-                  {editingStaff
-                    ? "Save Changes"
-                    : "Create Staff"}
-                </button>
+                <p>
+                  Wannan account yana aiki ne a cikin:
+                </p>
+
+                <div className="access-box">
+                  <strong>Department</strong>
+                  <span>{currentUser.department}</span>
+                </div>
+
+                <div className="access-box">
+                  <strong>Role</strong>
+                  <span>{currentUser.role}</span>
+                </div>
+
+                <div className="access-box">
+                  <strong>Permissions</strong>
+
+                  <div className="tags">
+                    {currentUser.permissions.map(
+                      (permission) => (
+                        <span key={permission}>
+                          {permission}
+                        </span>
+                      )
+                    )}
+                  </div>
+                </div>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
+            </>
+          )}
+
+          {activePage === "Staff & Roles" &&
+            currentUser.role === "Super Admin" && (
+              <StaffManagement
+                staff={staff}
+                search={search}
+                setSearch={setSearch}
+                openPermissions={openPermissions}
+                showStaffModal={showStaffModal}
+                setShowStaffModal={setShowStaffModal}
+                editingStaff={editingStaff}
+                setEditingStaff={setEditingStaff}
+                staffForm={staffForm}
+                setStaffForm={setStaffForm}
+                openAddStaff={openAddStaff}
+                saveStaff={saveStaff}
+                departments={departments}
+                roles={roles}
+              />
+            )}
+
+          {activePage === "Attendance" && <AttendancePage />}
+
+          {activePage !== "Dashboard" &&
+            activePage !== "Staff & Roles" &&
+            activePage !== "Attendance" && (
+              <div className="card module">
+                <div className="module-icon">
+                  {menuIcons[activePage] || "🏥"}
+                </div>
+
+                <h1>{activePage}</h1>
+
+                <p>
+                  Wannan module an ware shi ne domin{" "}
+                  <strong>
+                    {currentUser.department}
+                  </strong>
+                  .
+                </p>
+
+                <div className="module-rule">
+                  🔐 Department Separation yana aiki.
+                  <br />
+                  Wannan user ba zai iya ganin aikin
+                  wasu departments ba sai idan an ba shi
+                  izini.
+                </div>
+
+                {hasPermission("View") && (
+                  <button className="primary">
+                    Open {activePage}
+                  </button>
+                )}
+              </div>
+            )}
+        </section>
+      </main>
 
       {showPermissions && selectedStaff && (
         <div className="overlay">
-          <div className="modal permission-modal">
-            <div className="modal-header">
-              <div>
-                <h3>Staff Permissions</h3>
+          <div className="modal">
+            <h2>Manage Permissions</h2>
 
-                <p>
-                  {selectedStaff.name} ·{" "}
-                  {selectedStaff.role}
-                </p>
-              </div>
+            <p>
+              <strong>{selectedStaff.name}</strong>
+            </p>
 
-              <button
-                className="close-button"
-                onClick={() => {
-                  setShowPermissions(false);
-                  setSelectedStaff(null);
-                }}
-              >
-                ×
-              </button>
+            <p className="muted">
+              {selectedStaff.department} ·{" "}
+              {selectedStaff.role}
+            </p>
+
+            <div className="permission-list">
+              {permissions.map((permission) => (
+                <label key={permission}>
+                  <input
+                    type="checkbox"
+                    checked={selectedPermissions.includes(
+                      permission
+                    )}
+                    onChange={() =>
+                      togglePermission(permission)
+                    }
+                    disabled={
+                      selectedStaff.role ===
+                      "Super Admin"
+                    }
+                  />
+
+                  <span>{permission}</span>
+                </label>
+              ))}
             </div>
 
-            {selectedStaff.role === "Super Admin" ? (
-              <div className="info-box">
-                Super Admin yana da cikakken system
-                permissions.
-              </div>
-            ) : (
-              <div className="permission-grid">
-                {allPermissions.map((permission) => (
-                  <label
-                    className="permission-item"
-                    key={permission}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedPermissions.includes(
-                        permission
-                      )}
-                      onChange={() =>
-                        togglePermission(permission)
-                      }
-                    />
-
-                    <span>{permission}</span>
-                  </label>
-                ))}
-              </div>
-            )}
+            <div className="security-note">
+              🔐 Super Admin ne kawai zai iya
+              canza permissions.
+              <br />
+              Department staff ba zai iya ba kansa
+              sabon permission ba.
+            </div>
 
             <div className="modal-buttons">
-              <button
-                className="secondary"
-                onClick={() => {
-                  setShowPermissions(false);
-                  setSelectedStaff(null);
-                }}
-              >
-                Cancel
-              </button>
+  <button
+    className="secondary"
+    onClick={() => {
+      setShowPermissions(false);
+      setSelectedStaff(null);
+    }}
+  >
+    Cancel
+  </button>
 
-              <button
-                className="primary"
-                onClick={savePermissions}
-              >
-                Save Permissions
-              </button>
+  <button
+    className="primary"
+    onClick={savePermissions}
+  >
+    Save Permissions
+  </button>
+</div>
+    
             </div>
           </div>
         </div>
       )}
-    </>
-  );
-}
-
-function Dashboard({ staff, currentUser }) {
-  const activeStaff = staff.filter(
-    (person) => person.status === "Active"
-  ).length;
-
-  const departmentsCount = new Set(
-    staff.map((person) => person.department)
-  ).size;
-
-  return (
-    <div>
-      <div className="welcome-card">
-        <div>
-          <span className="eyebrow">
-            Welcome back
-          </span>
-
-          <h1>{currentUser.name}</h1>
-
-          <p>
-            {currentUser.role} ·{" "}
-            {currentUser.department}
-          </p>
-        </div>
-
-        <div className="status-pill">
-          ● System Online
-        </div>
-      </div>
-
-      <div className="stats-grid">
-        <StatCard
-          title="Total Staff"
-          value={staff.length}
-          note="Registered staff accounts"
-        />
-
-        <StatCard
-          title="Active Staff"
-          value={activeStaff}
-          note="Currently enabled accounts"
-        />
-
-        <StatCard
-          title="Departments"
-          value={departmentsCount}
-          note="Departments represented"
-        />
-
-        <StatCard
-          title="Pending Work"
-          value="0"
-          note="Module integration coming next"
-        />
-      </div>
-
-      <div className="panel">
-        <div className="panel-heading">
-          <div>
-            <h3>Hospital Overview</h3>
-            <p>
-              Bazza PHC management dashboard
-            </p>
-          </div>
-        </div>
-
-        <div className="overview-grid">
-          <OverviewItem
-            label="Patients Today"
-            value="0"
-          />
-
-          <OverviewItem
-            label="Outpatients"
-            value="0"
-          />
-
-          <OverviewItem
-            label="Laboratory Requests"
-            value="0"
-          />
-
-          <OverviewItem
-            label="Pharmacy Prescriptions"
-            value="0"
-          />
-
-          <OverviewItem
-            label="Ultrasound Requests"
-            value="0"
-          />
-
-          <OverviewItem
-            label="New Alerts"
-            value="0"
-          />
-        </div>
-      </div>
     </div>
   );
 }
@@ -927,129 +1095,237 @@ function StaffManagement({
   staff,
   search,
   setSearch,
-  openAddStaff,
-  openEditStaff,
-  toggleStaffStatus,
-  resetPassword,
   openPermissions,
+  showStaffModal,
+  setShowStaffModal,
+  editingStaff,
+  setEditingStaff,
+  staffForm,
+  setStaffForm,
+  openAddStaff,
+  saveStaff,
+  departments,
+  roles,
 }) {
-  const filteredStaff = staff.filter((person) => {
-    const query = search.trim().toLowerCase();
-
-    return (
-      person.name.toLowerCase().includes(query) ||
-      person.staffId.toLowerCase().includes(query) ||
-      person.username.toLowerCase().includes(query) ||
-      person.department.toLowerCase().includes(query) ||
-      person.role.toLowerCase().includes(query)
-    );
-  });
-
-  const active = staff.filter(
-    (person) => person.status === "Active"
-  ).length;
-
-  const disabled = staff.filter(
-    (person) => person.status === "Disabled"
-  ).length;
+  const filtered = staff.filter((person) =>
+    `${person.name} ${person.staffId} ${person.department} ${person.role}`
+      .toLowerCase()
+      .includes(search.toLowerCase())
+  );
 
   return (
-    <div>
+    <>
       <div className="page-head">
         <div>
           <h1>Staff & Roles</h1>
-
           <p>
-            Create staff accounts, assign roles and
-            manage permissions.
-          </p>
-        </div>
+            Manage staff access and permissions.
+          </p>{showStaffModal && (
+  <div className="modal-overlay">
+    <div className="modal">
+      <div className="modal-header">
+        <h2>
+          {editingStaff ? "Edit Staff" : "Add New Staff"}
+        </h2>
 
         <button
-          className="primary"
-          onClick={openAddStaff}
+          className="close-button"
+          onClick={() => {
+            setShowStaffModal(false);
+            setEditingStaff(null);
+          }}
         >
-          + Add New Staff
+          ×
         </button>
       </div>
 
-      <div className="stats-grid compact">
-        <StatCard
-          title="Total Staff"
-          value={staff.length}
-          note="All staff accounts"
-        />
+      <div className="form-grid">
 
-      const allPermissions = [const allPermissions = [  <StatCard
-          title="Active Staff"
-          value={active}
-          note="Enabled accounts"
-        />
-
-        <StatCard
-          title="Disabled"
-          value={disabled}
-          note="Disabled accounts"
-        />
-
-        <StatCard
-          title="Departments"
-          value={
-            new Set(
-              staff.map((person) => person.department)
-            ).size
-          }
-          note="Departments represented"
-        />
-      </div>
-
-      <div className="panel">
-        <div className="table-toolbar">
-          <div>
-            <h3>Staff Accounts</h3>
-
-            <p>
-              Search and manage registered staff.
-            </p>
-          </div>
+        <div className="form-group">
+          <label>Staff Full Name *</label>
 
           <input
-            className="search-input"
-            value={search}
+            type="text"
+            value={staffForm.fullName}
             onChange={(e) =>
-              setSearch(e.target.value)
+              setStaffForm({
+                ...staffForm,
+                fullName: e.target.value,
+              })
             }
-            placeholder="Search staff, ID, role..."
+            placeholder="Enter full name"
           />
         </div>
 
-        <div className="table-wrap">
+        <div className="form-group">
+          <label>Staff ID *</label>
+
+          <input
+            type="text"
+            value={staffForm.staffId}
+            onChange={(e) =>
+              setStaffForm({
+                ...staffForm,
+                staffId: e.target.value,
+              })
+            }
+            placeholder="e.g. BZ005"
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Username *</label>
+
+          <input
+            type="text"
+            value={staffForm.username}
+            onChange={(e) =>
+              setStaffForm({
+                ...staffForm,
+                username: e.target.value,
+              })
+            }
+            placeholder="Enter username"
+          />
+        </div>
+
+        <div className="form-group">
+          <label>
+            {editingStaff
+              ? "New Password (optional)"
+              : "Initial Password"}
+          </label>
+
+          <input
+            type="password"
+            value={staffForm.password}
+            onChange={(e) =>
+              setStaffForm({
+                ...staffForm,
+                password: e.target.value,
+              })
+            }
+            placeholder={
+              editingStaff
+                ? "Leave blank to keep current password"
+                : "Enter password"
+            }
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Main Department *</label>
+
+          <select
+            value={staffForm.department}
+            onChange={(e) =>
+              setStaffForm({
+                ...staffForm,
+                department: e.target.value,
+              })
+            }
+          >
+            <option value="">Select Department</option>
+
+            {departments.map((department) => (
+              <option
+                key={department}
+                value={department}
+              >
+                {department}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label>Role *</label>
+
+          <select
+            value={staffForm.role}
+            onChange={(e) =>
+              setStaffForm({
+                ...staffForm,
+                role: e.target.value,
+              })
+            }
+          >
+            <option value="">Select Role</option>
+
+            {roles.map((role) => (
+              <option
+                key={role}
+                value={role}
+              >
+                {role}
+              </option>
+            ))}
+          </select>
+        </div>
+
+      </div>
+
+      <div className="modal-buttons">
+
+        <button
+          className="secondary"
+          onClick={() => {
+            setShowStaffModal(false);
+            setEditingStaff(null);
+          }}
+        >
+          Cancel
+        </button>
+
+        <button
+          className="primary"
+          onClick={saveStaff}
+        >
+          {editingStaff ? "Update Staff" : "Save Staff"}
+        </button>
+
+      </div>
+    </div>
+  </div>
+)}
+        </div>
+
+        <button className="primary" onClick={openAddStaff}>
+  + Add New Staff
+</button>
+      </div>
+
+      <div className="card">
+        <input
+          className="search"
+          value={search}
+          onChange={(e) =>
+            setSearch(e.target.value)
+          }
+          placeholder="Search staff..."
+        />
+      </div>
+
+      <div className="table-card">
+        <div className="table-scroll">
           <table>
             <thead>
               <tr>
-                <th>Staff</th>
+                <th>Name</th>
                 <th>Staff ID</th>
                 <th>Department</th>
                 <th>Role</th>
+                <th>Permissions</th>
                 <th>Status</th>
-                <th>Actions</th>
+                <th>Action</th>
               </tr>
             </thead>
 
             <tbody>
-              {filteredStaff.map((person) => (
+              {filtered.map((person) => (
                 <tr key={person.id}>
                   <td>
-                    <div className="staff-cell">
-                      <div className="mini-avatar">
-                        {person.name.charAt(0)}
-                      </div>
-
-                      <div>
-                        <strong>{person.name}</strong>
-                        <span>@{person.username}</span>
-                      </div>
-                    </div>
+                    <strong>{person.name}</strong>
                   </td>
 
                   <td>{person.staffId}</td>
@@ -1059,1300 +1335,630 @@ function StaffManagement({
                   <td>{person.role}</td>
 
                   <td>
-                    <span
-                      className={
-                        person.status === "Active"
-                          ? "status active-status"
-                          : "status disabled-status"
-                      }
-                    >
+                    <div className="tags">
+                      {person.permissions.map(
+                        (permission) => (
+                          <span key={permission}>
+                            {permission}
+                          </span>
+                        )
+                      )}
+                    </div>
+                  </td>
+
+                  <td>
+                    <span className="active-badge">
                       {person.status}
                     </span>
                   </td>
 
                   <td>
-                    <div className="actions">
-                      <button
-                        className="action-button"
-                        onClick={() =>
-                          openEditStaff(person)
-                        }
-                      >
-                        Edit
-                      </button>
-
-                      <button
-                        className="action-button"
-                        onClick={() =>
-                          openPermissions(person)
-                        }
-                      >
-                        Permissions
-                      </button>
-
-                      <button
-                        className="action-button"
-                        onClick={() =>
-                          resetPassword(person)
-                        }
-                      >
-                        Password
-                      </button>
-
-                      <button
-                        className="action-button"
-                        onClick={() =>
-                          toggleStaffStatus(person)
-                        }
-                      >
-                        {person.status === "Active"
-                          ? "Disable"
-                          : "Activate"}
-                      </button>
-                    </div>
+                    <button
+                      className="action"
+                      onClick={() =>
+                        openPermissions(person)
+                      }
+                    >
+                      🔐 Permissions
+                    </button>
                   </td>
                 </tr>
               ))}
-
-              {filteredStaff.length === 0 && (
-                <tr>
-                  <td
-                    colSpan="6"
-                    className="empty-cell"
-                  >
-                    No staff found.
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
-function ModulePlaceholder({ title, currentUser }) {
-  return (
-    <div className="panel module-placeholder">
-      <div className="module-icon">
-        {getIcon(title)}
-      </div>
-
-      <h2>{title}</h2>
-
-      <p>
-        Wannan module yana cikin tsarin Bazza PHC kuma
-        yanzu ya shirya domin mu fara gina aikin sa.
-      </p>
-
-      <div className="permission-note">
-        Logged in as:{" "}
-        <strong>{currentUser.role}</strong>
-      </div>
-    </div>
-  );
-}
-
-function StatCard({ title, value, note }) {
-  return (
-    <div className="stat-card">
-      <span>{title}</span>
-      <strong>{value}</strong>
-      <small>{note}</small>
-    </div>
-  );
-}
-
-function OverviewItem({ label, value }) {
-  return (
-    <div className="overview-item">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function getIcon(page) {
-  const icons = {
-    Dashboard: "▦",
-    Patients: "👥",
-    Departments: "🏥",
-    "Staff & Roles": "🧑‍⚕️",
-    Attendance: "🕒",
-    Roster: "📅",
-    "General Cashier": "💳",
-    Stock: "📦",
-    "Wards & Beds": "🛏️",
-    Alerts: "🔔",
-    "SMS / Email": "✉️",
-    Reports: "📊",
-    "Audit Logs": "📋",
-    Settings: "⚙️",
-  };
-
-  return icons[page] || "•";
-}
-function Attendance({ staff, currentUser }) {
-  const [attendance, setAttendance] = useState([]);
-
-  const today = new Date().toISOString().split("T")[0];
-
-  const todayRecord = attendance.find(
-    (item) =>
-      item.staffId === currentUser.staffId &&
-      item.date === today
-  );
-function Roster({ staff }) {
-  const [selectedMonth, setSelectedMonth] = useState(
-    new Date().toISOString().slice(0, 7)
-  );
-
-  const [roster, setRoster] = useState([]);
-
-  const shifts = ["Morning", "Evening", "Night"];
-
-  function getDaysInMonth(month) {
-    const [year, monthNumber] = month.split("-").map(Number);
-
-    return new Date(year, monthNumber, 0).getDate();
-  }
-
-  function generateRoster() {
-    const days = getDaysInMonth(selectedMonth);
-
-    const generated = [];
-
-    staff.forEach((person, staffIndex) => {
-      for (let day = 1; day <= days; day++) {
-        const date = `${selectedMonth}-${String(day).padStart(
-          2,
-          "0"
-        )}`;
-
-        /*
-         * Basic automatic shift rotation.
-         * Later we will connect this to:
-         * - Married staff
-         * - HOD
-         * - Student
-         * - Volunteer
-         * - 5 ON / 2 OFF
-         * - 5 ON / 3 OFF
-         * - 5 ON / 4 OFF
-         */
-
-        const shiftIndex =
-          (staffIndex + day - 1) % shifts.length;
-
-        const shift = shifts[shiftIndex];
-
-        generated.push({
-          id: `${person.id}-${date}`,
-          date,
-          staffId: person.staffId,
-          staffName: person.name,
-          department: person.department,
-          role: person.role,
-          shift,
-          status: "ON DUTY",
-        });
-      }
-    });
-
-    setRoster(generated);
-  }
-
-  function clearRoster() {
-    setRoster([]);
-  }
-
-  return (
-    <div>
-      <div className="page-head">
-        <div>
-          <h1>Staff Roster</h1>
-
-          <p>
-            Monthly staff duty roster and department assignments.
-          </p>
-        </div>
-
-        <div className="status-pill">
-          {roster.length > 0
-            ? "Roster Generated"
-            : "Not Generated"}
-        </div>
-      </div>
-
-      <div className="panel">
-        <div className="panel-heading">
-          <div>
-            <h3>Generate Monthly Roster</h3>
-
-            <p>
-              Select month sannan system ya samar da roster.
-            </p>
-          </div>
-        </div>
-
-        <div className="form-grid">
-          <div className="field">
-            <label>Select Month</label>
-
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={(e) =>
-                setSelectedMonth(e.target.value)
-              }
-            />
-          </div>
-        </div>
-
-        <div className="modal-buttons">
-          <button
-            className="primary"
-            onClick={generateRoster}
-          >
-            Generate Roster
-          </button>
-
-          <button
-            className="secondary"
-            onClick={clearRoster}
-          >
-            Clear Roster
-          </button>
-        </div>
-      </div>
-
-      <div className="stats-grid">
-        <StatCard
-          title="Staff"
-          value={staff.length}
-          note="Staff available"
-        />
-
-        <StatCard
-          title="Days"
-          value={
-            selectedMonth
-              ? getDaysInMonth(selectedMonth)
-              : 0
-          }
-          note="Days in selected month"
-        />
-
-        <StatCard
-          title="Roster Entries"
-          value={roster.length}
-          note="Generated assignments"
-        />
-
-        <StatCard
-          title="Shifts"
-          value={3}
-          note="Morning / Evening / Night"
-        />
-      </div>
-
-      <div className="panel">
-        <div className="panel-heading">
-          <div>
-            <h3>Monthly Roster</h3>
-
-            <p>
-              {selectedMonth}
-            </p>
-          </div>
-        </div>
-
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Staff</th>
-                <th>Department</th>
-                <th>Role</th>
-                <th>Shift</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {roster.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.date}</td>
-                  <td>{item.staffName}</td>
-                  <td>{item.department}</td>
-                  <td>{item.role}</td>
-                  <td>{item.shift}</td>
-                  <td>
-                    <span className="status active-status">
-                      {item.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-
-              {roster.length === 0 && (
-                <tr>
-                  <td
-                    colSpan="6"
-                    className="empty-cell"
-                  >
-                    Babu roster da aka generate tukuna.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-  function signIn() {
-    if (todayRecord?.signIn) {
-      alert("Ka riga ka yi Sign In yau.");
-      return;
-    }
-
-    const now = new Date();
-
-    const record = {
-      id: Date.now(),
-      staffId: currentUser.staffId,
-      staffName: currentUser.name,
-      department: currentUser.department,
-      role: currentUser.role,
-      date: today,
-      shift: "Morning",
-      signIn: now.toLocaleTimeString(),
-      signOut: "",
-      status: "Present",
-    };
-
-    setAttendance((previous) => [
-      ...previous,
-      record,
-    ]);
-  }
-
-  function signOut() {
-    if (!todayRecord?.signIn) {
-      alert("Sai ka yi Sign In kafin Sign Out.");
-      return;
-    }
-
-    if (todayRecord.signOut) {
-      alert("Ka riga ka yi Sign Out yau.");
-      return;
-    }
-
-    setAttendance((previous) =>
-      previous.map((item) =>
-        item.id === todayRecord.id
-          ? {
-              ...item,
-              signOut: new Date().toLocaleTimeString(),
-            }
-          : item
-      )
-    );
-  }
-
-  const myAttendance = attendance.filter(
-    (item) => item.staffId === currentUser.staffId
-  );
-
-  return (
-    <div>
-      <div className="page-head">
-        <div>
-          <h1>Staff Attendance</h1>
-
-          <p>
-            Sign In, Sign Out da attendance history.
-          </p>
-        </div>
-
-        <div className="status-pill">
-          {todayRecord?.signOut
-            ? "Signed Out"
-            : todayRecord?.signIn
-            ? "Signed In"
-            : "Not Signed In"}
-        </div>
-      </div>
-
-      <div className="stats-grid">
-        <StatCard
-          title="Today"
-          value={todayRecord ? "Present" : "—"}
-          note="Attendance status"
-        />
-
-        <StatCard
-          title="Sign In"
-          value={todayRecord?.signIn || "—"}
-          note="Today's sign-in time"
-        />
-
-        <StatCard
-          title="Sign Out"
-          value={todayRecord?.signOut || "—"}
-          note="Today's sign-out time"
-        />
-
-        <StatCard
-          title="Total Records"
-          value={myAttendance.length}
-          note="Your attendance records"
-        />
-      </div>
-
-      <div className="panel">
-        <div className="panel-heading">
-          <div>
-            <h3>Today's Attendance</h3>
-
-            <p>
-              {currentUser.name} ·{" "}
-              {currentUser.department}
-            </p>
-          </div>
-
-          <div className="attendance-actions">
-            <button
-              className="primary"
-              onClick={signIn}
-              disabled={Boolean(todayRecord?.signIn)}
-            >
-              ✓ Sign In
-            </button>
-
-            <button
-              className="secondary"
-              onClick={signOut}
-              disabled={
-                !todayRecord?.signIn ||
-                Boolean(todayRecord?.signOut)
-              }
-            >
-              Sign Out
-            </button>
-          </div>
-        </div>
-
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Staff</th>
-                <th>Department</th>
-                <th>Shift</th>
-                <th>Sign In</th>
-                <th>Sign Out</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {myAttendance.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.date}</td>
-                  <td>{item.staffName}</td>
-                  <td>{item.department}</td>
-                  <td>{item.shift}</td>
-                  <td>{item.signIn || "—"}</td>
-                  <td>{item.signOut || "—"}</td>
-                  <td>
-                    <span className="status active-status">
-                      {item.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-
-              {myAttendance.length === 0 && (
-                <tr>
-                  <td
-                    colSpan="7"
-                    className="empty-cell"
-                  >
-                    Babu attendance record tukuna.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-const styles = `
+const loginStyles = `
 * {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  font-family: Inter, Arial, Helvetica, sans-serif;
-  background: #f4f7fb;
-  color: #172033;
+  font-family: Arial, sans-serif;
 }
 
-button,
-input,
-select {
-  font: inherit;
-}
-
-button {
-  cursor: pointer;
-}
-
-.login-screen {
+.login-page {
   min-height: 100vh;
+  background: #f1f6f3;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
-  background:
-    radial-gradient(circle at top left, #e8f3ff, transparent 35%),
-    radial-gradient(circle at bottom right, #e8f8ef, transparent 35%),
-    #f6f8fb;
+  padding: 20px;
 }
 
 .login-card {
   width: 100%;
   max-width: 430px;
   background: white;
-  border-radius: 24px;
-  padding: 34px;
-  box-shadow: 0 20px 60px rgba(22, 35, 60, 0.12);
+  border-radius: 20px;
+  padding: 35px;
+  box-shadow: 0 15px 50px rgba(0,0,0,.08);
+  text-align: center;
 }
 
-.brand-mark {
-  width: 66px;
-  height: 66px;
+.logo {
+  width: 65px;
+  height: 65px;
+  border-radius: 18px;
+  background: #28553f;
+  color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 18px;
-  background: #0e65d7;
-  color: white;
-  font-weight: 800;
-  margin-bottom: 20px;
+  margin: auto;
+  font-size: 35px;
+  font-weight: bold;
 }
 
 .login-card h1 {
-  margin: 0;
-  font-size: 30px;
+  color: #28553f;
+  margin: 15px 0 5px;
 }
 
 .subtitle {
-  color: #6f788a;
-  margin-top: 8px;
-  margin-bottom: 28px;
+  color: #718078;
+  margin-bottom: 30px;
 }
 
-.login-card label,
-.form-group label {
+.login-card form {
+  text-align: left;
+}
+
+.login-card label {
   display: block;
   font-size: 13px;
-  font-weight: 700;
-  margin-bottom: 8px;
-}
-
-.login-card input,
-.form-group input,
-.form-group select,
-.search-input {
-  width: 100%;
-  border: 1px solid #dce2eb;
-  border-radius: 11px;
-  padding: 12px 13px;
-  outline: none;
-  background: white;
+  font-weight: bold;
+  margin: 15px 0 7px;
 }
 
 .login-card input {
-  margin-bottom: 16px;
-}
-
-.login-card input:focus,
-.form-group input:focus,
-.form-group select:focus,
-.search-input:focus {
-  border-color: #0e65d7;
-  box-shadow: 0 0 0 3px rgba(14, 101, 215, 0.08);
-}
-
-.login-button,
-.primary {
-  border: none;
-  background: #0e65d7;
-  color: white;
-  border-radius: 10px;
-  padding: 12px 18px;
-  font-weight: 700;
+  width: 100%;
+  padding: 13px;
+  border: 1px solid #d9e3dd;
+  border-radius: 9px;
+  outline: none;
 }
 
 .login-button {
   width: 100%;
-  margin-top: 4px;
+  margin-top: 20px;
+  padding: 13px;
+  border: 0;
+  border-radius: 9px;
+  background: #28553f;
+  color: white;
+  font-weight: bold;
 }
 
-.secondary {
-  border: 1px solid #d9dfe8;
-  background: white;
-  color: #283248;
-  border-radius: 10px;
-  padding: 11px 17px;
-  font-weight: 700;
-}
-
-.error-box {
-  background: #fff0f0;
-  color: #b52929;
-  border: 1px solid #ffd3d3;
-  padding: 10px 12px;
-  border-radius: 10px;
-  margin-bottom: 14px;
+.login-error {
+  margin-top: 12px;
+  padding: 10px;
+  background: #fbecec;
+  color: #a33b3b;
+  border-radius: 8px;
   font-size: 13px;
 }
 
 .login-footer {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin-top: 24px;
-  padding-top: 18px;
-  border-top: 1px solid #edf0f5;
-  color: #7c8494;
+  margin-top: 25px;
+  color: #69766f;
   font-size: 12px;
+  line-height: 1.7;
 }
 
-.login-footer strong {
-  color: #2f3a50;
+.demo {
+  margin-top: 20px;
+  padding: 12px;
+  background: #eef5f1;
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 1.7;
+  color: #526159;
+}
+`;
+
+const dashboardStyles = `
+* {
+  box-sizing: border-box;
 }
 
-.app-shell {
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f4f7f5;
+  color: #1c2922;
+}
+
+.app {
   min-height: 100vh;
-  display: flex;
 }
 
 .sidebar {
-  width: 265px;
-  background: #101a2d;
-  color: white;
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
   position: fixed;
   left: 0;
   top: 0;
   bottom: 0;
-}
-
-.sidebar-brand {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 22px 20px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-}
-
-.small-logo {
-  width: 42px;
-  height: 42px;
-  border-radius: 11px;
-  background: #2b7de9;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-weight: 800;
-}
-
-.sidebar-brand strong,
-.sidebar-brand span {
-  display: block;
-}
-
-.sidebar-brand span {
-  color: #95a0b8;
-  font-size: 11px;
-  margin-top: 3px;
-}
-
-.user-box {
-  display: flex;
-  gap: 11px;
-  padding: 18px 20px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-}
-
-.avatar {
-  min-width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: #203150;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-}
-
-.user-box strong,
-.user-box span,
-.user-box small {
-  display: block;
-}
-
-.user-box span {
-  font-size: 12px;
-  color: #aec2df;
-  margin-top: 3px;
-}
-
-.user-box small {
-  font-size: 10px;
-  color: #7d8ca5;
-  margin-top: 2px;
-}
-
-.nav-menu {
-  padding: 12px;
+  width: 260px;
+  background: #244f3d;
+  color: white;
   overflow-y: auto;
-  flex: 1;
+  z-index: 50;
 }
 
-.nav-button {
-  width: 100%;
+.brand {
+  padding: 24px;
+  border-bottom: 1px solid rgba(255,255,255,.12);
+}
+
+.brand-logo {
+  width: 45px;
+  height: 45px;
+  background: white;
+  color: #244f3d;
   display: flex;
-  gap: 11px;
   align-items: center;
-  border: none;
+  justify-content: center;
+  border-radius: 13px;
+  font-size: 25px;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.brand h2 {
+  margin: 0;
+}
+
+.brand p {
+  margin: 5px 0;
+  font-size: 12px;
+  color: #cfe1d7;
+}
+
+.user-info {
+  padding: 18px;
+  border-bottom: 1px solid rgba(255,255,255,.1);
+}
+
+.user-info strong,
+.user-info span,
+.user-info small {
+  display: block;
+}
+
+.user-info span {
+  margin-top: 4px;
+  color: #cfe1d7;
+  font-size: 12px;
+}
+
+.user-info small {
+  margin-top: 3px;
+  color: #a9c5b5;
+  font-size: 11px;
+}
+
+.menu {
+  padding: 12px;
+}
+
+.menu button,
+.logout {
+  width: 100%;
+  border: 0;
   background: transparent;
-  color: #b7c0d1;
-  border-radius: 9px;
+  color: white;
   padding: 11px 12px;
-  margin-bottom: 4px;
+  border-radius: 9px;
   text-align: left;
+  margin: 2px 0;
 }
 
-.nav-button:hover {
-  background: rgba(255,255,255,0.06);
-  color: white;
+.menu button:hover,
+.menu button.active {
+  background: #315f4b;
 }
 
-.nav-button.active {
-  background: #1768d4;
-  color: white;
+.menu button span {
+  width: 28px;
+  display: inline-block;
 }
 
-.logout-button {
-  margin: 14px;
-  padding: 11px 12px;
-  border-radius: 9px;
-  border: 1px solid rgba(255,255,255,0.13);
-  background: transparent;
-  color: #d9e0eb;
+.logout {
+  margin: 15px 12px;
+  width: calc(100% - 24px);
+  background: #a44a4a;
 }
 
-.main-area {
-  margin-left: 265px;
-  width: calc(100% - 265px);
+.main {
+  margin-left: 260px;
+  min-height: 100vh;
 }
 
 .topbar {
-  height: 82px;
+  height: 70px;
   background: white;
-  border-bottom: 1px solid #e9edf3;
+  border-bottom: 1px solid #e1e8e3;
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 0 28px;
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 20;
 }
 
-.topbar h2 {
-  margin: 0;
-  font-size: 20px;
-}
-
-.topbar p {
-  margin: 4px 0 0;
-  color: #8690a2;
-  font-size: 12px;
-}
-
-.topbar-user {
-  text-align: right;
-}
-
-.topbar-user strong,
-.topbar-user span {
-  display: block;
-}
-
-.topbar-user span {
-  color: #8a94a4;
-  font-size: 12px;
-  margin-top: 4px;
-}
-
-.page-content {
-  padding: 28px;
-}
-
-.welcome-card {
-  background: linear-gradient(135deg, #1065d7, #0e83bf);
-  color: white;
-  border-radius: 20px;
-  padding: 28px;
+.top-left {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  box-shadow: 0 12px 30px rgba(16, 101, 215, 0.18);
+  gap: 12px;
+  font-size: 19px;
 }
 
-.welcome-card h1 {
-  margin: 7px 0 6px;
-  font-size: 28px;
+.mobile-menu {
+  display: none;
+  border: 0;
+  background: #edf3ef;
+  padding: 8px 11px;
+  border-radius: 7px;
 }
 
-.welcome-card p {
-  margin: 0;
-  color: rgba(255,255,255,0.82);
+.top-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.eyebrow {
-  font-size: 12px;
-  opacity: 0.8;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.status-pill {
-  background: rgba(255,255,255,0.16);
-  border: 1px solid rgba(255,255,255,0.22);
-  border-radius: 999px;
-  padding: 9px 13px;
+.top-user span {
+  color: #2a7950;
   font-size: 12px;
 }
 
-.stats-grid {
-  margin-top: 22px;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-}
-
-.stats-grid.compact {
-  margin-bottom: 20px;
-}
-
-.stat-card {
-  background: white;
-  border: 1px solid #e7ebf1;
-  border-radius: 15px;
-  padding: 19px;
-}
-
-.stat-card span,
-.stat-card strong,
-.stat-card small {
+.top-user small {
   display: block;
-}
-
-.stat-card span {
-  color: #7e8899;
-  font-size: 12px;
-}
-
-.stat-card strong {
-  font-size: 27px;
-  margin: 7px 0 7px;
-}
-
-.stat-card small {
-  color: #9aa2b0;
+  color: #748079;
   font-size: 11px;
 }
 
-.panel {
-  background: white;
-  border: 1px solid #e7ebf1;
-  border-radius: 16px;
-  margin-top: 22px;
-  padding: 20px;
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #315f4b;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
 }
 
-.panel-heading,
-.table-toolbar,
+.content {
+  padding: 28px;
+}
+
+.welcome,
+.card,
+.table-card,
+.stat {
+  background: white;
+  border: 1px solid #e0e8e3;
+  border-radius: 15px;
+}
+
+.welcome {
+  padding: 24px;
+  margin-bottom: 20px;
+}
+
+.welcome h1 {
+  margin: 0 0 7px;
+}
+
+.welcome p {
+  margin: 0;
+  color: #718078;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.stat {
+  padding: 18px;
+}
+
+.stat span {
+  font-size: 24px;
+}
+
+.stat small {
+  display: block;
+  color: #718078;
+  margin-top: 10px;
+}
+
+.stat strong {
+  display: block;
+  font-size: 25px;
+  margin-top: 5px;
+}
+
+.card {
+  padding: 22px;
+  margin-bottom: 20px;
+}
+
+.access-box {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 13px;
+  background: #f2f6f3;
+  border-radius: 9px;
+  margin: 5px;
+}
+
+.access-box strong {
+  font-size: 12px;
+  color: #69766f;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.tags span {
+  background: #e8f2ec;
+  color: #315f4b;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+
 .page-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  margin-bottom: 18px;
 }
 
-.panel-heading h3,
-.table-toolbar h3,
 .page-head h1 {
   margin: 0;
 }
 
-.panel-heading p,
-.table-toolbar p,
 .page-head p {
-  margin: 5px 0 0;
-  color: #8892a2;
-  font-size: 12px;
+  color: #718078;
 }
 
-.overview-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-  margin-top: 18px;
+.primary {
+  background: #315f4b;
+  color: white;
+  border: 0;
+  border-radius: 9px;
+  padding: 11px 15px;
+  font-weight: bold;
 }
 
-.overview-item {
-  background: #f7f9fc;
-  border-radius: 12px;
-  padding: 16px;
+.secondary {
+  background: white;
+  border: 1px solid #d7e0da;
+  padding: 10px 15px;
+  border-radius: 9px;
 }
 
-.overview-item span,
-.overview-item strong {
-  display: block;
+.search {
+  width: 100%;
+  border: 1px solid #d7e0da;
+  padding: 12px;
+  border-radius: 9px;
+  outline: none;
 }
 
-.overview-item span {
-  color: #8791a2;
-  font-size: 12px;
+.table-card {
+  overflow: hidden;
 }
 
-.overview-item strong {
-  font-size: 23px;
-  margin-top: 6px;
-}
-
-.search-input {
-  max-width: 270px;
-}
-
-.table-wrap {
+.table-scroll {
   overflow-x: auto;
-  margin-top: 18px;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 900px;
+  min-width: 1000px;
 }
 
 th,
 td {
-  padding: 13px 12px;
-  border-bottom: 1px solid #eef1f5;
+  padding: 14px;
+  border-bottom: 1px solid #edf1ee;
   text-align: left;
   font-size: 13px;
 }
 
 th {
-  color: #6d7789;
+  background: #f7faf8;
+  color: #69766f;
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
-.staff-cell {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.mini-avatar {
-  width: 35px;
-  height: 35px;
-  border-radius: 9px;
-  background: #edf4fe;
-  color: #1768d4;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-weight: 800;
-}
-
-.staff-cell strong,
-.staff-cell span {
-  display: block;
-}
-
-.staff-cell span {
-  color: #8b94a4;
+.active-badge {
+  background: #e8f4ec;
+  color: #28744c;
+  padding: 5px 9px;
+  border-radius: 15px;
   font-size: 11px;
-  margin-top: 3px;
 }
 
-.status {
-  display: inline-flex;
-  border-radius: 999px;
-  padding: 6px 9px;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.active-status {
-  background: #e9f8ef;
-  color: #188347;
-}
-
-.disabled-status {
-  background: #fff0f0;
-  color: #bb3434;
-}
-
-.actions {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.action-button {
-  border: 1px solid #dce3ec;
+.action {
   background: white;
-  color: #344055;
-  border-radius: 8px;
-  padding: 7px 9px;
-  font-size: 11px;
+  border: 1px solid #d6e0d9;
+  border-radius: 7px;
+  padding: 8px 10px;
 }
 
-.action-button:hover {
-  background: #f5f7fa;
-}
-
-.empty-cell {
+.module {
   text-align: center;
-  color: #929aaa;
-  padding: 30px;
+  padding: 50px 25px;
+}
+
+.module-icon {
+  font-size: 45px;
+}
+
+.module-rule {
+  max-width: 550px;
+  margin: 20px auto;
+  padding: 15px;
+  background: #eef5f1;
+  border-radius: 9px;
+  color: #536159;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 100;
 }
 
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(10, 20, 35, 0.58);
+  background: rgba(0,0,0,.45);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
-  z-index: 1000;
+  z-index: 100;
 }
 
 .modal {
+  background: white;
   width: 100%;
-  max-width: 680px;
+  max-width: 550px;
+  border-radius: 16px;
+  padding: 25px;
   max-height: 90vh;
   overflow-y: auto;
-  background: white;
-  border-radius: 18px;
-  padding: 22px;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
 }
 
-.permission-modal {
-  max-width: 720px;
+.muted {
+  color: #718078;
 }
 
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #edf0f4;
-  margin-bottom: 19px;
-}
-
-.modal-header h3 {
-  margin: 0;
-}
-
-.modal-header p {
-  margin: 5px 0 0;
-  color: #8a93a2;
-  font-size: 12px;
-}
-
-.close-button {
-  border: none;
-  background: #f1f4f8;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  font-size: 21px;
-  line-height: 1;
-}
-
-.form-grid {
+.permission-list {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 20px;
 }
 
-.form-group {
-  min-width: 0;
+.permission-list label {
+  border: 1px solid #dce5df;
+  padding: 13px;
+  border-radius: 9px;
+  display: flex;
+  gap: 10px;
+}
+
+.security-note {
+  margin-top: 20px;
+  padding: 14px;
+  background: #eef5f1;
+  border-radius: 9px;
+  font-size: 12px;
+  color: #526159;
 }
 
 .modal-buttons {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 22px;
+  margin-top: 20px;
 }
 
-.permission-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 11px;
-}
-
-.permission-item {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 12px;
-  border: 1px solid #e5e9ef;
-  border-radius: 10px;
-  font-size: 13px;
-}
-
-.permission-item input {
-  width: 17px;
-  height: 17px;
-}
-
-.info-box {
-  background: #eef6ff;
-  border: 1px solid #d2e7ff;
-  color: #1557a1;
-  border-radius: 11px;
-  padding: 13px;
-  font-size: 13px;
-}
-
-.module-placeholder {
-  text-align: center;
-  padding: 55px 24px;
-}
-
-.module-icon {
-  font-size: 42px;
-  margin-bottom: 14px;
-}
-
-.module-placeholder h2 {
-  margin: 0;
-}
-
-.module-placeholder p {
-  max-width: 600px;
-  margin: 10px auto;
-  color: #7e8899;
-  line-height: 1.6;
-}
-
-.permission-note {
-  display: inline-block;
-  margin-top: 14px;
-  background: #f1f5fa;
-  border-radius: 9px;
-  padding: 10px 14px;
-  color: #596477;
-  font-size: 12px;
-}
-
-@media (max-width: 1050px) {
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .overview-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 760px) {
+@media(max-width: 850px) {
   .sidebar {
-    width: 210px;
+    transform: translateX(-100%);
+    transition: .2s;
   }
 
-  .main-area {
-    margin-left: 210px;
-    width: calc(100% - 210px);
+  .sidebar.open {
+    transform: translateX(0);
   }
 
-  .page-content {
-    padding: 18px;
+  .main {
+    margin-left: 0;
   }
 
-  .topbar {
-    padding: 0 18px;
-  }
-
-  .form-grid,
-  .permission-grid,
-  .stats-grid,
-  .overview-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .welcome-card,
-  .page-head,
-  .table-toolbar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .search-input {
-    max-width: none;
-  }
-}
-
-@media (max-width: 560px) {
-  .sidebar {
-    position: static;
-    width: 100%;
-    min-height: auto;
-  }
-
-  .app-shell {
+  .mobile-menu {
     display: block;
   }
 
-  .main-area {
-    margin-left: 0;
-    width: 100%;
+  .stats {
+    grid-template-columns: 1fr 1fr;
   }
 
-  .nav-menu {
-    max-height: 300px;
+  .top-user span {
+    display: none;
+  }
+}
+
+@media(max-width: 600px) {
+  .content {
+    padding: 15px;
   }
 
-  .topbar {
-    position: static;
+  .stats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .top-user div:nth-child(2) {
+    display: none;
+  }
+
+  .permission-list {
+    grid-template-columns: 1fr;
+  }
+
+  .page-head {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 `;
