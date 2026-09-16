@@ -1300,6 +1300,62 @@ function ICTPage({ patients, setPatients, showMessage }) {
     </div>
   );
 }
+function RecordsDashboard({ patients, onOpenService }) {
+  return (
+    <div>
+      <div className="page-head">
+        <div>
+          <h1>Records Unit</h1>
+          <p>Patient records, files and registration services</p>
+        </div>
+      </div>
+
+      <div className="stats-grid">
+        <StatCard
+          title="Today's Cards"
+          value="12"
+          icon="▣"
+          text="Cards issued"
+        />
+
+        <StatCard
+          title="Files Issued"
+          value="18"
+          icon="✓"
+          text="Files issued"
+        />
+
+        <StatCard
+          title="Pending"
+          value="4"
+          icon="!"
+          text="Pending records"
+        />
+
+        <StatCard
+          title="Total Records"
+          value={patients.length}
+          icon="◉"
+          text="Registered patients"
+        />
+      </div>
+
+      <div className="card">
+        <h2>Records Services</h2>
+        <p>
+          Search patients, issue cards and files, and process Records payments.
+        </p>
+
+        <button
+          className="primary"
+          onClick={onOpenService}
+        >
+          Open Patient Records
+        </button>
+      </div>
+    </div>
+  );
+}
 function RecordsPage({ patients, showMessage }) {
   const [search, setSearch] = useState("");
   const [selectedPatient, setSelectedPatient] = useState(null);
