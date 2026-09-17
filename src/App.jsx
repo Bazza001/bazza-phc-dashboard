@@ -1368,7 +1368,12 @@ function RecordsDashboard({ patients, onOpenService }) {
 }
 
 
-function RecordsPage({ patients, showMessage, onSaved }) {
+function RecordsPage({
+  patients,
+  showMessage,
+  onSaved,
+  setTransactions,
+}) {
   const [search, setSearch] = useState("");
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [service, setService] = useState("");
