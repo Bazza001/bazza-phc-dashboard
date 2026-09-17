@@ -136,6 +136,7 @@ function App() {
   const [recordsView, setRecordsView] = useState("dashboard");
   const [staff, setStaff] = useState(initialStaff);
   const [patients, setPatients] = useState(demoPatients);
+  const [transactions, setTransactions] = useState([]);
   const [search, setSearch] = useState("");
   const [loginForm, setLoginForm] = useState({
     username: "",
