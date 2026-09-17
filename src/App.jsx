@@ -704,8 +704,16 @@ function App() {
           )}
 
           {page === "General Cashier" && (
-  <GeneralCashierPage
-    transactions={transactions}
+  <ModulePage
+    title="General Cashier"
+    subtitle="Central payment and receipt management"
+    icon="₦"
+    stats={[
+      ["Today's Collections", "₦84,500"],
+      ["Cash", "₦32,000"],
+      ["POS", "₦27,500"],
+      ["Bank Transfer", "₦25,000"],
+    ]}
   />
 )}
 
