@@ -3608,10 +3608,19 @@ function App() {
           )}
 
           {page === "Records Unit" && (
-  <RecordsPage
-    patients={patients}
-    showMessage={showMessage}
-  />
+  recordsView === "dashboard" ? (
+    <RecordsDashboard
+      patients={patients}
+      onOpenService={() => setRecordsView("service")}
+    />
+  ) : (
+    <RecordsPage
+      patients={patients}
+      showMessage={showMessage}
+      onSaved={() => setRecordsView("dashboard")}
+      setTransactions={setTransactions}
+    />
+  )
 )}
 
           {page === "Nursing Unit" && (
