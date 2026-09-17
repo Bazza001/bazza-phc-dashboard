@@ -1399,30 +1399,47 @@ function RecordsPage({
   });
 
   const handlePayment = () => {
-    if (!selectedPatient) {
-      showMessage("Da farko nemo patient.");
-      return;
-    }
+  if (!selectedPatient) {
+    showMessage("Da farko nemo patient.");
+    return;
+  }
 
-    if (!service) {
-      showMessage("Zaɓi Card, File ko Card + File.");
-      return;
-    }
+  if (!service) {
+    showMessage("Zaɓi Card, File ko Card + File.");
+    return;
+  }
 
-    const amount = prices[service];
+  const amount = prices[service];
 
-    showMessage(
-      `${service} na ${selectedPatient.name} an yi payment ₦${amount}.`
-    );
-
-    setSearch("");
-    setSelectedPatient(null);
-    setService("");
-    setPaymentMethod("Cash");
-    setPaymentStatus("Paid");
-
-    onSaved();
+  const transaction = {
+    id: Date.now(),
+    transactionNo: `TRX-${Date.now()}`,
+    department: "Records Unit",
+    patientId: selectedPatient.id,
+    card: selectedPatient.card,
+    patientName: selectedPatient.name,
+    service,
+    amount,
+    paymentMethod,
+    paymentStatus,
+    cashier: "Records Cashier",
+    date: new Date().toLocaleString(),
   };
+
+  setTransactions((prev) => [transaction, ...prev]);
+
+  showMessage(
+    `${service} na ${selectedPatient.name} an yi payment ₦${amount}.`
+  );
+
+  setSearch("");
+  setSelectedPatient(null);
+  setService("");
+  setPaymentMethod("Cash");
+  setPaymentStatus("Paid");
+
+  onSaved();
+};
 
   const printSlip = () => {
     if (!selectedPatient || !service) {
