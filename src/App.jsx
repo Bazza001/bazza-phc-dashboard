@@ -3877,7 +3877,47 @@ function PharmacyPage({
       );
     });
   }, [prescriptions, search]);
+useEffect(() => {
+  const receiveConsultantPrescription = (event) => {
+    const prescription = event.detail;
 
+    if (!prescription) {
+      return;
+    }
+
+    setPrescriptions((previous) => {
+      const alreadyExists = previous.some(
+        (item) => item.id === prescription.id
+      );
+
+      if (alreadyExists) {
+        return previous;
+      }
+
+      return [prescription, ...previous];
+    });
+
+    setView("queue");
+
+    if (showMessage) {
+      showMessage(
+        `New prescription received from Consultant Room for ${prescription.patientName}.`
+      );
+    }
+  };
+
+  window.addEventListener(
+    "bazza:pharmacy-prescription",
+    receiveConsultantPrescription
+  );
+
+  return () => {
+    window.removeEventListener(
+      "bazza:pharmacy-prescription",
+      receiveConsultantPrescription
+    );
+  };
+}, [showMessage]);
   const totalPrescriptions = prescriptions.length;
 
   const newPrescriptions = prescriptions.filter(
