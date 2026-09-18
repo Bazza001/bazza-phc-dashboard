@@ -137,6 +137,11 @@ function App() {
   const [staff, setStaff] = useState(initialStaff);
   const [patients, setPatients] = useState(demoPatients);
   const [transactions, setTransactions] = useState([]);
+  const [labRequests, setLabRequests] = useState([
+    { id: 1, card: "BZ-P001", patientName: "Aisha Musa", test: "Malaria Test", consultant: "Consultant Room", status: "New", paymentStatus: "Pending", amount: 1500, date: "9/18/2026, 1:20:00 PM" },
+    { id: 2, card: "BZ-P002", patientName: "Ibrahim Bello", test: "Full Blood Count (FBC)", consultant: "Consultant Room", status: "Sample Received", paymentStatus: "Paid", amount: 3000, date: "9/18/2026, 1:25:00 PM" },
+    { id: 3, card: "BZ-P003", patientName: "Fatima Yusuf", test: "Urinalysis", consultant: "Consultant Room", status: "In Progress", paymentStatus: "Paid", amount: 1000, date: "9/18/2026, 1:30:00 PM" },
+  ]);
   const [search, setSearch] = useState("");
   const [loginForm, setLoginForm] = useState({
     username: "",
@@ -617,16 +622,12 @@ function App() {
           )}
 
           {page === "Laboratory Unit" && (
-            <ModulePage
-              title="Laboratory Unit"
-              subtitle="Laboratory requests, samples and results"
-              icon="⚗"
-              stats={[
-                ["New Requests", "7"],
-                ["Samples Received", "5"],
-                ["In Progress", "3"],
-                ["Results Ready", "11"],
-              ]}
+            <LaboratoryPage
+              patients={patients}
+              requests={labRequests}
+              setRequests={setLabRequests}
+              setTransactions={setTransactions}
+              showMessage={showMessage}
             />
           )}
 
@@ -1709,6 +1710,203 @@ function StaffManagement({
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+function LaboratoryPage({ patients, requests, setRequests, setTransactions, showMessage }) {
+  const [search, setSearch] = useState("");
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [test, setTest] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("Cash");
+  const [paymentStatus, setPaymentStatus] = useState("Paid");
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [result, setResult] = useState("");
+
+  const tests = {
+    "Malaria Test": 1500,
+    "Full Blood Count (FBC)": 3000,
+    "Urinalysis": 1000,
+    "Blood Group": 1000,
+    "Widal Test": 2000,
+    "Pregnancy Test": 1000,
+  };
+
+  const filteredPatients = patients.filter((patient) => {
+    const q = search.toLowerCase().trim();
+    if (!q) return false;
+    return patient.name.toLowerCase().includes(q) || patient.card.toLowerCase().includes(q) || patient.phone.includes(q);
+  });
+
+  const stats = [
+    ["New Requests", requests.filter((r) => r.status === "New").length],
+    ["Samples Received", requests.filter((r) => r.status === "Sample Received").length],
+    ["In Progress", requests.filter((r) => r.status === "In Progress").length],
+    ["Results Ready", requests.filter((r) => r.status === "Result Ready").length],
+  ];
+
+  const createRequest = () => {
+    if (!selectedPatient) {
+      showMessage("Da farko nemo patient.");
+      return;
+    }
+    if (!test) {
+      showMessage("Zaɓi laboratory test.");
+      return;
+    }
+
+    const amount = tests[test];
+    const now = new Date().toLocaleString();
+    const request = {
+      id: Date.now(),
+      card: selectedPatient.card,
+      patientName: selectedPatient.name,
+      test,
+      consultant: "Consultant Room",
+      status: "New",
+      paymentStatus,
+      amount,
+      date: now,
+    };
+
+    setRequests((prev) => [request, ...prev]);
+
+    if (paymentStatus === "Paid") {
+      setTransactions((prev) => [
+        {
+          id: Date.now() + 1,
+          transactionNo: `TRX-${Date.now() + 1}`,
+          department: "Laboratory Unit",
+          patientId: selectedPatient.id,
+          card: selectedPatient.card,
+          patientName: selectedPatient.name,
+          service: test,
+          amount,
+          paymentMethod,
+          paymentStatus,
+          cashier: "Laboratory Cashier",
+          date: now,
+        },
+        ...prev,
+      ]);
+    }
+
+    showMessage(`${test} na ${selectedPatient.name} an ƙirƙira successfully.`);
+    setSearch("");
+    setSelectedPatient(null);
+    setTest("");
+    setPaymentStatus("Paid");
+    setPaymentMethod("Cash");
+  };
+
+  const updateStatus = (status) => {
+    if (!selectedRequest) return;
+    setRequests((prev) => prev.map((r) => r.id === selectedRequest.id ? { ...r, status } : r));
+    setSelectedRequest((prev) => ({ ...prev, status }));
+    showMessage(`Status an canza zuwa ${status}.`);
+  };
+
+  const saveResult = () => {
+    if (!selectedRequest) {
+      showMessage("Da farko zaɓi request.");
+      return;
+    }
+    if (!result.trim()) {
+      showMessage("Rubuta laboratory result.");
+      return;
+    }
+    const updated = { ...selectedRequest, result: result.trim(), status: "Result Ready" };
+    setRequests((prev) => prev.map((r) => r.id === updated.id ? updated : r));
+    setSelectedRequest(updated);
+    showMessage("Result Ready. Consultant zai iya ganin sakamakon.");
+  };
+
+  return (
+    <div>
+      <PageHeader title="Laboratory Unit" subtitle="Laboratory requests, samples and results" icon="⚗" />
+
+      <div className="stats-grid">
+        {stats.map(([name, value], index) => (
+          <StatCard key={name} title={name} value={value} icon={["!", "◉", "⚗", "✓"][index]} />
+        ))}
+      </div>
+
+      <div className="card">
+        <h2>New Laboratory Request</h2>
+        <div className="form-grid">
+          <div className="field">
+            <label>Search Patient</label>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Card number, name or phone" />
+            {search && !selectedPatient && (
+              <div className="search-results">
+                {filteredPatients.length === 0 ? <div className="search-item">Ba a samu patient ba.</div> : filteredPatients.map((patient) => (
+                  <button key={patient.id} className="search-item" onClick={() => { setSelectedPatient(patient); setSearch(patient.card); }}>
+                    <strong>{patient.card}</strong> — {patient.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="field">
+            <label>Laboratory Test</label>
+            <select value={test} onChange={(e) => setTest(e.target.value)}>
+              <option value="">Select test</option>
+              {Object.entries(tests).map(([name, price]) => <option key={name} value={name}>{name} — ₦{price.toLocaleString()}</option>)}
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Payment Method</label>
+            <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+              <option>Cash</option><option>POS</option><option>Bank Transfer</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Payment Status</label>
+            <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)}>
+              <option>Paid</option><option>Pending</option><option>Free</option>
+            </select>
+          </div>
+        </div>
+        {selectedPatient && <p className="muted">Patient: <strong>{selectedPatient.name}</strong> ({selectedPatient.card})</p>}
+        {test && test !== "Other" && <p className="muted">Service Price: <strong>₦{tests[test].toLocaleString()}</strong></p>}
+        <button className="button primary" onClick={createRequest}>Create Laboratory Request</button>
+      </div>
+
+      <div className="card">
+        <h2>Laboratory Request Queue</h2>
+        <div className="table-scroll">
+          <table>
+            <thead><tr><th>Card</th><th>Patient</th><th>Test</th><th>Consultant</th><th>Status</th><th>Payment</th><th>Amount</th><th>Date / Time</th><th>Action</th></tr></thead>
+            <tbody>
+              {requests.map((request) => (
+                <tr key={request.id}>
+                  <td>{request.card}</td><td>{request.patientName}</td><td>{request.test}</td><td>{request.consultant}</td><td>{request.status}</td><td>{request.paymentStatus}</td><td>₦{Number(request.amount || 0).toLocaleString()}</td><td>{request.date}</td>
+                  <td><button className="small-button" onClick={() => { setSelectedRequest(request); setResult(request.result || ""); }}>Open</button></td>
+                </tr>
+              ))}
+              {requests.length === 0 && <tr><td colSpan="9" className="empty-cell">Babu laboratory request tukuna.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {selectedRequest && (
+        <div className="card">
+          <h2>Sample & Result — {selectedRequest.patientName}</h2>
+          <p className="muted">{selectedRequest.test} • {selectedRequest.card}</p>
+          <div className="button-row">
+            <button className="small-button" onClick={() => updateStatus("Sample Received")}>Sample Received</button>
+            <button className="small-button" onClick={() => updateStatus("In Progress")}>In Progress</button>
+            <button className="small-button" onClick={() => updateStatus("Completed")}>Completed</button>
+          </div>
+          <div className="field">
+            <label>Laboratory Result</label>
+            <textarea value={result} onChange={(e) => setResult(e.target.value)} rows="5" placeholder="Enter laboratory result / findings" />
+          </div>
+          <button className="button primary" onClick={saveResult}>Save Result & Mark Result Ready</button>
+        </div>
+      )}
     </div>
   );
 }
