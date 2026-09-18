@@ -635,6 +635,7 @@ function App() {
   <PharmacyPage
     patients={patients}
     showMessage={showMessage}
+    setTransactions={setTransactions}
   />
 )}
 
