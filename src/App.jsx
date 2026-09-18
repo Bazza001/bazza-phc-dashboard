@@ -632,18 +632,11 @@ function App() {
           )}
 
           {page === "Pharmacy Unit" && (
-            <ModulePage
-              title="Pharmacy Unit"
-              subtitle="Prescriptions, dispensing and medicine stock"
-              icon="⚕"
-              stats={[
-                ["New Prescriptions", "9"],
-                ["Dispensed Today", "31"],
-                ["Pending", "4"],
-                ["Stock Alerts", "3"],
-              ]}
-            />
-          )}
+  <PharmacyPage
+    patients={patients}
+    showMessage={showMessage}
+  />
+)}
 
           {page === "Ultrasound Room" && (
             <ModulePage
