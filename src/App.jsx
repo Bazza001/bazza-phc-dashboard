@@ -3602,10 +3602,28 @@ function PharmacyPage({
       dispensedBy: "",
     };
 
-    setPrescriptions((previous) => [
-      newPrescription,
-      ...previous,
-    ]);
+    if (
+  paymentStatus === "Paid" &&
+  setTransactions
+) {
+  setTransactions((previous) => [
+    {
+      id: Date.now() + 1,
+      transactionNo: `TRX-${Date.now() + 1}`,
+      department: "Pharmacy Unit",
+      patientId: selectedPatient.id,
+      card: getPatientCard(selectedPatient),
+      patientName: getPatientName(selectedPatient),
+      service: medicine,
+      amount: totalAmount,
+      paymentMethod,
+      paymentStatus: "Paid",
+      cashier: "Pharmacy Cashier",
+      date: new Date().toLocaleString(),
+    },
+    ...previous,
+  ]);
+}
 
     setMedicine("");
     setQuantity(1);
