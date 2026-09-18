@@ -608,18 +608,11 @@ function App() {
           )}
 
           {page === "Consultant Room" && (
-            <ModulePage
-              title="Consultant Room"
-              subtitle="Consultation, diagnosis, requests and prescriptions"
-              icon="✚"
-              stats={[
-                ["Waiting", "5"],
-                ["In Consultation", "2"],
-                ["Lab Requests", "6"],
-                ["Completed", "29"],
-              ]}
-            />
-          )}
+  <ConsultantPage
+    patients={patients}
+    showMessage={showMessage}
+  />
+)}
 
           {page === "Laboratory Unit" && (
             <LaboratoryPage
