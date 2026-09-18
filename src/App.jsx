@@ -2205,6 +2205,421 @@ function PageHeader({ title, subtitle, icon }) {
   );
 }
 
+function ConsultantPage({ patients = [], showMessage }) {
+  const [search, setSearch] = useState("");
+  const [selectedPatient, setSelectedPatient] = useState(null);
+
+  const [medicine, setMedicine] = useState("");
+  const [quantity, setQuantity] = useState(1);
+  const [instructions, setInstructions] = useState("");
+  const [duration, setDuration] = useState("");
+
+  const [consultationNote, setConsultationNote] = useState("");
+
+  const medicines = [
+    "Paracetamol 500mg",
+    "Amoxicillin 500mg",
+    "Metronidazole 400mg",
+    "Artemether/Lumefantrine",
+  ];
+
+  const filteredPatients = patients.filter((patient) => {
+    const term = search.toLowerCase().trim();
+
+    if (!term) return true;
+
+    const name = (
+      patient.name ||
+      `${patient.surname || ""} ${patient.otherNames || ""}`
+    ).toLowerCase();
+
+    const card = String(
+      patient.card || patient.cardNumber || patient.id || ""
+    ).toLowerCase();
+
+    const phone = String(
+      patient.phone || patient.phoneNumber || ""
+    ).toLowerCase();
+
+    return (
+      name.includes(term) ||
+      card.includes(term) ||
+      phone.includes(term)
+    );
+  });
+
+  const getPatientName = (patient) => {
+    if (!patient) return "";
+
+    return (
+      patient.name ||
+      `${patient.surname || ""} ${patient.otherNames || ""}`.trim()
+    );
+  };
+
+  const getPatientCard = (patient) => {
+    if (!patient) return "";
+
+    return (
+      patient.card ||
+      patient.cardNumber ||
+      patient.id ||
+      ""
+    );
+  };
+
+  const selectPatient = (patient) => {
+    setSelectedPatient(patient);
+    setSearch(getPatientName(patient));
+
+    if (showMessage) {
+      showMessage(
+        `Patient selected: ${getPatientName(patient)}`
+      );
+    }
+  };
+
+  const sendToPharmacy = () => {
+    if (!selectedPatient) {
+      if (showMessage) {
+        showMessage("Please select a patient first.");
+      }
+      return;
+    }
+
+    if (!medicine) {
+      if (showMessage) {
+        showMessage("Please select medicine.");
+      }
+      return;
+    }
+
+    if (!quantity || Number(quantity) < 1) {
+      if (showMessage) {
+        showMessage("Please enter a valid quantity.");
+      }
+      return;
+    }
+
+    const prescription = {
+      id: `CONS-RX-${Date.now()}`,
+      patientId: selectedPatient.id,
+      patientName: getPatientName(selectedPatient),
+      card: getPatientCard(selectedPatient),
+      medicine,
+      quantity: Number(quantity),
+      instructions,
+      duration,
+      consultant: "Consultant Room",
+      status: "New",
+      paymentStatus: "Pending",
+      paymentMethod: "Cash",
+      amount: 0,
+      date: new Date().toLocaleString(),
+    };
+
+    /*
+      Temporary browser event.
+
+      Pharmacy will listen for this event and add the
+      prescription to its queue.
+    */
+    window.dispatchEvent(
+      new CustomEvent("bazza:pharmacy-prescription", {
+        detail: prescription,
+      })
+    );
+
+    if (showMessage) {
+      showMessage(
+        `${medicine} prescription sent to Pharmacy for ${getPatientName(
+          selectedPatient
+        )}.`
+      );
+    }
+
+    setMedicine("");
+    setQuantity(1);
+    setInstructions("");
+    setDuration("");
+  };
+
+  const sendToLaboratory = () => {
+    if (!selectedPatient) {
+      if (showMessage) {
+        showMessage("Please select a patient first.");
+      }
+      return;
+    }
+
+    if (showMessage) {
+      showMessage(
+        `Laboratory request can be created for ${getPatientName(
+          selectedPatient
+        )} using the shared Card Number ${getPatientCard(
+          selectedPatient
+        )}.`
+      );
+    }
+  };
+
+  return (
+    <div>
+      <PageHeader
+        title="Consultant Room"
+        subtitle="Consultation, diagnosis, laboratory requests and prescriptions"
+        icon="✚"
+      />
+
+      <div className="stats-grid">
+        <StatCard
+          title="Waiting"
+          value="5"
+          icon="◉"
+        />
+
+        <StatCard
+          title="In Consultation"
+          value="2"
+          icon="✚"
+        />
+
+        <StatCard
+          title="Lab Requests"
+          value="6"
+          icon="▣"
+        />
+
+        <StatCard
+          title="Completed"
+          value="29"
+          icon="✓"
+        />
+      </div>
+
+      <div className="panel" style={{ marginTop: 20 }}>
+        <h2 style={{ marginTop: 0 }}>
+          Select Patient
+        </h2>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr",
+            gap: 10,
+          }}
+        >
+          <input
+            className="search-input"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search patient by name, Card Number or phone..."
+          />
+
+          {!selectedPatient &&
+            search.trim() &&
+            filteredPatients.map((patient) => (
+              <button
+                type="button"
+                key={patient.id}
+                onClick={() => selectPatient(patient)}
+                style={{
+                  textAlign: "left",
+                  border: "1px solid #dce3e8",
+                  background: "#fff",
+                  borderRadius: 8,
+                  padding: 12,
+                  cursor: "pointer",
+                }}
+              >
+                <strong>
+                  {getPatientName(patient)}
+                </strong>
+
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: 11,
+                    color: "#71808d",
+                  }}
+                >
+                  Card: {getPatientCard(patient)}{" "}
+                  • Phone:{" "}
+                  {patient.phone ||
+                    patient.phoneNumber ||
+                    "-"}
+                </div>
+              </button>
+            ))}
+        </div>
+      </div>
+
+      {selectedPatient && (
+        <>
+          <div
+            className="panel"
+            style={{ marginTop: 20 }}
+          >
+            <h2 style={{ marginTop: 0 }}>
+              Patient Profile
+            </h2>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "repeat(3, minmax(0, 1fr))",
+                gap: 15,
+              }}
+            >
+              <div>
+                <strong>Name</strong>
+                <div>
+                  {getPatientName(selectedPatient)}
+                </div>
+              </div>
+
+              <div>
+                <strong>Card Number</strong>
+                <div>
+                  {getPatientCard(selectedPatient)}
+                </div>
+              </div>
+
+              <div>
+                <strong>Phone</strong>
+                <div>
+                  {selectedPatient.phone ||
+                    selectedPatient.phoneNumber ||
+                    "-"}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            className="panel"
+            style={{ marginTop: 20 }}
+          >
+            <h2 style={{ marginTop: 0 }}>
+              Consultation
+            </h2>
+
+            <label className="form-field">
+              <span>
+                Consultation Notes / Diagnosis
+              </span>
+
+              <textarea
+                value={consultationNote}
+                onChange={(e) =>
+                  setConsultationNote(e.target.value)
+                }
+                rows={5}
+                placeholder="Enter consultation notes and diagnosis..."
+              />
+            </label>
+          </div>
+
+          <div
+            className="panel"
+            style={{ marginTop: 20 }}
+          >
+            <h2 style={{ marginTop: 0 }}>
+              Prescription
+            </h2>
+
+            <div className="form-grid">
+              <label className="form-field">
+                <span>Medicine</span>
+
+                <select
+                  value={medicine}
+                  onChange={(e) =>
+                    setMedicine(e.target.value)
+                  }
+                >
+                  <option value="">
+                    Select medicine
+                  </option>
+
+                  {medicines.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="form-field">
+                <span>Quantity</span>
+
+                <input
+                  type="number"
+                  min="1"
+                  value={quantity}
+                  onChange={(e) =>
+                    setQuantity(e.target.value)
+                  }
+                />
+              </label>
+
+              <label className="form-field">
+                <span>Duration</span>
+
+                <input
+                  value={duration}
+                  onChange={(e) =>
+                    setDuration(e.target.value)
+                  }
+                  placeholder="e.g. 3 days"
+                />
+              </label>
+
+              <label className="form-field">
+                <span>Instructions</span>
+
+                <input
+                  value={instructions}
+                  onChange={(e) =>
+                    setInstructions(e.target.value)
+                  }
+                  placeholder="e.g. Take after food"
+                />
+              </label>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                marginTop: 18,
+                flexWrap: "wrap",
+              }}
+            >
+              <button
+                type="button"
+                className="button primary"
+                onClick={sendToPharmacy}
+              >
+                Send Prescription to Pharmacy
+              </button>
+
+              <button
+                type="button"
+                className="button secondary"
+                onClick={sendToLaboratory}
+              >
+                Create Laboratory Request
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function StatCard({ title, value, icon, text }) {
   return (
     <div className="stat-card">
