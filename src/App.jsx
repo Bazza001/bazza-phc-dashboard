@@ -136,6 +136,7 @@ function App() {
   const [recordsView, setRecordsView] = useState("dashboard");
   const [staff, setStaff] = useState(initialStaff);
   const [patients, setPatients] = useState(demoPatients);
+  const [transactions, setTransactions] = useState([]);
   const [search, setSearch] = useState("");
   const [loginForm, setLoginForm] = useState({
     username: "",
@@ -580,11 +581,12 @@ function App() {
           )}
 
           {page === "Records Unit" && (
-  <RecordsPage
-    patients={patients}
-    showMessage={showMessage}
-  />
-)}
+            <RecordsPage
+              patients={patients}
+              showMessage={showMessage}
+              setTransactions={setTransactions}
+            />
+          )}
 
           {page === "Nursing Unit" && (
             <ModulePage
@@ -695,17 +697,7 @@ function App() {
           )}
 
           {page === "General Cashier" && (
-            <ModulePage
-              title="General Cashier"
-              subtitle="Central payment and receipt management"
-              icon="₦"
-              stats={[
-                ["Today's Collections", "₦84,500"],
-                ["Cash", "₦32,000"],
-                ["POS", "₦27,500"],
-                ["Bank Transfer", "₦25,000"],
-              ]}
-            />
+            <GeneralCashierPage transactions={transactions} />
           )}
 
           {page === "Roster & Attendance" && (
@@ -1301,233 +1293,6 @@ function ICTPage({ patients, setPatients, showMessage }) {
     </div>
   );
 }
-function RecordsPage({ patients, showMessage }) {
-  const [search, setSearch] = useState("");
-  const [selectedPatient, setSelectedPatient] = useState(null);
-  const [service, setService] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("Cash");
-  const [paymentStatus, setPaymentStatus] = useState("Paid");
-
-  const prices = {
-    Card: 100,
-    File: 500,
-    "Card + File": 600,
-  };
-
-  const results = patients.filter((patient) => {
-    const q = search.toLowerCase().trim();
-
-    if (!q) return false;
-
-    return (
-      patient.card.toLowerCase().includes(q) ||
-      patient.name.toLowerCase().includes(q) ||
-      patient.phone.toLowerCase().includes(q)
-    );
-  });
-
-  const handlePayment = () => {
-    if (!selectedPatient) {
-      showMessage("Da farko nemo patient.");
-      return;
-    }
-
-    if (!service) {
-      showMessage("Zaɓi Card, File ko Card + File.");
-      return;
-    }
-
-    const amount = prices[service];
-
-    showMessage(
-      `${service} na ${selectedPatient.name} an yi payment ₦${amount}.`
-    );
-
-    setSearch("");
-    setSelectedPatient(null);
-    setService("");
-    setPaymentMethod("Cash");
-    setPaymentStatus("Paid");
-  };
-
-  const printSlip = () => {
-    if (!selectedPatient || !service) {
-      showMessage("Zaɓi patient da service kafin printing.");
-      return;
-    }
-
-    window.print();
-  };
-
-  return (
-    <div>
-      <div className="page-head">
-        <div>
-          <h1>Records Unit</h1>
-          <p>Patient records, Card, File and registration services</p>
-        </div>
-      </div>
-
-      <div className="stats-grid">
-        <StatCard
-          title="Today's Cards"
-          value="12"
-          icon="▤"
-          text="Cards issued"
-        />
-
-        <StatCard
-          title="Files Issued"
-          value="18"
-          icon="📁"
-          text="Files issued"
-        />
-
-        <StatCard
-          title="Pending"
-          value="4"
-          icon="!"
-          text="Pending records"
-        />
-
-        <StatCard
-          title="Total Records"
-          value={patients.length}
-          icon="👤"
-          text="Registered patients"
-        />
-      </div>
-
-      <div className="card">
-        <h2>Search Patient</h2>
-        <p>Search using Card Number, Name or Phone Number.</p>
-
-        <input
-          className="search"
-          placeholder="e.g. BZ-P005, Musa Ali or 08123456789"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-
-        {search && (
-          <div style={{ marginTop: 15 }}>
-            {results.length === 0 ? (
-              <p>No patient found.</p>
-            ) : (
-              results.map((patient) => (
-                <button
-                  key={patient.id}
-                  className="secondary"
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    textAlign: "left",
-                    marginBottom: 8,
-                  }}
-                  onClick={() => setSelectedPatient(patient)}
-                >
-                  <strong>{patient.card}</strong> — {patient.name} —{" "}
-                  {patient.phone}
-                </button>
-              ))
-            )}
-          </div>
-        )}
-      </div>
-
-      {selectedPatient && (
-        <>
-          <div className="card">
-            <h2>Patient Profile</h2>
-
-            <div className="access-box">
-              <strong>Card Number</strong>
-              <span>{selectedPatient.card}</span>
-            </div>
-
-            <div className="access-box">
-              <strong>Patient Name</strong>
-              <span>{selectedPatient.name}</span>
-            </div>
-
-            <div className="access-box">
-              <strong>Phone</strong>
-              <span>{selectedPatient.phone}</span>
-            </div>
-
-            <div className="access-box">
-              <strong>Sex</strong>
-              <span>{selectedPatient.sex}</span>
-            </div>
-          </div>
-
-          <div className="card">
-            <h2>Records Service</h2>
-
-            <label>Service</label>
-
-            <select
-              className="search"
-              value={service}
-              onChange={(e) => setService(e.target.value)}
-            >
-              <option value="">Select Service</option>
-              <option value="Card">Card — ₦100</option>
-              <option value="File">File — ₦500</option>
-              <option value="Card + File">Card + File — ₦600</option>
-            </select>
-
-            {service && (
-              <div className="access-box">
-                <strong>Amount</strong>
-                <span>₦{prices[service]}</span>
-              </div>
-            )}
-
-            <label>Payment Method</label>
-
-            <select
-              className="search"
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value)}
-            >
-              <option value="Cash">Cash</option>
-              <option value="POS">POS</option>
-              <option value="Bank Transfer">Bank Transfer</option>
-            </select>
-
-            <label>Payment Status</label>
-
-            <select
-              className="search"
-              value={paymentStatus}
-              onChange={(e) => setPaymentStatus(e.target.value)}
-            >
-              <option value="Paid">Paid</option>
-              <option value="Pending">Pending</option>
-            </select>
-
-            <div style={{ marginTop: 20, display: "flex", gap: 10 }}>
-              <button
-                className="primary"
-                onClick={handlePayment}
-              >
-                Save Transaction
-              </button>
-
-              <button
-                className="secondary"
-                onClick={printSlip}
-              >
-                Print Slip
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
 function RecordsDashboard({ patients, onOpenService }) {
   return (
     <div>
@@ -1584,7 +1349,7 @@ function RecordsDashboard({ patients, onOpenService }) {
     </div>
   );
 }
-function RecordsPage({ patients, showMessage }) {
+function RecordsPage({ patients, showMessage, setTransactions }) {
   const [search, setSearch] = useState("");
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [service, setService] = useState("");
@@ -1609,30 +1374,46 @@ function RecordsPage({ patients, showMessage }) {
     );
   });
 
- const handlePayment = () => {
-  if (!selectedPatient) {
-    showMessage("Da farko nemo patient.");
-    return;
-  }
+  const handlePayment = () => {
+    if (!selectedPatient) {
+      showMessage("Da farko nemo patient.");
+      return;
+    }
 
-  if (!service) {
-    showMessage("Zaɓi Card, File ko Card + File.");
-    return;
-  }
+    if (!service) {
+      showMessage("Zaɓi Card, File ko Card + File.");
+      return;
+    }
 
-  const amount = prices[service];
+    const amount = prices[service];
 
-  showMessage(
-    `${service} na ${selectedPatient.name} an yi payment ₦${amount}.`
-  );
+    const transaction = {
+      id: Date.now(),
+      transactionNo: `TRX-${Date.now()}`,
+      department: "Records Unit",
+      patientId: selectedPatient.id,
+      card: selectedPatient.card,
+      patientName: selectedPatient.name,
+      service,
+      amount,
+      paymentMethod,
+      paymentStatus,
+      cashier: "Records Cashier",
+      date: new Date().toLocaleString(),
+    };
 
-  // Komawa Records Dashboard bayan an gama transaction
-  setSearch("");
-  setSelectedPatient(null);
-  setService("");
-  setPaymentMethod("Cash");
-  setPaymentStatus("Paid");
-}; 
+    setTransactions((prev) => [transaction, ...prev]);
+
+    showMessage(
+      `${service} na ${selectedPatient.name} an yi payment ₦${amount}.`
+    );
+
+    setSearch("");
+    setSelectedPatient(null);
+    setService("");
+    setPaymentMethod("Cash");
+    setPaymentStatus("Paid");
+  };
 
   const printSlip = () => {
     if (!selectedPatient || !service) {
@@ -1927,6 +1708,105 @@ function StaffManagement({
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function GeneralCashierPage({ transactions }) {
+  const total = transactions.reduce(
+    (sum, transaction) => sum + Number(transaction.amount || 0),
+    0
+  );
+
+  const cashTotal = transactions
+    .filter((transaction) => transaction.paymentMethod === "Cash")
+    .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+
+  const posTotal = transactions
+    .filter((transaction) => transaction.paymentMethod === "POS")
+    .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+
+  const transferTotal = transactions
+    .filter((transaction) => transaction.paymentMethod === "Bank Transfer")
+    .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+
+  return (
+    <div>
+      <div className="page-head">
+        <div>
+          <h1>General Cashier</h1>
+          <p>Central payment and receipt management</p>
+        </div>
+      </div>
+
+      <div className="stats-grid">
+        <StatCard
+          title="Total Collections"
+          value={`₦${total.toLocaleString()}`}
+          icon="₦"
+          text="All transactions"
+        />
+        <StatCard
+          title="Cash"
+          value={`₦${cashTotal.toLocaleString()}`}
+          icon="₦"
+          text="Cash payments"
+        />
+        <StatCard
+          title="POS"
+          value={`₦${posTotal.toLocaleString()}`}
+          icon="▣"
+          text="POS payments"
+        />
+        <StatCard
+          title="Bank Transfer"
+          value={`₦${transferTotal.toLocaleString()}`}
+          icon="↗"
+          text="Transfer payments"
+        />
+      </div>
+
+      <div className="card">
+        <h2>Transaction History</h2>
+        {transactions.length === 0 ? (
+          <p className="muted">Babu transaction tukuna.</p>
+        ) : (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Transaction #</th>
+                  <th>Department</th>
+                  <th>Patient</th>
+                  <th>Card Number</th>
+                  <th>Service</th>
+                  <th>Amount</th>
+                  <th>Method</th>
+                  <th>Status</th>
+                  <th>Cashier</th>
+                  <th>Date / Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transactions.map((transaction) => (
+                  <tr key={transaction.id}>
+                    <td>{transaction.transactionNo}</td>
+                    <td>{transaction.department}</td>
+                    <td>{transaction.patientName}</td>
+                    <td>{transaction.card}</td>
+                    <td>{transaction.service}</td>
+                    <td>₦{Number(transaction.amount).toLocaleString()}</td>
+                    <td>{transaction.paymentMethod}</td>
+                    <td>{transaction.paymentStatus}</td>
+                    <td>{transaction.cashier}</td>
+                    <td>{transaction.date}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
