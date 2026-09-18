@@ -3879,32 +3879,52 @@ function PharmacyPage({
   }, [prescriptions, search]);
 useEffect(() => {
   const receiveConsultantPrescription = (event) => {
-    const prescription = event.detail;
+  const prescription = event.detail;
 
-    if (!prescription) {
-      return;
-    }
+  if (!prescription) return;
 
-    setPrescriptions((previous) => {
-      const alreadyExists = previous.some(
-        (item) => item.id === prescription.id
-      );
+  const patientName =
+    prescription.patientName ||
+    prescription.patient?.name ||
+    `${prescription.patient?.surname || ""} ${prescription.patient?.otherNames || ""}`.trim() ||
+    "Unknown Patient";
 
-      if (alreadyExists) {
-        return previous;
-      }
+  const patientCard =
+    prescription.card ||
+    prescription.cardNumber ||
+    prescription.patient?.card ||
+    prescription.patient?.cardNumber ||
+    prescription.patientId ||
+    "";
 
-      return [prescription, ...previous];
-    });
-
-    setView("queue");
-
-    if (showMessage) {
-      showMessage(
-        `New prescription received from Consultant Room for ${prescription.patientName}.`
-      );
-    }
+  const newPrescription = {
+    ...prescription,
+    patientName,
+    card: patientCard,
+    status: prescription.status || "New",
+    paymentStatus: prescription.paymentStatus || "Pending",
+    paymentMethod: prescription.paymentMethod || "Cash",
+    date: prescription.date || new Date().toLocaleString(),
   };
+
+  setPrescriptions((previous) => {
+    const alreadyExists = previous.some(
+      (item) => item.id === newPrescription.id
+    );
+
+    if (alreadyExists) return previous;
+
+    return [newPrescription, ...previous];
+  });
+
+  setView("queue");
+
+  if (showMessage) {
+    showMessage(
+      `New prescription received for ${patientName}.`
+    );
+  }
+};
 
   window.addEventListener(
     "bazza:pharmacy-prescription",
