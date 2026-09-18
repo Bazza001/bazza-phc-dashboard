@@ -3342,7 +3342,11 @@ select {
   }
 }
 `;
-function PharmacyPage({ patients = [], showMessage }) {
+function PharmacyPage({
+  patients = [],
+  showMessage,
+  setTransactions,
+}) {
   const [view, setView] = useState("dashboard");
   const [search, setSearch] = useState("");
   const [selectedPatient, setSelectedPatient] = useState(null);
