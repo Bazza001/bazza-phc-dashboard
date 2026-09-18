@@ -142,43 +142,6 @@ function App() {
     { id: 2, card: "BZ-P002", patientName: "Ibrahim Bello", test: "Full Blood Count (FBC)", consultant: "Consultant Room", status: "Sample Received", paymentStatus: "Paid", amount: 3000, date: "9/18/2026, 1:25:00 PM" },
     { id: 3, card: "BZ-P003", patientName: "Fatima Yusuf", test: "Urinalysis", consultant: "Consultant Room", status: "In Progress", paymentStatus: "Paid", amount: 1000, date: "9/18/2026, 1:30:00 PM" },
   ]);
-  const [pharmacyPrescriptions, setPharmacyPrescriptions] = useState([
-    {
-      id: 1,
-      card: "BZ-P001",
-      patientName: "Aisha Musa",
-      medicine: "Artemether/Lumefantrine 20/120mg",
-      quantity: 1,
-      instructions: "Take as prescribed",
-      duration: "3 days",
-      consultant: "Consultant Room",
-      status: "New",
-      paymentStatus: "Pending",
-      amount: 2500,
-      date: "9/18/2026, 1:35:00 PM"
-    },
-    {
-      id: 2,
-      card: "BZ-P002",
-      patientName: "Ibrahim Bello",
-      medicine: "Paracetamol 500mg",
-      quantity: 20,
-      instructions: "1 tablet every 8 hours",
-      duration: "5 days",
-      consultant: "Consultant Room",
-      status: "Dispensed",
-      paymentStatus: "Paid",
-      amount: 1000,
-      date: "9/18/2026, 1:40:00 PM"
-    },
-  ]);
-  const [pharmacyStock, setPharmacyStock] = useState([
-    { id: 1, medicine: "Artemether/Lumefantrine 20/120mg", stock: 24, unitPrice: 2500 },
-    { id: 2, medicine: "Paracetamol 500mg", stock: 180, unitPrice: 50 },
-    { id: 3, medicine: "Amoxicillin 500mg", stock: 90, unitPrice: 100 },
-    { id: 4, medicine: "Metronidazole 400mg", stock: 75, unitPrice: 80 },
-    { id: 5, medicine: "ORS Sachet", stock: 120, unitPrice: 100 },
-  ]);
   const [search, setSearch] = useState("");
   const [loginForm, setLoginForm] = useState({
     username: "",
@@ -669,14 +632,16 @@ function App() {
           )}
 
           {page === "Pharmacy Unit" && (
-            <PharmacyPage
-              patients={patients}
-              prescriptions={pharmacyPrescriptions}
-              setPrescriptions={setPharmacyPrescriptions}
-              stock={pharmacyStock}
-              setStock={setPharmacyStock}
-              setTransactions={setTransactions}
-              showMessage={showMessage}
+            <ModulePage
+              title="Pharmacy Unit"
+              subtitle="Prescriptions, dispensing and medicine stock"
+              icon="⚕"
+              stats={[
+                ["New Prescriptions", "9"],
+                ["Dispensed Today", "31"],
+                ["Pending", "4"],
+                ["Stock Alerts", "3"],
+              ]}
             />
           )}
 
@@ -1940,238 +1905,6 @@ function LaboratoryPage({ patients, requests, setRequests, setTransactions, show
             <textarea value={result} onChange={(e) => setResult(e.target.value)} rows="5" placeholder="Enter laboratory result / findings" />
           </div>
           <button className="button primary" onClick={saveResult}>Save Result & Mark Result Ready</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PharmacyPage({ patients, prescriptions, setPrescriptions, stock, setStock, setTransactions, showMessage }) {
-  const [search, setSearch] = useState("");
-  const [selectedPatient, setSelectedPatient] = useState(null);
-  const [medicine, setMedicine] = useState("");
-  const [quantity, setQuantity] = useState(1);
-  const [instructions, setInstructions] = useState("");
-  const [duration, setDuration] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("Cash");
-  const [paymentStatus, setPaymentStatus] = useState("Paid");
-  const [selectedPrescription, setSelectedPrescription] = useState(null);
-
-  const filteredPatients = patients.filter((patient) => {
-    const q = search.toLowerCase().trim();
-    if (!q) return false;
-    return patient.name.toLowerCase().includes(q) || patient.card.toLowerCase().includes(q) || patient.phone.includes(q);
-  });
-
-  const selectedMedicine = stock.find((item) => item.medicine === medicine);
-  const amount = selectedMedicine ? selectedMedicine.unitPrice * Number(quantity || 0) : 0;
-
-  const stats = [
-    ["New Prescriptions", prescriptions.filter((p) => p.status === "New").length],
-    ["Dispensed Today", prescriptions.filter((p) => p.status === "Dispensed").length],
-    ["Pending", prescriptions.filter((p) => p.status === "New" || p.status === "Pending").length],
-    ["Stock Alerts", stock.filter((item) => item.stock <= 10).length],
-  ];
-
-  const createPrescription = () => {
-    if (!selectedPatient) {
-      showMessage("Da farko nemo patient.");
-      return;
-    }
-    if (!medicine) {
-      showMessage("Zaɓi medicine.");
-      return;
-    }
-    if (!quantity || Number(quantity) < 1) {
-      showMessage("Quantity ba daidai ba.");
-      return;
-    }
-    if (Number(quantity) > selectedMedicine.stock) {
-      showMessage("Stock bai isa wannan quantity ba.");
-      return;
-    }
-
-    const now = new Date().toLocaleString();
-    const prescription = {
-      id: Date.now(),
-      card: selectedPatient.card,
-      patientName: selectedPatient.name,
-      medicine,
-      quantity: Number(quantity),
-      instructions: instructions.trim() || "Take as prescribed",
-      duration: duration.trim() || "As directed",
-      consultant: "Consultant Room",
-      status: "New",
-      paymentStatus,
-      amount,
-      date: now,
-    };
-
-    setPrescriptions((prev) => [prescription, ...prev]);
-
-    if (paymentStatus === "Paid") {
-      setTransactions((prev) => [
-        {
-          id: Date.now() + 1,
-          transactionNo: `TRX-${Date.now() + 1}`,
-          department: "Pharmacy Unit",
-          patientId: selectedPatient.id,
-          card: selectedPatient.card,
-          patientName: selectedPatient.name,
-          service: medicine,
-          amount,
-          paymentMethod,
-          paymentStatus,
-          cashier: "Pharmacy Cashier",
-          date: now,
-        },
-        ...prev,
-      ]);
-    }
-
-    showMessage(`Prescription na ${selectedPatient.name} an ƙirƙira successfully.`);
-    setSearch("");
-    setSelectedPatient(null);
-    setMedicine("");
-    setQuantity(1);
-    setInstructions("");
-    setDuration("");
-    setPaymentStatus("Paid");
-    setPaymentMethod("Cash");
-  };
-
-  const dispense = () => {
-    if (!selectedPrescription) {
-      showMessage("Da farko zaɓi prescription.");
-      return;
-    }
-    if (selectedPrescription.status === "Dispensed") {
-      showMessage("An riga an dispense wannan prescription.");
-      return;
-    }
-
-    const item = stock.find((s) => s.medicine === selectedPrescription.medicine);
-    if (!item || item.stock < selectedPrescription.quantity) {
-      showMessage("Stock bai isa dispensing ba.");
-      return;
-    }
-
-    setStock((prev) => prev.map((s) =>
-      s.medicine === selectedPrescription.medicine
-        ? { ...s, stock: s.stock - selectedPrescription.quantity }
-        : s
-    ));
-
-    const updated = { ...selectedPrescription, status: "Dispensed" };
-    setPrescriptions((prev) => prev.map((p) => p.id === updated.id ? updated : p));
-    setSelectedPrescription(updated);
-    showMessage("An yi dispensing kuma an rage stock.");
-  };
-
-  return (
-    <div>
-      <PageHeader title="Pharmacy Unit" subtitle="Prescriptions, dispensing and medicine stock" icon="⚕" />
-
-      <div className="stats-grid">
-        {stats.map(([name, value], index) => (
-          <StatCard key={name} title={name} value={value} icon={["✚", "✓", "!", "▣"][index]} />
-        ))}
-      </div>
-
-      <div className="card">
-        <h2>New Prescription / Pharmacy Request</h2>
-        <div className="form-grid">
-          <div className="field">
-            <label>Search Patient</label>
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Card number, name or phone" />
-            {search && !selectedPatient && (
-              <div className="search-results">
-                {filteredPatients.length === 0 ? <div className="search-item">Ba a samu patient ba.</div> : filteredPatients.map((patient) => (
-                  <button key={patient.id} className="search-item" onClick={() => { setSelectedPatient(patient); setSearch(patient.card); }}>
-                    <strong>{patient.card}</strong> — {patient.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="field">
-            <label>Medicine</label>
-            <select value={medicine} onChange={(e) => setMedicine(e.target.value)}>
-              <option value="">Select medicine</option>
-              {stock.map((item) => <option key={item.id} value={item.medicine}>{item.medicine} — ₦{item.unitPrice.toLocaleString()} / unit</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label>Quantity</label>
-            <input type="number" min="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
-          </div>
-          <div className="field">
-            <label>Instructions</label>
-            <input value={instructions} onChange={(e) => setInstructions(e.target.value)} placeholder="e.g. 1 tablet every 8 hours" />
-          </div>
-          <div className="field">
-            <label>Duration</label>
-            <input value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="e.g. 5 days" />
-          </div>
-          <div className="field">
-            <label>Payment Method</label>
-            <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-              <option>Cash</option><option>POS</option><option>Bank Transfer</option>
-            </select>
-          </div>
-          <div className="field">
-            <label>Payment Status</label>
-            <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)}>
-              <option>Paid</option><option>Pending</option><option>Free</option>
-            </select>
-          </div>
-        </div>
-        {selectedPatient && <p className="muted">Patient: <strong>{selectedPatient.name}</strong> ({selectedPatient.card})</p>}
-        {selectedMedicine && <p className="muted">Available Stock: <strong>{selectedMedicine.stock}</strong> • Service Price: <strong>₦{amount.toLocaleString()}</strong></p>}
-        <button className="button primary" onClick={createPrescription}>Create Prescription</button>
-      </div>
-
-      <div className="card">
-        <h2>Prescription Queue</h2>
-        <div className="table-scroll">
-          <table>
-            <thead><tr><th>Card</th><th>Patient</th><th>Medicine</th><th>Qty</th><th>Instructions</th><th>Duration</th><th>Status</th><th>Payment</th><th>Amount</th><th>Date / Time</th><th>Action</th></tr></thead>
-            <tbody>
-              {prescriptions.map((prescription) => (
-                <tr key={prescription.id}>
-                  <td>{prescription.card}</td><td>{prescription.patientName}</td><td>{prescription.medicine}</td><td>{prescription.quantity}</td><td>{prescription.instructions}</td><td>{prescription.duration}</td><td>{prescription.status}</td><td>{prescription.paymentStatus}</td><td>₦{Number(prescription.amount || 0).toLocaleString()}</td><td>{prescription.date}</td>
-                  <td><button className="small-button" onClick={() => setSelectedPrescription(prescription)}>Open</button></td>
-                </tr>
-              ))}
-              {prescriptions.length === 0 && <tr><td colSpan="11" className="empty-cell">Babu prescription tukuna.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="card">
-        <h2>Medicine Stock</h2>
-        <div className="table-scroll">
-          <table>
-            <thead><tr><th>Medicine</th><th>Stock</th><th>Unit Price</th><th>Status</th></tr></thead>
-            <tbody>
-              {stock.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.medicine}</td><td>{item.stock}</td><td>₦{item.unitPrice.toLocaleString()}</td><td>{item.stock <= 10 ? "Low Stock" : "Available"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {selectedPrescription && (
-        <div className="card">
-          <h2>Dispense Medicine — {selectedPrescription.patientName}</h2>
-          <p className="muted">{selectedPrescription.medicine} • Qty: {selectedPrescription.quantity} • {selectedPrescription.card}</p>
-          <p><strong>Instructions:</strong> {selectedPrescription.instructions}</p>
-          <p><strong>Duration:</strong> {selectedPrescription.duration}</p>
-          <button className="button primary" onClick={dispense}>Dispense & Deduct Stock</button>
         </div>
       )}
     </div>
