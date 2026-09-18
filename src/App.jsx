@@ -3342,5 +3342,1769 @@ select {
   }
 }
 `;
+function PharmacyPage({ patients = [], showMessage }) {
+  const [view, setView] = useState("dashboard");
+  const [search, setSearch] = useState("");
+  const [selectedPatient, setSelectedPatient] = useState(null);
 
+  const [medicine, setMedicine] = useState("");
+  const [quantity, setQuantity] = useState(1);
+  const [instructions, setInstructions] = useState("");
+  const [duration, setDuration] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("Cash");
+  const [paymentStatus, setPaymentStatus] = useState("Pending");
+
+  const [prescriptions, setPrescriptions] = useState([
+    {
+      id: "RX-001",
+      patientId: "BZ-P001",
+      patientName: "Aisha Musa",
+      card: "BZ-P001",
+      medicine: "Paracetamol 500mg",
+      quantity: 10,
+      instructions: "Take 1 tablet three times daily",
+      duration: "3 days",
+      consultant: "Consultant Room",
+      status: "New",
+      paymentStatus: "Pending",
+      paymentMethod: "Cash",
+      amount: 500,
+      date: new Date().toLocaleString(),
+      dispensedBy: "",
+    },
+    {
+      id: "RX-002",
+      patientId: "BZ-P002",
+      patientName: "Ibrahim Bello",
+      card: "BZ-P002",
+      medicine: "Amoxicillin 500mg",
+      quantity: 21,
+      instructions: "Take 1 capsule three times daily",
+      duration: "7 days",
+      consultant: "Consultant Room",
+      status: "New",
+      paymentStatus: "Paid",
+      paymentMethod: "POS",
+      amount: 1500,
+      date: new Date().toLocaleString(),
+      dispensedBy: "",
+    },
+  ]);
+
+  const [stock, setStock] = useState([
+    {
+      id: 1,
+      medicine: "Paracetamol 500mg",
+      category: "Tablet",
+      price: 500,
+      quantity: 100,
+      reorderLevel: 20,
+    },
+    {
+      id: 2,
+      medicine: "Amoxicillin 500mg",
+      category: "Capsule",
+      price: 1500,
+      quantity: 50,
+      reorderLevel: 10,
+    },
+    {
+      id: 3,
+      medicine: "Metronidazole 400mg",
+      category: "Tablet",
+      price: 800,
+      quantity: 35,
+      reorderLevel: 10,
+    },
+    {
+      id: 4,
+      medicine: "Artemether/Lumefantrine",
+      category: "Tablet",
+      price: 1200,
+      quantity: 20,
+      reorderLevel: 5,
+    },
+  ]);
+
+  const filteredPatients = useMemo(() => {
+    const term = search.trim().toLowerCase();
+
+    if (!term) {
+      return patients.slice(0, 10);
+    }
+
+    return patients
+      .filter((patient) => {
+        const name = String(patient.name || "").toLowerCase();
+        const card = String(patient.card || "").toLowerCase();
+        const phone = String(patient.phone || "").toLowerCase();
+
+        return (
+          name.includes(term) ||
+          card.includes(term) ||
+          phone.includes(term)
+        );
+      })
+      .slice(0, 10);
+  }, [patients, search]);
+
+  const filteredPrescriptions = useMemo(() => {
+    const term = search.trim().toLowerCase();
+
+    if (!term) {
+      return prescriptions;
+    }
+
+    return prescriptions.filter((item) => {
+      return (
+        item.patientName.toLowerCase().includes(term) ||
+        item.card.toLowerCase().includes(term) ||
+        item.medicine.toLowerCase().includes(term) ||
+        item.id.toLowerCase().includes(term)
+      );
+    });
+  }, [prescriptions, search]);
+
+  const totalPrescriptions = prescriptions.length;
+
+  const newPrescriptions = prescriptions.filter(
+    (item) => item.status === "New"
+  ).length;
+
+  const dispensedToday = prescriptions.filter(
+    (item) => item.status === "Dispensed"
+  ).length;
+
+  const pendingPrescriptions = prescriptions.filter(
+    (item) =>
+      item.status === "New" ||
+      item.status === "Pending"
+  ).length;
+
+  const stockAlerts = stock.filter(
+    (item) => item.quantity <= item.reorderLevel
+  ).length;
+
+  const money = (value) => {
+    return `₦${Number(value || 0).toLocaleString()}`;
+  };
+
+  const getPatientName = (patient) => {
+    if (!patient) return "";
+
+    return (
+      patient.name ||
+      `${patient.surname || ""} ${patient.otherNames || ""}`.trim()
+    );
+  };
+
+  const getPatientCard = (patient) => {
+    if (!patient) return "";
+
+    return patient.card || patient.cardNumber || patient.id || "";
+  };
+
+  const selectPatient = (patient) => {
+    setSelectedPatient(patient);
+    setSearch(getPatientName(patient));
+
+    if (showMessage) {
+      showMessage(
+        `Patient selected: ${getPatientName(patient)}`
+      );
+    }
+  };
+
+  const selectPrescriptionPatient = (item) => {
+    const patient = patients.find(
+      (patient) =>
+        String(patient.card || patient.cardNumber || patient.id) ===
+        String(item.card)
+    );
+
+    if (patient) {
+      setSelectedPatient(patient);
+    } else {
+      setSelectedPatient({
+        id: item.patientId,
+        card: item.card,
+        name: item.patientName,
+      });
+    }
+  };
+
+  const createPrescription = () => {
+    if (!selectedPatient) {
+      if (showMessage) {
+        showMessage("Please select a patient first.");
+      }
+      return;
+    }
+
+    if (!medicine) {
+      if (showMessage) {
+        showMessage("Please select medicine.");
+      }
+      return;
+    }
+
+    if (!quantity || Number(quantity) < 1) {
+      if (showMessage) {
+        showMessage("Please enter a valid quantity.");
+      }
+      return;
+    }
+
+    const selectedStock = stock.find(
+      (item) => item.medicine === medicine
+    );
+
+    if (!selectedStock) {
+      if (showMessage) {
+        showMessage("Selected medicine is not available in stock.");
+      }
+      return;
+    }
+
+    const requestedQuantity = Number(quantity);
+
+    if (requestedQuantity > selectedStock.quantity) {
+      if (showMessage) {
+        showMessage(
+          `Insufficient stock. Available quantity: ${selectedStock.quantity}`
+        );
+      }
+      return;
+    }
+
+    const totalAmount =
+      Number(selectedStock.price) * requestedQuantity;
+
+    const newPrescription = {
+      id: `RX-${String(prescriptions.length + 1).padStart(3, "0")}`,
+      patientId: selectedPatient.id,
+      patientName: getPatientName(selectedPatient),
+      card: getPatientCard(selectedPatient),
+      medicine,
+      quantity: requestedQuantity,
+      instructions,
+      duration,
+      consultant: "Consultant Room",
+      status: "New",
+      paymentStatus,
+      paymentMethod,
+      amount: totalAmount,
+      date: new Date().toLocaleString(),
+      dispensedBy: "",
+    };
+
+    setPrescriptions((previous) => [
+      newPrescription,
+      ...previous,
+    ]);
+
+    setMedicine("");
+    setQuantity(1);
+    setInstructions("");
+    setDuration("");
+    setPaymentStatus("Pending");
+    setPaymentMethod("Cash");
+
+    if (showMessage) {
+      showMessage(
+        `Prescription ${newPrescription.id} created successfully.`
+      );
+    }
+
+    setView("queue");
+  };
+
+  const dispensePrescription = (prescriptionId) => {
+    const prescription = prescriptions.find(
+      (item) => item.id === prescriptionId
+    );
+
+    if (!prescription) {
+      return;
+    }
+
+    if (prescription.status === "Dispensed") {
+      if (showMessage) {
+        showMessage("This prescription has already been dispensed.");
+      }
+      return;
+    }
+
+    const medicineStock = stock.find(
+      (item) => item.medicine === prescription.medicine
+    );
+
+    if (!medicineStock) {
+      if (showMessage) {
+        showMessage("Medicine not found in pharmacy stock.");
+      }
+      return;
+    }
+
+    if (medicineStock.quantity < prescription.quantity) {
+      if (showMessage) {
+        showMessage(
+          `Insufficient stock. Available: ${medicineStock.quantity}`
+        );
+      }
+      return;
+    }
+
+    setStock((previous) =>
+      previous.map((item) =>
+        item.id === medicineStock.id
+          ? {
+              ...item,
+              quantity:
+                Number(item.quantity) -
+                Number(prescription.quantity),
+            }
+          : item
+      )
+    );
+
+    setPrescriptions((previous) =>
+      previous.map((item) =>
+        item.id === prescriptionId
+          ? {
+              ...item,
+              status: "Dispensed",
+              dispensedBy: "Pharmacy Cashier",
+              dispensedAt: new Date().toLocaleString(),
+            }
+          : item
+      )
+    );
+
+    if (showMessage) {
+      showMessage(
+        `${prescription.medicine} dispensed successfully. Stock updated.`
+      );
+    }
+  };
+
+  const markAsPending = (prescriptionId) => {
+    setPrescriptions((previous) =>
+      previous.map((item) =>
+        item.id === prescriptionId
+          ? {
+              ...item,
+              status: "Pending",
+            }
+          : item
+      )
+    );
+
+    if (showMessage) {
+      showMessage("Prescription marked as Pending.");
+    }
+  };
+
+  const markAsPaid = (prescriptionId, method = "Cash") => {
+    setPrescriptions((previous) =>
+      previous.map((item) =>
+        item.id === prescriptionId
+          ? {
+              ...item,
+              paymentStatus: "Paid",
+              paymentMethod: method,
+            }
+          : item
+      )
+    );
+
+    if (showMessage) {
+      showMessage("Payment marked as Paid.");
+    }
+  };
+
+  const sendSMS = (prescription) => {
+    const patient = patients.find(
+      (item) =>
+        String(item.card || item.cardNumber || item.id) ===
+        String(prescription.card)
+    );
+
+    const phone = patient?.phone || patient?.phoneNumber;
+
+    if (!phone) {
+      if (showMessage) {
+        showMessage(
+          "Patient phone number is not available in the ICT Patient Profile."
+        );
+      }
+      return;
+    }
+
+    if (showMessage) {
+      showMessage(
+        `SMS prepared for ${prescription.patientName} (${phone}).`
+      );
+    }
+  };
+
+  const printPrescription = (prescription) => {
+    const printWindow = window.open(
+      "",
+      "_blank",
+      "width=800,height=700"
+    );
+
+    if (!printWindow) {
+      if (showMessage) {
+        showMessage("Please allow pop-ups to print the prescription.");
+      }
+      return;
+    }
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Pharmacy Prescription - ${prescription.id}</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              padding: 30px;
+              color: #222;
+            }
+
+            h2 {
+              margin-bottom: 4px;
+            }
+
+            .facility {
+              color: #555;
+              margin-bottom: 20px;
+            }
+
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 20px;
+            }
+
+            td {
+              border: 1px solid #ddd;
+              padding: 10px;
+            }
+
+            .label {
+              font-weight: bold;
+              width: 35%;
+            }
+
+            .footer {
+              margin-top: 30px;
+              color: #777;
+              font-size: 12px;
+            }
+          </style>
+        </head>
+
+        <body>
+          <h2>Bazza Primary Health Care</h2>
+          <div class="facility">
+            Pharmacy Unit
+          </div>
+
+          <table>
+            <tr>
+              <td class="label">Prescription No.</td>
+              <td>${prescription.id}</td>
+            </tr>
+
+            <tr>
+              <td class="label">Patient Name</td>
+              <td>${prescription.patientName}</td>
+            </tr>
+
+            <tr>
+              <td class="label">Patient/Card Number</td>
+              <td>${prescription.card}</td>
+            </tr>
+
+            <tr>
+              <td class="label">Medicine</td>
+              <td>${prescription.medicine}</td>
+            </tr>
+
+            <tr>
+              <td class="label">Quantity</td>
+              <td>${prescription.quantity}</td>
+            </tr>
+
+            <tr>
+              <td class="label">Instructions</td>
+              <td>${prescription.instructions || "-"}</td>
+            </tr>
+
+            <tr>
+              <td class="label">Duration</td>
+              <td>${prescription.duration || "-"}</td>
+            </tr>
+
+            <tr>
+              <td class="label">Amount</td>
+              <td>${money(prescription.amount)}</td>
+            </tr>
+
+            <tr>
+              <td class="label">Payment Status</td>
+              <td>${prescription.paymentStatus}</td>
+            </tr>
+
+            <tr>
+              <td class="label">Payment Method</td>
+              <td>${prescription.paymentMethod}</td>
+            </tr>
+          </table>
+
+          <div class="footer">
+            Printed from Bazza PHC Pharmacy Unit.
+          </div>
+
+          <script>
+            window.onload = function () {
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+  };
+
+  const statCard = (title, value, icon) => (
+    <div
+      style={{
+        background: "#fff",
+        border: "1px solid #e7ebef",
+        borderRadius: 12,
+        padding: 18,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
+      }}
+    >
+      <div>
+        <div
+          style={{
+            color: "#7b8794",
+            fontSize: 11,
+            marginBottom: 7,
+          }}
+        >
+          {title}
+        </div>
+
+        <div
+          style={{
+            color: "#263442",
+            fontSize: 23,
+            fontWeight: 900,
+          }}
+        >
+          {value}
+        </div>
+      </div>
+
+      <div
+        style={{
+          width: 42,
+          height: 42,
+          borderRadius: 10,
+          background: "#eef9f4",
+          color: "#18a56b",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 20,
+        }}
+      >
+        {icon}
+      </div>
+    </div>
+  );
+
+  return (
+    <div>
+      {/* PAGE HEADER */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 15,
+          marginBottom: 22,
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 24,
+              color: "#263442",
+            }}
+          >
+            Pharmacy Unit
+          </h1>
+
+          <div
+            style={{
+              marginTop: 5,
+              color: "#7b8794",
+              fontSize: 12,
+            }}
+          >
+            Prescriptions, dispensing, medicine stock and patient SMS
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setView("new")}
+          style={{
+            border: 0,
+            borderRadius: 8,
+            padding: "11px 16px",
+            background: "#18a56b",
+            color: "#fff",
+            fontWeight: 800,
+            cursor: "pointer",
+          }}
+        >
+          + New Prescription
+        </button>
+      </div>
+
+      {/* NAVIGATION */}
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          marginBottom: 20,
+          flexWrap: "wrap",
+        }}
+      >
+        {[
+          ["dashboard", "Dashboard"],
+          ["new", "New Prescription"],
+          ["queue", "Prescription Queue"],
+          ["stock", "Medicine Stock"],
+        ].map(([key, label]) => (
+          <button
+            type="button"
+            key={key}
+            onClick={() => setView(key)}
+            style={{
+              border: "1px solid #dfe5ea",
+              borderRadius: 8,
+              padding: "9px 14px",
+              background:
+                view === key ? "#18a56b" : "#fff",
+              color:
+                view === key ? "#fff" : "#45525f",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* DASHBOARD */}
+      {view === "dashboard" && (
+        <>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns:
+                "repeat(4, minmax(0, 1fr))",
+              gap: 15,
+              marginBottom: 22,
+            }}
+          >
+            {statCard(
+              "New Prescriptions",
+              newPrescriptions,
+              "Rx"
+            )}
+
+            {statCard(
+              "Dispensed Today",
+              dispensedToday,
+              "✓"
+            )}
+
+            {statCard(
+              "Pending",
+              pendingPrescriptions,
+              "!"
+            )}
+
+            {statCard(
+              "Stock Alerts",
+              stockAlerts,
+              "⚠"
+            )}
+          </div>
+
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #e7ebef",
+              borderRadius: 12,
+              padding: 18,
+              marginBottom: 20,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 15,
+              }}
+            >
+              <div>
+                <h3
+                  style={{
+                    margin: 0,
+                    color: "#263442",
+                    fontSize: 16,
+                  }}
+                >
+                  Recent Prescriptions
+                </h3>
+
+                <div
+                  style={{
+                    color: "#8a95a1",
+                    fontSize: 11,
+                    marginTop: 4,
+                  }}
+                >
+                  Latest prescriptions received from Consultant
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setView("queue")}
+                style={{
+                  border: 0,
+                  background: "transparent",
+                  color: "#18a56b",
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                View All
+              </button>
+            </div>
+
+            <div style={{ overflowX: "auto" }}>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: 12,
+                }}
+              >
+                <thead>
+                  <tr>
+                    <th style={tableHeadStyle}>Prescription</th>
+                    <th style={tableHeadStyle}>Patient</th>
+                    <th style={tableHeadStyle}>Card No.</th>
+                    <th style={tableHeadStyle}>Medicine</th>
+                    <th style={tableHeadStyle}>Qty</th>
+                    <th style={tableHeadStyle}>Status</th>
+                    <th style={tableHeadStyle}>Payment</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {prescriptions
+                    .slice(0, 5)
+                    .map((item) => (
+                      <tr key={item.id}>
+                        <td style={tableCellStyle}>
+                          {item.id}
+                        </td>
+
+                        <td style={tableCellStyle}>
+                          {item.patientName}
+                        </td>
+
+                        <td style={tableCellStyle}>
+                          {item.card}
+                        </td>
+
+                        <td style={tableCellStyle}>
+                          {item.medicine}
+                        </td>
+
+                        <td style={tableCellStyle}>
+                          {item.quantity}
+                        </td>
+
+                        <td style={tableCellStyle}>
+                          <StatusBadge
+                            status={item.status}
+                          />
+                        </td>
+
+                        <td style={tableCellStyle}>
+                          <StatusBadge
+                            status={item.paymentStatus}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #e7ebef",
+              borderRadius: 12,
+              padding: 18,
+            }}
+          >
+            <h3
+              style={{
+                margin: "0 0 15px",
+                color: "#263442",
+                fontSize: 16,
+              }}
+            >
+              Stock Alerts
+            </h3>
+
+            {stock.filter(
+              (item) => item.quantity <= item.reorderLevel
+            ).length === 0 ? (
+              <div
+                style={{
+                  padding: 18,
+                  background: "#f5fbf8",
+                  borderRadius: 8,
+                  color: "#287453",
+                  fontSize: 12,
+                }}
+              >
+                ✓ No medicine is currently below the
+                reorder level.
+              </div>
+            ) : (
+              stock
+                .filter(
+                  (item) =>
+                    item.quantity <= item.reorderLevel
+                )
+                .map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      padding: "10px 0",
+                      borderBottom:
+                        "1px solid #edf0f2",
+                    }}
+                  >
+                    <span>{item.medicine}</span>
+
+                    <strong>
+                      {item.quantity} remaining
+                    </strong>
+                  </div>
+                ))
+            )}
+          </div>
+        </>
+      )}
+
+      {/* NEW PRESCRIPTION */}
+      {view === "new" && (
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid #e7ebef",
+            borderRadius: 12,
+            padding: 20,
+          }}
+        >
+          <h3
+            style={{
+              margin: "0 0 5px",
+              color: "#263442",
+            }}
+          >
+            New Prescription
+          </h3>
+
+          <p
+            style={{
+              margin: "0 0 20px",
+              color: "#7b8794",
+              fontSize: 12,
+            }}
+          >
+            Select the patient using the existing ICT
+            Patient/Card Number.
+          </p>
+
+          {/* PATIENT SEARCH */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={labelStyle}>
+              Search Patient
+            </label>
+
+            <input
+              value={search}
+              onChange={(event) =>
+                setSearch(event.target.value)
+              }
+              placeholder="Search by name, card number or phone"
+              style={inputStyle}
+            />
+
+            {search && filteredPatients.length > 0 && (
+              <div
+                style={{
+                  marginTop: 6,
+                  border: "1px solid #dfe5ea",
+                  borderRadius: 8,
+                  overflow: "hidden",
+                }}
+              >
+                {filteredPatients.map((patient) => (
+                  <button
+                    type="button"
+                    key={
+                      patient.id ||
+                      patient.card ||
+                      patient.cardNumber
+                    }
+                    onClick={() =>
+                      selectPatient(patient)
+                    }
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      textAlign: "left",
+                      border: 0,
+                      borderBottom:
+                        "1px solid #edf0f2",
+                      background: "#fff",
+                      padding: 12,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <strong
+                      style={{
+                        display: "block",
+                        color: "#263442",
+                      }}
+                    >
+                      {getPatientName(patient)}
+                    </strong>
+
+                    <span
+                      style={{
+                        color: "#7b8794",
+                        fontSize: 11,
+                      }}
+                    >
+                      Card: {getPatientCard(patient)}
+                      {patient.phone
+                        ? ` • ${patient.phone}`
+                        : ""}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* SELECTED PATIENT */}
+          {selectedPatient && (
+            <div
+              style={{
+                padding: 15,
+                borderRadius: 9,
+                background: "#f1faf6",
+                border: "1px solid #d5eee2",
+                marginBottom: 20,
+              }}
+            >
+              <div
+                style={{
+                  color: "#65736d",
+                  fontSize: 10,
+                  marginBottom: 5,
+                }}
+              >
+                Selected Patient
+              </div>
+
+              <strong
+                style={{
+                  color: "#1f5d43",
+                  fontSize: 14,
+                }}
+              >
+                {getPatientName(selectedPatient)}
+              </strong>
+
+              <div
+                style={{
+                  marginTop: 4,
+                  color: "#4c7765",
+                  fontSize: 11,
+                }}
+              >
+                Patient/Card Number:{" "}
+                {getPatientCard(selectedPatient)}
+              </div>
+            </div>
+          )}
+
+          {/* MEDICINE FORM */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns:
+                "repeat(2, minmax(0, 1fr))",
+              gap: 15,
+            }}
+          >
+            <div>
+              <label style={labelStyle}>
+                Medicine
+              </label>
+
+              <select
+                value={medicine}
+                onChange={(event) =>
+                  setMedicine(event.target.value)
+                }
+                style={inputStyle}
+              >
+                <option value="">
+                  Select medicine
+                </option>
+
+                {stock.map((item) => (
+                  <option
+                    key={item.id}
+                    value={item.medicine}
+                  >
+                    {item.medicine} —{" "}
+                    {money(item.price)} — Stock:{" "}
+                    {item.quantity}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Quantity
+              </label>
+
+              <input
+                type="number"
+                min="1"
+                value={quantity}
+                onChange={(event) =>
+                  setQuantity(event.target.value)
+                }
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Instructions
+              </label>
+
+              <input
+                value={instructions}
+                onChange={(event) =>
+                  setInstructions(event.target.value)
+                }
+                placeholder="e.g. Take 1 tablet three times daily"
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Duration
+              </label>
+
+              <input
+                value={duration}
+                onChange={(event) =>
+                  setDuration(event.target.value)
+                }
+                placeholder="e.g. 5 days"
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Payment Status
+              </label>
+
+              <select
+                value={paymentStatus}
+                onChange={(event) =>
+                  setPaymentStatus(event.target.value)
+                }
+                style={inputStyle}
+              >
+                <option value="Pending">Pending</option>
+                <option value="Paid">Paid</option>
+                <option value="Free">Free</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Payment Method
+              </label>
+
+              <select
+                value={paymentMethod}
+                onChange={(event) =>
+                  setPaymentMethod(event.target.value)
+                }
+                style={inputStyle}
+              >
+                <option value="Cash">Cash</option>
+                <option value="POS">POS</option>
+                <option value="Bank Transfer">
+                  Bank Transfer
+                </option>
+              </select>
+            </div>
+          </div>
+
+          {/* AMOUNT PREVIEW */}
+          {medicine && (
+            <div
+              style={{
+                marginTop: 20,
+                padding: 15,
+                borderRadius: 9,
+                background: "#f7f9fb",
+              }}
+            >
+              {(() => {
+                const item = stock.find(
+                  (stockItem) =>
+                    stockItem.medicine === medicine
+                );
+
+                const total =
+                  Number(item?.price || 0) *
+                  Number(quantity || 0);
+
+                return (
+                  <>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        fontSize: 12,
+                        marginBottom: 7,
+                      }}
+                    >
+                      <span>Unit Price</span>
+                      <strong>
+                        {money(item?.price)}
+                      </strong>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        fontSize: 12,
+                        fontWeight: 900,
+                      }}
+                    >
+                      <span>Total Amount</span>
+                      <strong
+                        style={{
+                          color: "#18a56b",
+                          fontSize: 17,
+                        }}
+                      >
+                        {money(total)}
+                      </strong>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              marginTop: 20,
+              flexWrap: "wrap",
+            }}
+          >
+            <button
+              type="button"
+              onClick={createPrescription}
+              style={primaryButtonStyle}
+            >
+              Create Prescription
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setView("dashboard")}
+              style={secondaryButtonStyle}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* QUEUE */}
+      {view === "queue" && (
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid #e7ebef",
+            borderRadius: 12,
+            padding: 18,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 15,
+              alignItems: "center",
+              marginBottom: 18,
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <h3
+                style={{
+                  margin: 0,
+                  color: "#263442",
+                }}
+              >
+                Prescription Queue
+              </h3>
+
+              <div
+                style={{
+                  marginTop: 4,
+                  color: "#8a95a1",
+                  fontSize: 11,
+                }}
+              >
+                Prescriptions received from Consultant Room
+              </div>
+            </div>
+
+            <input
+              value={search}
+              onChange={(event) =>
+                setSearch(event.target.value)
+              }
+              placeholder="Search patient, card or medicine"
+              style={{
+                ...inputStyle,
+                width: 260,
+              }}
+            />
+          </div>
+
+          <div style={{ overflowX: "auto" }}>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                minWidth: 1050,
+                fontSize: 11,
+              }}
+            >
+              <thead>
+                <tr>
+                  <th style={tableHeadStyle}>Rx No.</th>
+                  <th style={tableHeadStyle}>Patient</th>
+                  <th style={tableHeadStyle}>Card No.</th>
+                  <th style={tableHeadStyle}>Medicine</th>
+                  <th style={tableHeadStyle}>Qty</th>
+                  <th style={tableHeadStyle}>Instructions</th>
+                  <th style={tableHeadStyle}>Status</th>
+                  <th style={tableHeadStyle}>Payment</th>
+                  <th style={tableHeadStyle}>Actions</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {filteredPrescriptions.map(
+                  (item) => (
+                    <tr key={item.id}>
+                      <td style={tableCellStyle}>
+                        {item.id}
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        <strong>
+                          {item.patientName}
+                        </strong>
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        {item.card}
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        {item.medicine}
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        {item.quantity}
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        {item.instructions || "-"}
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        <StatusBadge
+                          status={item.status}
+                        />
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        <StatusBadge
+                          status={item.paymentStatus}
+                        />
+                      </td>
+
+                      <td
+                        style={{
+                          ...tableCellStyle,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            selectPrescriptionPatient(
+                              item
+                            )
+                          }
+                          style={smallButtonStyle}
+                        >
+                          Patient
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            dispensePrescription(
+                              item.id
+                            )
+                          }
+                          style={{
+                            ...smallButtonStyle,
+                            background: "#18a56b",
+                            color: "#fff",
+                            borderColor: "#18a56b",
+                          }}
+                          disabled={
+                            item.status === "Dispensed"
+                          }
+                        >
+                          Dispense
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            markAsPending(item.id)
+                          }
+                          style={smallButtonStyle}
+                        >
+                          Pending
+                        </button>
+
+                        {item.paymentStatus !==
+                          "Paid" && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              markAsPaid(
+                                item.id,
+                                "Cash"
+                              )
+                            }
+                            style={smallButtonStyle}
+                          >
+                            Paid
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            sendSMS(item)
+                          }
+                          style={smallButtonStyle}
+                        >
+                          SMS
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            printPrescription(item)
+                          }
+                          style={smallButtonStyle}
+                        >
+                          Print
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {filteredPrescriptions.length === 0 && (
+            <div
+              style={{
+                textAlign: "center",
+                padding: 35,
+                color: "#8a95a1",
+              }}
+            >
+              No prescriptions found.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* STOCK */}
+      {view === "stock" && (
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid #e7ebef",
+            borderRadius: 12,
+            padding: 18,
+          }}
+        >
+          <div style={{ marginBottom: 18 }}>
+            <h3
+              style={{
+                margin: 0,
+                color: "#263442",
+              }}
+            >
+              Medicine Stock
+            </h3>
+
+            <div
+              style={{
+                marginTop: 4,
+                color: "#8a95a1",
+                fontSize: 11,
+              }}
+            >
+              Stock is controlled by ICT Centre. Pharmacy
+              can view available stock and dispensing reduces
+              the quantity automatically.
+            </div>
+          </div>
+
+          <div style={{ overflowX: "auto" }}>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                minWidth: 750,
+                fontSize: 12,
+              }}
+            >
+              <thead>
+                <tr>
+                  <th style={tableHeadStyle}>
+                    Medicine
+                  </th>
+
+                  <th style={tableHeadStyle}>
+                    Category
+                  </th>
+
+                  <th style={tableHeadStyle}>
+                    Unit Price
+                  </th>
+
+                  <th style={tableHeadStyle}>
+                    Current Stock
+                  </th>
+
+                  <th style={tableHeadStyle}>
+                    Reorder Level
+                  </th>
+
+                  <th style={tableHeadStyle}>
+                    Status
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {stock.map((item) => {
+                  const low =
+                    item.quantity <=
+                    item.reorderLevel;
+
+                  return (
+                    <tr key={item.id}>
+                      <td style={tableCellStyle}>
+                        <strong>
+                          {item.medicine}
+                        </strong>
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        {item.category}
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        {money(item.price)}
+                      </td>
+
+                      <td
+                        style={{
+                          ...tableCellStyle,
+                          fontWeight: 900,
+                        }}
+                      >
+                        {item.quantity}
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        {item.reorderLevel}
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        {low ? (
+                          <span
+                            style={{
+                              color: "#bd3b3b",
+                              fontWeight: 800,
+                            }}
+                          >
+                            Low Stock
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              color: "#287453",
+                              fontWeight: 800,
+                            }}
+                          >
+                            Available
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* SELECTED PATIENT QUICK INFO */}
+      {selectedPatient && view === "queue" && (
+        <div
+          style={{
+            marginTop: 18,
+            background: "#f7f9fb",
+            border: "1px solid #e3e8ec",
+            borderRadius: 10,
+            padding: 15,
+          }}
+        >
+          <strong
+            style={{
+              color: "#263442",
+              display: "block",
+              marginBottom: 5,
+            }}
+          >
+            Selected Patient
+          </strong>
+
+          <span
+            style={{
+              color: "#66727e",
+              fontSize: 12,
+            }}
+          >
+            {getPatientName(selectedPatient)} — Card:{" "}
+            {getPatientCard(selectedPatient)}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ================================
+   PHARMACY SUPPORT STYLES
+================================ */
+
+const tableHeadStyle = {
+  textAlign: "left",
+  padding: "11px 10px",
+  background: "#f7f9fb",
+  borderBottom: "1px solid #e4e9ed",
+  color: "#687582",
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+};
+
+const tableCellStyle = {
+  padding: "11px 10px",
+  borderBottom: "1px solid #edf0f2",
+  color: "#465360",
+  verticalAlign: "top",
+};
+
+const labelStyle = {
+  display: "block",
+  marginBottom: 6,
+  color: "#4e5c69",
+  fontSize: 11,
+  fontWeight: 800,
+};
+
+const inputStyle = {
+  width: "100%",
+  boxSizing: "border-box",
+  border: "1px solid #dce3e8",
+  borderRadius: 8,
+  padding: "10px 11px",
+  background: "#fff",
+  color: "#263442",
+  fontSize: 12,
+  outline: "none",
+};
+
+const primaryButtonStyle = {
+  border: 0,
+  borderRadius: 8,
+  padding: "11px 16px",
+  background: "#18a56b",
+  color: "#fff",
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const secondaryButtonStyle = {
+  border: "1px solid #dce3e8",
+  borderRadius: 8,
+  padding: "11px 16px",
+  background: "#fff",
+  color: "#465360",
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const smallButtonStyle = {
+  border: "1px solid #dce3e8",
+  borderRadius: 6,
+  padding: "6px 8px",
+  background: "#fff",
+  color: "#465360",
+  fontSize: 10,
+  fontWeight: 800,
+  cursor: "pointer",
+  marginRight: 5,
+  marginBottom: 5,
+};
+
+function StatusBadge({ status }) {
+  let background = "#f1f3f5";
+  let color = "#65717c";
+
+  if (
+    status === "Paid" ||
+    status === "Dispensed" ||
+    status === "Completed"
+  ) {
+    background = "#eaf8f1";
+    color = "#24734f";
+  }
+
+  if (
+    status === "New" ||
+    status === "Pending"
+  ) {
+    background = "#fff7e8";
+    color = "#9a6b16";
+  }
+
+  if (
+    status === "Free"
+  ) {
+    background = "#edf5ff";
+    color = "#35658e";
+  }
+
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        padding: "4px 8px",
+        borderRadius: 20,
+        background,
+        color,
+        fontSize: 10,
+        fontWeight: 800,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {status}
+    </span>
+  );
+}
 export default App;
