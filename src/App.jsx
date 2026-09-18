@@ -3601,6 +3601,11 @@ function PharmacyPage({
       date: new Date().toLocaleString(),
       dispensedBy: "",
     };
+    
+    setPrescriptions((previous) => [
+  newPrescription,
+  ...previous,
+]);
 
     if (
   paymentStatus === "Paid" &&
