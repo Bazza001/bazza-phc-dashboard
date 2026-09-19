@@ -2240,7 +2240,11 @@ function PageHeader({ title, subtitle, icon }) {
   );
 }
 
-function ConsultantPage({ patients = [], showMessage }) {
+function ConsultantPage({
+  patients = [],
+  showMessage,
+  setPharmacyPrescriptions,
+}) {
   const [search, setSearch] = useState("");
   const [selectedPatient, setSelectedPatient] = useState(null);
 
