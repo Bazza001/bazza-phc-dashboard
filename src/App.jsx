@@ -2363,11 +2363,10 @@ function ConsultantPage({
       Pharmacy will listen for this event and add the
       prescription to its queue.
     */
-    window.dispatchEvent(
-      new CustomEvent("bazza:pharmacy-prescription", {
-        detail: prescription,
-      })
-    );
+    setPharmacyPrescriptions((previous) => [
+  prescription,
+  ...previous,
+]);
 
     if (showMessage) {
       showMessage(
