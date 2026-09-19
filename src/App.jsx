@@ -643,9 +643,10 @@ function App() {
 
           {page === "Consultant Room" && (
   <ConsultantPage
-    patients={patients}
-    showMessage={showMessage}
-  />
+  patients={patients}
+  showMessage={showMessage}
+  setPharmacyPrescriptions={setPharmacyPrescriptions}
+/>
 )}
 
           {page === "Laboratory Unit" && (
