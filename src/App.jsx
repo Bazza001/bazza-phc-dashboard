@@ -2386,23 +2386,40 @@ function ConsultantPage({
   };
 
   const sendToLaboratory = () => {
-    if (!selectedPatient) {
-      if (showMessage) {
-        showMessage("Please select a patient first.");
-      }
-      return;
-    }
-
+  if (!selectedPatient) {
     if (showMessage) {
-      showMessage(
-        `Laboratory request can be created for ${getPatientName(
-          selectedPatient
-        )} using the shared Card Number ${getPatientCard(
-          selectedPatient
-        )}.`
-      );
+      showMessage("Please select a patient first.");
     }
+    return;
+  }
+
+  const labTest = "Malaria Test";
+
+  const request = {
+    id: Date.now(),
+    card: getPatientCard(selectedPatient),
+    patientName: getPatientName(selectedPatient),
+    test: labTest,
+    consultant: "Consultant Room",
+    status: "New",
+    paymentStatus: "Pending",
+    amount: 1500,
+    date: new Date().toLocaleString(),
   };
+
+  setLabRequests((previous) => [
+    request,
+    ...previous,
+  ]);
+
+  if (showMessage) {
+    showMessage(
+      `${labTest} request sent to Laboratory for ${getPatientName(
+        selectedPatient
+      )}.`
+    );
+  }
+};
 
   return (
     <div>
