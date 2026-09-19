@@ -130,6 +130,71 @@ const demoPatients = [
   },
 ];
 
+function MultiSelectWithOther({
+  label,
+  options = [],
+  value = [],
+  onChange,
+  placeholder = "Select options",
+}) {
+  const selected = Array.isArray(value) ? value : [];
+  const hasOther = selected.some((item) => item === "Others" || item.startsWith("Others: "));
+  const otherValue = selected.find((item) => item.startsWith("Others: "))?.replace("Others: ", "") || "";
+
+  const handleChange = (event) => {
+    const values = Array.from(event.target.selectedOptions).map((option) => option.value);
+    const previousOther = selected.find((item) => item.startsWith("Others: "));
+    const next = values.filter((item) => item !== "Others");
+
+    if (values.includes("Others")) {
+      next.push(previousOther || "Others");
+    }
+
+    onChange(next);
+  };
+
+  const handleOtherChange = (event) => {
+    const text = event.target.value;
+    const withoutOther = selected.filter(
+      (item) => item !== "Others" && !item.startsWith("Others: ")
+    );
+    onChange([...withoutOther, text.trim() ? `Others: ${text}` : "Others"]);
+  };
+
+  return (
+    <label className="form-field">
+      <span>{label}</span>
+
+      <select
+        multiple
+        value={selected.map((item) => item.startsWith("Others: ") ? "Others" : item)}
+        onChange={handleChange}
+        style={{ minHeight: 130 }}
+      >
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+        <option value="Others">Others</option>
+      </select>
+
+      <small style={{ color: "#71808d", marginTop: 5 }}>
+        Zaɓi fiye da ɗaya ta riƙe Ctrl. Idan ka zaɓi Others, rubuta abin da kake so a ƙasa.
+      </small>
+
+      {hasOther && (
+        <input
+          value={otherValue}
+          onChange={handleOtherChange}
+          placeholder="Rubuta abin da kake so..."
+          style={{ marginTop: 8 }}
+        />
+      )}
+    </label>
+  );
+}
+
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [page, setPage] = useState("Dashboard"); 
@@ -189,7 +254,7 @@ function App() {
     name: "",
     username: "",
     password: "",
-    department: "ICT Centre",
+    departments: ["ICT Centre"],
     role: "ICT Staff",
     status: "Active",
   };
@@ -218,7 +283,8 @@ function App() {
         person.name.toLowerCase().includes(q) ||
         person.staffId.toLowerCase().includes(q) ||
         person.username.toLowerCase().includes(q) ||
-        person.department.toLowerCase().includes(q) ||
+        String(person.department || "").toLowerCase().includes(q) ||
+        (Array.isArray(person.departments) && person.departments.join(" ").toLowerCase().includes(q)) ||
         person.role.toLowerCase().includes(q)
     );
   }, [staff, search]);
@@ -272,7 +338,11 @@ function App() {
       name: person.name,
       username: person.username,
       password: person.password,
-      department: person.department,
+      departments: Array.isArray(person.departments)
+        ? person.departments
+        : person.department
+          ? [person.department]
+          : ["ICT Centre"],
       role: person.role,
       status: person.status,
     });
@@ -292,6 +362,10 @@ function App() {
       return;
     }
 
+    const departmentsForStaff = Array.isArray(staffForm.departments)
+      ? staffForm.departments
+      : [staffForm.departments].filter(Boolean);
+
     if (editingStaff) {
       setStaff((prev) =>
         prev.map((person) =>
@@ -299,6 +373,8 @@ function App() {
             ? {
                 ...person,
                 ...staffForm,
+                departments: departmentsForStaff,
+                department: departmentsForStaff[0] || "ICT Centre",
               }
             : person
         )
@@ -310,6 +386,8 @@ function App() {
         id: Date.now(),
         staffId: `BZ${String(staff.length).padStart(3, "0")}`,
         ...staffForm,
+        departments: departmentsForStaff,
+        department: departmentsForStaff[0] || "ICT Centre",
       };
 
       setStaff((prev) => [...prev, newStaff]);
@@ -646,6 +724,7 @@ function App() {
   patients={patients}
   showMessage={showMessage}
   setPharmacyPrescriptions={setPharmacyPrescriptions}
+  pharmacyPrescriptions={pharmacyPrescriptions}
   setLabRequests={setLabRequests}
   labRequests={labRequests}
 />
@@ -839,21 +918,17 @@ function App() {
                 />
               </FormField>
 
-              <FormField label="Department">
-                <select
-                  value={staffForm.department}
-                  onChange={(e) =>
-                    setStaffForm({
-                      ...staffForm,
-                      department: e.target.value,
-                    })
-                  }
-                >
-                  {departments.map((department) => (
-                    <option key={department}>{department}</option>
-                  ))}
-                </select>
-              </FormField>
+              <MultiSelectWithOther
+                label="Departments Where Staff Will Work"
+                options={departments}
+                value={staffForm.departments}
+                onChange={(values) =>
+                  setStaffForm({
+                    ...staffForm,
+                    departments: values,
+                  })
+                }
+              />
 
               <FormField label="Role">
                 <select
@@ -2559,6 +2634,7 @@ function ConsultantPage({
   patients = [],
   showMessage,
   setPharmacyPrescriptions,
+  pharmacyPrescriptions = [],
   setLabRequests,
   labRequests = [],
 }) {
@@ -2572,7 +2648,7 @@ function ConsultantPage({
 
   const [consultationNote, setConsultationNote] = useState("");
 
-  const [laboratoryTest, setLaboratoryTest] = useState("");
+  const [laboratoryTestsSelected, setLaboratoryTestsSelected] = useState([]);
 
   const medicines = [
     "Paracetamol 500mg",
@@ -2720,71 +2796,44 @@ function ConsultantPage({
 
   const sendToLaboratory = () => {
     if (!selectedPatient) {
-      if (showMessage) {
-        showMessage("Da farko zaɓi patient.");
-      }
+      showMessage?.("Da farko zaɓi patient.");
       return;
     }
 
-    if (!laboratoryTest) {
-      if (showMessage) {
-        showMessage("Da farko zaɓi Laboratory Test.");
-      }
+    if (!laboratoryTestsSelected.length) {
+      showMessage?.("Da farko zaɓi Laboratory Test.");
       return;
     }
 
     if (!setLabRequests) {
-      if (showMessage) {
-        showMessage(
-          "Laboratory connection is not available."
-        );
-      }
+      showMessage?.("Laboratory connection is not available.");
       return;
     }
 
-    const amount =
-      laboratoryTests[laboratoryTest] || 0;
-
-    const request = {
-      id: Date.now(),
+    const requests = laboratoryTestsSelected.map((test, index) => ({
+      id: Date.now() + index,
       patientId: selectedPatient.id,
       card: getPatientCard(selectedPatient),
       patientName: getPatientName(selectedPatient),
-      test: laboratoryTest,
+      test,
       consultant: "Consultant Room",
       status: "New",
       paymentStatus: "Pending",
       paymentMethod: "Cash",
-      amount,
+      amount: laboratoryTests[test] || 0,
       result: "",
       consultationNote,
       date: new Date().toLocaleString(),
-    };
+    }));
 
-    setLabRequests((previous) => [
-      request,
-      ...previous,
-    ]);
+    setLabRequests((previous) => [...requests, ...previous]);
 
-    if (showMessage) {
-      showMessage(
-        `${laboratoryTest} request an aika zuwa Laboratory domin ${getPatientName(
-          selectedPatient
-        )}.`
-      );
-    }
+    showMessage?.(
+      `${requests.length} Laboratory request(s) an aika zuwa Laboratory domin ${getPatientName(selectedPatient)}.`
+    );
 
-    setLaboratoryTest("");
+    setLaboratoryTestsSelected([]);
   };
-
-  const readyLabResults = labRequests.filter(
-    (request) =>
-      request.patientId === selectedPatient?.id &&
-      (
-        request.status === "Result Ready" ||
-        request.status === "Sent to Consultant"
-      )
-  );
 
   return (
     <div>
@@ -2809,7 +2858,7 @@ function ConsultantPage({
 
         <StatCard
           title="Lab Requests"
-          value={labRequests.length}
+          value="6"
           icon="▣"
         />
 
@@ -2974,39 +3023,15 @@ function ConsultantPage({
             </p>
 
             <div className="form-grid">
-              <label className="form-field">
-                <span>Laboratory Test</span>
-
-                <select
-                  value={laboratoryTest}
-                  onChange={(e) =>
-                    setLaboratoryTest(e.target.value)
-                  }
-                >
-                  <option value="">
-                    Select Laboratory Test
-                  </option>
-
-                  {Object.entries(
-                    laboratoryTests
-                  ).map(([name, price]) => (
-                    <option
-                      key={name}
-                      value={name}
-                    >
-                      {name} — ₦
-                      {price.toLocaleString()}
-                    </option>
-                  ))}
-
-                  <option value="Others">
-                    Others
-                  </option>
-                </select>
-              </label>
+              <MultiSelectWithOther
+                label="Laboratory Tests"
+                options={Object.keys(laboratoryTests)}
+                value={laboratoryTestsSelected}
+                onChange={setLaboratoryTestsSelected}
+              />
             </div>
 
-            {laboratoryTest && (
+            {laboratoryTestsSelected.length > 0 && (
               <div
                 style={{
                   marginTop: 15,
@@ -3015,24 +3040,15 @@ function ConsultantPage({
                   borderRadius: 8,
                 }}
               >
-                <strong>
-                  Selected Test:
-                </strong>{" "}
-                {laboratoryTest}
-
-                {laboratoryTests[
-                  laboratoryTest
-                ] && (
-                  <>
-                    {" • "}
-                    <strong>
-                      ₦
-                      {laboratoryTests[
-                        laboratoryTest
-                      ].toLocaleString()}
-                    </strong>
-                  </>
-                )}
+                <strong>Selected Tests:</strong>
+                <div style={{ marginTop: 8 }}>
+                  {laboratoryTestsSelected.map((test) => (
+                    <div key={test} style={{ marginBottom: 4 }}>
+                      • {test}
+                      {laboratoryTests[test] ? ` — ₦${laboratoryTests[test].toLocaleString()}` : ""}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -3144,175 +3160,85 @@ function ConsultantPage({
             </div>
           </div>
 
-          {/* LABORATORY RESULTS */}
-          <div
-            className="panel"
-            style={{ marginTop: 20 }}
-          >
-            <h2 style={{ marginTop: 0 }}>
-              Laboratory Results
-            </h2>
 
-            <p
-              style={{
-                marginTop: 0,
-                color: "#71808d",
-              }}
-            >
-              Results returned from Laboratory for
-              Consultant review.
+          {/* LABORATORY RESULTS RETURNED TO CONSULTANT */}
+          <div className="panel" style={{ marginTop: 20 }}>
+            <h2 style={{ marginTop: 0 }}>Laboratory Results</h2>
+            <p style={{ color: "#71808d" }}>
+              Results returned from Laboratory for this selected patient.
             </p>
 
-            {readyLabResults.length === 0 ? (
-              <div
-                style={{
-                  marginTop: 15,
-                  padding: 15,
-                  background: "#f7f9fb",
-                  borderRadius: 8,
-                  color: "#71808d",
-                }}
-              >
-                No laboratory results are ready
-                for review.
+            {labRequests.filter(
+              (request) =>
+                String(request.patientId) === String(selectedPatient.id) &&
+                (request.status === "Result Ready" || request.status === "Sent to Consultant")
+            ).length === 0 ? (
+              <div style={{ padding: 15, background: "#f7f9fb", borderRadius: 8, color: "#71808d" }}>
+                No laboratory results are ready for review.
               </div>
             ) : (
-              <div
-                style={{
-                  display: "grid",
-                  gap: 15,
-                  marginTop: 15,
-                }}
-              >
-                {readyLabResults.map((request) => (
-                  <div
-                    key={request.id}
-                    style={{
-                      border: "1px solid #dce3e8",
-                      borderRadius: 10,
-                      padding: 16,
-                      background: "#fff",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns:
-                          "repeat(2, minmax(0, 1fr))",
-                        gap: 15,
-                      }}
-                    >
-                      <div>
-                        <div
-                          style={{
-                            fontSize: 11,
-                            color: "#71808d",
-                            marginBottom: 4,
-                          }}
-                        >
-                          Patient
-                        </div>
-
-                        <strong>
-                          {request.patientName}
-                        </strong>
-                      </div>
-
-                      <div>
-                        <div
-                          style={{
-                            fontSize: 11,
-                            color: "#71808d",
-                            marginBottom: 4,
-                          }}
-                        >
-                          Card Number
-                        </div>
-
-                        <strong>
-                          {request.card}
-                        </strong>
-                      </div>
-
-                      <div>
-                        <div
-                          style={{
-                            fontSize: 11,
-                            color: "#71808d",
-                            marginBottom: 4,
-                          }}
-                        >
-                          Laboratory Test
-                        </div>
-
-                        <strong>
-                          {request.test}
-                        </strong>
-                      </div>
-
-                      <div>
-                        <div
-                          style={{
-                            fontSize: 11,
-                            color: "#71808d",
-                            marginBottom: 4,
-                          }}
-                        >
-                          Date
-                        </div>
-
-                        <strong>
-                          {request.date}
-                        </strong>
-                      </div>
+              labRequests
+                .filter(
+                  (request) =>
+                    String(request.patientId) === String(selectedPatient.id) &&
+                    (request.status === "Result Ready" || request.status === "Sent to Consultant")
+                )
+                .map((request) => (
+                  <div key={request.id} style={{ border: "1px solid #e7ebef", borderRadius: 8, padding: 15, marginTop: 10 }}>
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <div><strong>Test:</strong> {request.test}</div>
+                      <div><strong>Status:</strong> {request.status}</div>
+                      <div><strong>Date:</strong> {request.date}</div>
                     </div>
-
-                    <div
-                      style={{
-                        marginTop: 15,
-                        padding: 15,
-                        background: "#f7f9fb",
-                        borderRadius: 8,
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: "#71808d",
-                          fontWeight: 800,
-                          marginBottom: 6,
-                        }}
-                      >
-                        RESULT
+                    <div style={{ marginTop: 12, padding: 12, background: "#f7f9fb", borderRadius: 8 }}>
+                      <strong>Result</strong>
+                      <div style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
+                        {request.result || "No result entered yet."}
                       </div>
-
-                      <div
-                        style={{
-                          whiteSpace: "pre-wrap",
-                          lineHeight: 1.6,
-                        }}
-                      >
-                        {request.result ||
-                          "No result entered yet."}
-                      </div>
-                    </div>
-
-                    <div style={{ marginTop: 12 }}>
-                      <span className="status-badge active-status">
-                        {request.status}
-                      </span>
                     </div>
                   </div>
-                ))}
-              </div>
+                ))
             )}
           </div>
+
+          {/* PHARMACY RESULTS / DISPENSING STATUS */}
+          <div className="panel" style={{ marginTop: 20 }}>
+            <h2 style={{ marginTop: 0 }}>Pharmacy Results</h2>
+            <p style={{ color: "#71808d" }}>
+              Prescription and dispensing status returned from Pharmacy.
+            </p>
+
+            {pharmacyPrescriptions.filter(
+              (item) => String(item.patientId) === String(selectedPatient.id)
+            ).length === 0 ? (
+              <div style={{ padding: 15, background: "#f7f9fb", borderRadius: 8, color: "#71808d" }}>
+                No pharmacy prescription is available for this patient.
+              </div>
+            ) : (
+              pharmacyPrescriptions
+                .filter((item) => String(item.patientId) === String(selectedPatient.id))
+                .map((item) => (
+                  <div key={item.id} style={{ border: "1px solid #e7ebef", borderRadius: 8, padding: 15, marginTop: 10 }}>
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <div><strong>Medicine:</strong> {item.medicine}</div>
+                      <div><strong>Quantity:</strong> {item.quantity}</div>
+                      <div><strong>Instructions:</strong> {item.instructions || "-"}</div>
+                      <div><strong>Duration:</strong> {item.duration || "-"}</div>
+                      <div><strong>Status:</strong> {item.status}</div>
+                      <div><strong>Payment:</strong> {item.paymentStatus || "Pending"}</div>
+                      {item.dispensedBy && <div><strong>Dispensed By:</strong> {item.dispensedBy}</div>}
+                      {item.dispensedAt && <div><strong>Dispensed At:</strong> {item.dispensedAt}</div>}
+                    </div>
+                  </div>
+                ))
+            )}
+          </div>
+
         </>
       )}
     </div>
   );
 }
-
 function StatCard({ title, value, icon, text }) {
   return (
     <div className="stat-card">
