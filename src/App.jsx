@@ -3882,67 +3882,6 @@ function PharmacyPage({
       );
     });
   }, [prescriptions, search]);
-useEffect(() => {
-  const receiveConsultantPrescription = (event) => {
-  const prescription = event.detail;
-
-  if (!prescription) return;
-
-  const patientName =
-    prescription.patientName ||
-    prescription.patient?.name ||
-    `${prescription.patient?.surname || ""} ${prescription.patient?.otherNames || ""}`.trim() ||
-    "Unknown Patient";
-
-  const patientCard =
-    prescription.card ||
-    prescription.cardNumber ||
-    prescription.patient?.card ||
-    prescription.patient?.cardNumber ||
-    prescription.patientId ||
-    "";
-
-  const newPrescription = {
-    ...prescription,
-    patientName,
-    card: patientCard,
-    status: prescription.status || "New",
-    paymentStatus: prescription.paymentStatus || "Pending",
-    paymentMethod: prescription.paymentMethod || "Cash",
-    date: prescription.date || new Date().toLocaleString(),
-  };
-
-  setPrescriptions((previous) => {
-    const alreadyExists = previous.some(
-      (item) => item.id === newPrescription.id
-    );
-
-    if (alreadyExists) return previous;
-
-    return [newPrescription, ...previous];
-  });
-
-  setView("queue");
-
-  if (showMessage) {
-    showMessage(
-      `New prescription received for ${patientName}.`
-    );
-  }
-};
-
-  window.addEventListener(
-    "bazza:pharmacy-prescription",
-    receiveConsultantPrescription
-  );
-
-  return () => {
-    window.removeEventListener(
-      "bazza:pharmacy-prescription",
-      receiveConsultantPrescription
-    );
-  };
-}, [showMessage]);
   const totalPrescriptions = prescriptions.length;
 
   const newPrescriptions = prescriptions.filter(
