@@ -2560,6 +2560,7 @@ function ConsultantPage({
   showMessage,
   setPharmacyPrescriptions,
   setLabRequests,
+  labRequests = [],
 }) {
   const [search, setSearch] = useState("");
   const [selectedPatient, setSelectedPatient] = useState(null);
