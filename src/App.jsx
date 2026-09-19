@@ -646,6 +646,7 @@ function App() {
   patients={patients}
   showMessage={showMessage}
   setPharmacyPrescriptions={setPharmacyPrescriptions}
+  setLabRequests={setLabRequests}
 />
 )}
 
