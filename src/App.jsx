@@ -2665,6 +2665,7 @@ function ConsultantPage({
   setPharmacyPrescriptions,
   setLabRequests,
   labRequests = [],
+  pharmacyPrescriptions = [],
 }) {
   const [search, setSearch] = useState("");
   const [selectedPatient, setSelectedPatient] = useState(null);
@@ -3036,39 +3037,16 @@ function ConsultantPage({
             </p>
 
             <div className="form-grid">
-              <label className="form-field">
-                <span>Laboratory Test</span>
-
-                <select
-                  value={laboratoryTest}
-                  onChange={(e) =>
-                    setLaboratoryTest(e.target.value)
-                  }
-                >
-                  <option value="">
-                    Select Laboratory Test
-                  </option>
-
-                  {Object.entries(
-                    laboratoryTests
-                  ).map(([name, price]) => (
-                    <option
-                      key={name}
-                      value={name}
-                    >
-                      {name} — ₦
-                      {price.toLocaleString()}
-                    </option>
-                  ))}
-
-                  <option value="Others">
-                    Others
-                  </option>
-                </select>
-              </label>
+              <MultiSelectDropdown
+                label="Laboratory Tests"
+                options={[...Object.keys(laboratoryTests), "Others"]}
+                value={laboratoryTestsSelected}
+                onChange={setLaboratoryTestsSelected}
+                placeholder="Select one or more laboratory tests"
+              />
             </div>
 
-            {laboratoryTest && (
+            {laboratoryTestsSelected.length > 0 && (
               <div
                 style={{
                   marginTop: 15,
@@ -3077,24 +3055,7 @@ function ConsultantPage({
                   borderRadius: 8,
                 }}
               >
-                <strong>
-                  Selected Test:
-                </strong>{" "}
-                {laboratoryTest}
-
-                {laboratoryTests[
-                  laboratoryTest
-                ] && (
-                  <>
-                    {" • "}
-                    <strong>
-                      ₦
-                      {laboratoryTests[
-                        laboratoryTest
-                      ].toLocaleString()}
-                    </strong>
-                  </>
-                )}
+                <strong>Selected Tests:</strong> {laboratoryTestsSelected.join(", ")}
               </div>
             )}
 
@@ -3126,29 +3087,13 @@ function ConsultantPage({
             </h2>
 
             <div className="form-grid">
-              <label className="form-field">
-                <span>Medicine</span>
-
-                <select
-                  value={medicinesSelected.join(", ")}
-                  onChange={(e) =>
-                    setMedicine(e.target.value)
-                  }
-                >
-                  <option value="">
-                    Select medicine
-                  </option>
-
-                  {medicines.map((item) => (
-                    <option
-                      key={item}
-                      value={item}
-                    >
-                      {item}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <MultiSelectDropdown
+                label="Medicine"
+                options={medicines}
+                value={medicinesSelected}
+                onChange={setMedicinesSelected}
+                placeholder="Select one or more medicines"
+              />
 
               <label className="form-field">
                 <span>Quantity</span>
@@ -3366,6 +3311,35 @@ function ConsultantPage({
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+
+          {/* PHARMACY RESULTS / DISPENSING STATUS */}
+          <div className="panel" style={{ marginTop: 20 }}>
+            <h2 style={{ marginTop: 0 }}>Pharmacy Results / Dispensing Status</h2>
+            <p style={{ marginTop: 0, color: "#71808d" }}>
+              Pharmacy prescriptions and dispensing status for the selected patient.
+            </p>
+            {pharmacyPrescriptions.filter((item) => item.patientId === selectedPatient?.id).length === 0 ? (
+              <div style={{ padding: 15, background: "#f7f9fb", borderRadius: 8, color: "#71808d" }}>
+                No Pharmacy prescription is available for this patient.
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                {pharmacyPrescriptions
+                  .filter((item) => item.patientId === selectedPatient?.id)
+                  .map((item) => (
+                    <div key={item.id} style={{ border: "1px solid #dce3e8", borderRadius: 8, padding: 12 }}>
+                      <strong>{item.medicine}</strong> — Qty: {item.quantity}
+                      <div style={{ marginTop: 5, color: "#71808d", fontSize: 12 }}>
+                        Instructions: {item.instructions || "-"} · Duration: {item.duration || "-"}
+                      </div>
+                      <div style={{ marginTop: 5, fontSize: 12 }}>
+                        Status: <strong>{item.status || "Pending"}</strong> · Payment: {item.paymentStatus || "Pending"}
+                      </div>
+                    </div>
+                  ))}
               </div>
             )}
           </div>
