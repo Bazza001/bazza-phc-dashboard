@@ -130,71 +130,6 @@ const demoPatients = [
   },
 ];
 
-function MultiSelectWithOther({
-  label,
-  options = [],
-  value = [],
-  onChange,
-  placeholder = "Select options",
-}) {
-  const selected = Array.isArray(value) ? value : [];
-  const hasOther = selected.some((item) => item === "Others" || item.startsWith("Others: "));
-  const otherValue = selected.find((item) => item.startsWith("Others: "))?.replace("Others: ", "") || "";
-
-  const handleChange = (event) => {
-    const values = Array.from(event.target.selectedOptions).map((option) => option.value);
-    const previousOther = selected.find((item) => item.startsWith("Others: "));
-    const next = values.filter((item) => item !== "Others");
-
-    if (values.includes("Others")) {
-      next.push(previousOther || "Others");
-    }
-
-    onChange(next);
-  };
-
-  const handleOtherChange = (event) => {
-    const text = event.target.value;
-    const withoutOther = selected.filter(
-      (item) => item !== "Others" && !item.startsWith("Others: ")
-    );
-    onChange([...withoutOther, text.trim() ? `Others: ${text}` : "Others"]);
-  };
-
-  return (
-    <label className="form-field">
-      <span>{label}</span>
-
-      <select
-        multiple
-        value={selected.map((item) => item.startsWith("Others: ") ? "Others" : item)}
-        onChange={handleChange}
-        style={{ minHeight: 130 }}
-      >
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-        <option value="Others">Others</option>
-      </select>
-
-      <small style={{ color: "#71808d", marginTop: 5 }}>
-        Zaɓi fiye da ɗaya ta riƙe Ctrl. Idan ka zaɓi Others, rubuta abin da kake so a ƙasa.
-      </small>
-
-      {hasOther && (
-        <input
-          value={otherValue}
-          onChange={handleOtherChange}
-          placeholder="Rubuta abin da kake so..."
-          style={{ marginTop: 8 }}
-        />
-      )}
-    </label>
-  );
-}
-
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [page, setPage] = useState("Dashboard"); 
@@ -254,7 +189,7 @@ function App() {
     name: "",
     username: "",
     password: "",
-    departments: ["ICT Centre"],
+    department: "ICT Centre",
     role: "ICT Staff",
     status: "Active",
   };
@@ -283,8 +218,7 @@ function App() {
         person.name.toLowerCase().includes(q) ||
         person.staffId.toLowerCase().includes(q) ||
         person.username.toLowerCase().includes(q) ||
-        String(person.department || "").toLowerCase().includes(q) ||
-        (Array.isArray(person.departments) && person.departments.join(" ").toLowerCase().includes(q)) ||
+        person.department.toLowerCase().includes(q) ||
         person.role.toLowerCase().includes(q)
     );
   }, [staff, search]);
@@ -338,11 +272,7 @@ function App() {
       name: person.name,
       username: person.username,
       password: person.password,
-      departments: Array.isArray(person.departments)
-        ? person.departments
-        : person.department
-          ? [person.department]
-          : ["ICT Centre"],
+      department: person.department,
       role: person.role,
       status: person.status,
     });
@@ -362,10 +292,6 @@ function App() {
       return;
     }
 
-    const departmentsForStaff = Array.isArray(staffForm.departments)
-      ? staffForm.departments
-      : [staffForm.departments].filter(Boolean);
-
     if (editingStaff) {
       setStaff((prev) =>
         prev.map((person) =>
@@ -373,8 +299,6 @@ function App() {
             ? {
                 ...person,
                 ...staffForm,
-                departments: departmentsForStaff,
-                department: departmentsForStaff[0] || "ICT Centre",
               }
             : person
         )
@@ -386,8 +310,6 @@ function App() {
         id: Date.now(),
         staffId: `BZ${String(staff.length).padStart(3, "0")}`,
         ...staffForm,
-        departments: departmentsForStaff,
-        department: departmentsForStaff[0] || "ICT Centre",
       };
 
       setStaff((prev) => [...prev, newStaff]);
@@ -724,7 +646,6 @@ function App() {
   patients={patients}
   showMessage={showMessage}
   setPharmacyPrescriptions={setPharmacyPrescriptions}
-  pharmacyPrescriptions={pharmacyPrescriptions}
   setLabRequests={setLabRequests}
   labRequests={labRequests}
 />
@@ -918,17 +839,21 @@ function App() {
                 />
               </FormField>
 
-              <MultiSelectWithOther
-                label="Departments Where Staff Will Work"
-                options={departments}
-                value={staffForm.departments}
-                onChange={(values) =>
-                  setStaffForm({
-                    ...staffForm,
-                    departments: values,
-                  })
-                }
-              />
+              <FormField label="Department">
+                <select
+                  value={staffForm.department}
+                  onChange={(e) =>
+                    setStaffForm({
+                      ...staffForm,
+                      department: e.target.value,
+                    })
+                  }
+                >
+                  {departments.map((department) => (
+                    <option key={department}>{department}</option>
+                  ))}
+                </select>
+              </FormField>
 
               <FormField label="Role">
                 <select
@@ -2630,18 +2555,121 @@ function PageHeader({ title, subtitle, icon }) {
   );
 }
 
+function MultiSelectDropdown({ label, options = [], value = [], onChange, placeholder = "Select options" }) {
+  const [open, setOpen] = useState(false);
+  const selected = Array.isArray(value) ? value : [];
+
+  const toggle = (option) => {
+    onChange(
+      selected.includes(option)
+        ? selected.filter((item) => item !== option)
+        : [...selected, option]
+    );
+  };
+
+  return (
+    <div className="form-field" style={{ position: "relative" }}>
+      <span>{label}</span>
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        style={{
+          width: "100%",
+          minHeight: 44,
+          textAlign: "left",
+          padding: "10px 12px",
+          border: "1px solid #dce3e8",
+          borderRadius: 8,
+          background: "#fff",
+          cursor: "pointer",
+          color: selected.length ? "#17212b" : "#71808d",
+        }}
+      >
+        {selected.length ? `${selected.length} selected` : placeholder}
+      </button>
+
+      {selected.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+          {selected.map((item) => (
+            <span
+              key={item}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "5px 9px",
+                borderRadius: 999,
+                background: "#eef6ff",
+                border: "1px solid #cfe4f8",
+                fontSize: 12,
+              }}
+            >
+              {item}
+              <button
+                type="button"
+                onClick={() => toggle(item)}
+                style={{ border: 0, background: "transparent", cursor: "pointer", fontWeight: 800 }}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            zIndex: 20,
+            left: 0,
+            right: 0,
+            top: "100%",
+            marginTop: 5,
+            background: "#fff",
+            border: "1px solid #dce3e8",
+            borderRadius: 8,
+            boxShadow: "0 8px 24px rgba(0,0,0,.12)",
+            maxHeight: 240,
+            overflowY: "auto",
+          }}
+        >
+          {options.map((option) => (
+            <label
+              key={option}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 9,
+                padding: "10px 12px",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={selected.includes(option)}
+                onChange={() => toggle(option)}
+              />
+              <span>{option}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ConsultantPage({
   patients = [],
   showMessage,
   setPharmacyPrescriptions,
-  pharmacyPrescriptions = [],
   setLabRequests,
   labRequests = [],
 }) {
   const [search, setSearch] = useState("");
   const [selectedPatient, setSelectedPatient] = useState(null);
 
-  const [medicine, setMedicine] = useState("");
+  const [medicinesSelected, setMedicinesSelected] = useState([]);
   const [quantity, setQuantity] = useState(1);
   const [instructions, setInstructions] = useState("");
   const [duration, setDuration] = useState("");
@@ -2729,41 +2757,29 @@ function ConsultantPage({
 
   const sendToPharmacy = () => {
     if (!selectedPatient) {
-      if (showMessage) {
-        showMessage("Please select a patient first.");
-      }
+      showMessage?.("Please select a patient first.");
       return;
     }
-
-    if (!medicine) {
-      if (showMessage) {
-        showMessage("Please select medicine.");
-      }
+    if (!medicinesSelected.length) {
+      showMessage?.("Please select at least one medicine.");
       return;
     }
-
     if (!quantity || Number(quantity) < 1) {
-      if (showMessage) {
-        showMessage("Please enter a valid quantity.");
-      }
+      showMessage?.("Please enter a valid quantity.");
       return;
     }
-
     if (!setPharmacyPrescriptions) {
-      if (showMessage) {
-        showMessage(
-          "Pharmacy connection is not available."
-        );
-      }
+      showMessage?.("Pharmacy connection is not available.");
       return;
     }
 
-    const prescription = {
-      id: `CONS-RX-${Date.now()}`,
+    const now = Date.now();
+    const prescriptions = medicinesSelected.map((item, index) => ({
+      id: `CONS-RX-${now}-${index + 1}`,
       patientId: selectedPatient.id,
       patientName: getPatientName(selectedPatient),
       card: getPatientCard(selectedPatient),
-      medicine,
+      medicine: item,
       quantity: Number(quantity),
       instructions,
       duration,
@@ -2773,22 +2789,15 @@ function ConsultantPage({
       paymentMethod: "Cash",
       amount: 0,
       date: new Date().toLocaleString(),
-    };
+    }));
 
     setPharmacyPrescriptions((previous) => [
-      prescription,
+      ...prescriptions,
       ...previous,
     ]);
 
-    if (showMessage) {
-      showMessage(
-        `${medicine} prescription sent to Pharmacy for ${getPatientName(
-          selectedPatient
-        )}.`
-      );
-    }
-
-    setMedicine("");
+    showMessage?.(`${medicinesSelected.length} medicine(s) prescription sent to Pharmacy for ${getPatientName(selectedPatient)}.`);
+    setMedicinesSelected([]);
     setQuantity(1);
     setInstructions("");
     setDuration("");
@@ -2799,19 +2808,18 @@ function ConsultantPage({
       showMessage?.("Da farko zaɓi patient.");
       return;
     }
-
     if (!laboratoryTestsSelected.length) {
-      showMessage?.("Da farko zaɓi Laboratory Test.");
+      showMessage?.("Da farko zaɓi aƙalla Laboratory Test ɗaya.");
       return;
     }
-
     if (!setLabRequests) {
       showMessage?.("Laboratory connection is not available.");
       return;
     }
 
+    const now = Date.now();
     const requests = laboratoryTestsSelected.map((test, index) => ({
-      id: Date.now() + index,
+      id: now + index,
       patientId: selectedPatient.id,
       card: getPatientCard(selectedPatient),
       patientName: getPatientName(selectedPatient),
@@ -2827,13 +2835,18 @@ function ConsultantPage({
     }));
 
     setLabRequests((previous) => [...requests, ...previous]);
-
-    showMessage?.(
-      `${requests.length} Laboratory request(s) an aika zuwa Laboratory domin ${getPatientName(selectedPatient)}.`
-    );
-
+    showMessage?.(`${laboratoryTestsSelected.length} laboratory request(s) an aika zuwa Laboratory domin ${getPatientName(selectedPatient)}.`);
     setLaboratoryTestsSelected([]);
   };
+
+  const readyLabResults = labRequests.filter(
+    (request) =>
+      request.patientId === selectedPatient?.id &&
+      (
+        request.status === "Result Ready" ||
+        request.status === "Sent to Consultant"
+      )
+  );
 
   return (
     <div>
@@ -2858,7 +2871,7 @@ function ConsultantPage({
 
         <StatCard
           title="Lab Requests"
-          value="6"
+          value={labRequests.length}
           icon="▣"
         />
 
@@ -3023,15 +3036,39 @@ function ConsultantPage({
             </p>
 
             <div className="form-grid">
-              <MultiSelectWithOther
-                label="Laboratory Tests"
-                options={Object.keys(laboratoryTests)}
-                value={laboratoryTestsSelected}
-                onChange={setLaboratoryTestsSelected}
-              />
+              <label className="form-field">
+                <span>Laboratory Test</span>
+
+                <select
+                  value={laboratoryTest}
+                  onChange={(e) =>
+                    setLaboratoryTest(e.target.value)
+                  }
+                >
+                  <option value="">
+                    Select Laboratory Test
+                  </option>
+
+                  {Object.entries(
+                    laboratoryTests
+                  ).map(([name, price]) => (
+                    <option
+                      key={name}
+                      value={name}
+                    >
+                      {name} — ₦
+                      {price.toLocaleString()}
+                    </option>
+                  ))}
+
+                  <option value="Others">
+                    Others
+                  </option>
+                </select>
+              </label>
             </div>
 
-            {laboratoryTestsSelected.length > 0 && (
+            {laboratoryTest && (
               <div
                 style={{
                   marginTop: 15,
@@ -3040,15 +3077,24 @@ function ConsultantPage({
                   borderRadius: 8,
                 }}
               >
-                <strong>Selected Tests:</strong>
-                <div style={{ marginTop: 8 }}>
-                  {laboratoryTestsSelected.map((test) => (
-                    <div key={test} style={{ marginBottom: 4 }}>
-                      • {test}
-                      {laboratoryTests[test] ? ` — ₦${laboratoryTests[test].toLocaleString()}` : ""}
-                    </div>
-                  ))}
-                </div>
+                <strong>
+                  Selected Test:
+                </strong>{" "}
+                {laboratoryTest}
+
+                {laboratoryTests[
+                  laboratoryTest
+                ] && (
+                  <>
+                    {" • "}
+                    <strong>
+                      ₦
+                      {laboratoryTests[
+                        laboratoryTest
+                      ].toLocaleString()}
+                    </strong>
+                  </>
+                )}
               </div>
             )}
 
@@ -3084,7 +3130,7 @@ function ConsultantPage({
                 <span>Medicine</span>
 
                 <select
-                  value={medicine}
+                  value={medicinesSelected.join(", ")}
                   onChange={(e) =>
                     setMedicine(e.target.value)
                   }
@@ -3160,85 +3206,175 @@ function ConsultantPage({
             </div>
           </div>
 
+          {/* LABORATORY RESULTS */}
+          <div
+            className="panel"
+            style={{ marginTop: 20 }}
+          >
+            <h2 style={{ marginTop: 0 }}>
+              Laboratory Results
+            </h2>
 
-          {/* LABORATORY RESULTS RETURNED TO CONSULTANT */}
-          <div className="panel" style={{ marginTop: 20 }}>
-            <h2 style={{ marginTop: 0 }}>Laboratory Results</h2>
-            <p style={{ color: "#71808d" }}>
-              Results returned from Laboratory for this selected patient.
+            <p
+              style={{
+                marginTop: 0,
+                color: "#71808d",
+              }}
+            >
+              Results returned from Laboratory for
+              Consultant review.
             </p>
 
-            {labRequests.filter(
-              (request) =>
-                String(request.patientId) === String(selectedPatient.id) &&
-                (request.status === "Result Ready" || request.status === "Sent to Consultant")
-            ).length === 0 ? (
-              <div style={{ padding: 15, background: "#f7f9fb", borderRadius: 8, color: "#71808d" }}>
-                No laboratory results are ready for review.
+            {readyLabResults.length === 0 ? (
+              <div
+                style={{
+                  marginTop: 15,
+                  padding: 15,
+                  background: "#f7f9fb",
+                  borderRadius: 8,
+                  color: "#71808d",
+                }}
+              >
+                No laboratory results are ready
+                for review.
               </div>
             ) : (
-              labRequests
-                .filter(
-                  (request) =>
-                    String(request.patientId) === String(selectedPatient.id) &&
-                    (request.status === "Result Ready" || request.status === "Sent to Consultant")
-                )
-                .map((request) => (
-                  <div key={request.id} style={{ border: "1px solid #e7ebef", borderRadius: 8, padding: 15, marginTop: 10 }}>
-                    <div style={{ display: "grid", gap: 8 }}>
-                      <div><strong>Test:</strong> {request.test}</div>
-                      <div><strong>Status:</strong> {request.status}</div>
-                      <div><strong>Date:</strong> {request.date}</div>
-                    </div>
-                    <div style={{ marginTop: 12, padding: 12, background: "#f7f9fb", borderRadius: 8 }}>
-                      <strong>Result</strong>
-                      <div style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
-                        {request.result || "No result entered yet."}
+              <div
+                style={{
+                  display: "grid",
+                  gap: 15,
+                  marginTop: 15,
+                }}
+              >
+                {readyLabResults.map((request) => (
+                  <div
+                    key={request.id}
+                    style={{
+                      border: "1px solid #dce3e8",
+                      borderRadius: 10,
+                      padding: 16,
+                      background: "#fff",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns:
+                          "repeat(2, minmax(0, 1fr))",
+                        gap: 15,
+                      }}
+                    >
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: "#71808d",
+                            marginBottom: 4,
+                          }}
+                        >
+                          Patient
+                        </div>
+
+                        <strong>
+                          {request.patientName}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: "#71808d",
+                            marginBottom: 4,
+                          }}
+                        >
+                          Card Number
+                        </div>
+
+                        <strong>
+                          {request.card}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: "#71808d",
+                            marginBottom: 4,
+                          }}
+                        >
+                          Laboratory Test
+                        </div>
+
+                        <strong>
+                          {request.test}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: "#71808d",
+                            marginBottom: 4,
+                          }}
+                        >
+                          Date
+                        </div>
+
+                        <strong>
+                          {request.date}
+                        </strong>
                       </div>
                     </div>
-                  </div>
-                ))
-            )}
-          </div>
 
-          {/* PHARMACY RESULTS / DISPENSING STATUS */}
-          <div className="panel" style={{ marginTop: 20 }}>
-            <h2 style={{ marginTop: 0 }}>Pharmacy Results</h2>
-            <p style={{ color: "#71808d" }}>
-              Prescription and dispensing status returned from Pharmacy.
-            </p>
+                    <div
+                      style={{
+                        marginTop: 15,
+                        padding: 15,
+                        background: "#f7f9fb",
+                        borderRadius: 8,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: "#71808d",
+                          fontWeight: 800,
+                          marginBottom: 6,
+                        }}
+                      >
+                        RESULT
+                      </div>
 
-            {pharmacyPrescriptions.filter(
-              (item) => String(item.patientId) === String(selectedPatient.id)
-            ).length === 0 ? (
-              <div style={{ padding: 15, background: "#f7f9fb", borderRadius: 8, color: "#71808d" }}>
-                No pharmacy prescription is available for this patient.
-              </div>
-            ) : (
-              pharmacyPrescriptions
-                .filter((item) => String(item.patientId) === String(selectedPatient.id))
-                .map((item) => (
-                  <div key={item.id} style={{ border: "1px solid #e7ebef", borderRadius: 8, padding: 15, marginTop: 10 }}>
-                    <div style={{ display: "grid", gap: 8 }}>
-                      <div><strong>Medicine:</strong> {item.medicine}</div>
-                      <div><strong>Quantity:</strong> {item.quantity}</div>
-                      <div><strong>Instructions:</strong> {item.instructions || "-"}</div>
-                      <div><strong>Duration:</strong> {item.duration || "-"}</div>
-                      <div><strong>Status:</strong> {item.status}</div>
-                      <div><strong>Payment:</strong> {item.paymentStatus || "Pending"}</div>
-                      {item.dispensedBy && <div><strong>Dispensed By:</strong> {item.dispensedBy}</div>}
-                      {item.dispensedAt && <div><strong>Dispensed At:</strong> {item.dispensedAt}</div>}
+                      <div
+                        style={{
+                          whiteSpace: "pre-wrap",
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        {request.result ||
+                          "No result entered yet."}
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 12 }}>
+                      <span className="status-badge active-status">
+                        {request.status}
+                      </span>
                     </div>
                   </div>
-                ))
+                ))}
+              </div>
             )}
           </div>
-
         </>
       )}
     </div>
   );
 }
+
 function StatCard({ title, value, icon, text }) {
   return (
     <div className="stat-card">
@@ -5526,7 +5662,7 @@ function PharmacyPage({
           </div>
 
           {/* AMOUNT PREVIEW */}
-          {medicine && (
+          {medicinesSelected.length > 0 && (
             <div
               style={{
                 marginTop: 20,
