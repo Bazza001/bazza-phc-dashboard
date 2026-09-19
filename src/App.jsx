@@ -2747,29 +2747,17 @@ function ConsultantPage({
 
     const request = {
       id: Date.now(),
-
       patientId: selectedPatient.id,
-
       card: getPatientCard(selectedPatient),
-
       patientName: getPatientName(selectedPatient),
-
       test: laboratoryTest,
-
       consultant: "Consultant Room",
-
       status: "New",
-
       paymentStatus: "Pending",
-
       paymentMethod: "Cash",
-
       amount,
-
       result: "",
-
       consultationNote,
-
       date: new Date().toLocaleString(),
     };
 
@@ -2788,6 +2776,15 @@ function ConsultantPage({
 
     setLaboratoryTest("");
   };
+
+  const readyLabResults = labRequests.filter(
+    (request) =>
+      request.patientId === selectedPatient?.id &&
+      (
+        request.status === "Result Ready" ||
+        request.status === "Sent to Consultant"
+      )
+  );
 
   return (
     <div>
@@ -2812,7 +2809,7 @@ function ConsultantPage({
 
         <StatCard
           title="Lab Requests"
-          value="6"
+          value={labRequests.length}
           icon="▣"
         />
 
@@ -3146,99 +3143,175 @@ function ConsultantPage({
               </button>
             </div>
           </div>
+
+          {/* LABORATORY RESULTS */}
+          <div
+            className="panel"
+            style={{ marginTop: 20 }}
+          >
+            <h2 style={{ marginTop: 0 }}>
+              Laboratory Results
+            </h2>
+
+            <p
+              style={{
+                marginTop: 0,
+                color: "#71808d",
+              }}
+            >
+              Results returned from Laboratory for
+              Consultant review.
+            </p>
+
+            {readyLabResults.length === 0 ? (
+              <div
+                style={{
+                  marginTop: 15,
+                  padding: 15,
+                  background: "#f7f9fb",
+                  borderRadius: 8,
+                  color: "#71808d",
+                }}
+              >
+                No laboratory results are ready
+                for review.
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: "grid",
+                  gap: 15,
+                  marginTop: 15,
+                }}
+              >
+                {readyLabResults.map((request) => (
+                  <div
+                    key={request.id}
+                    style={{
+                      border: "1px solid #dce3e8",
+                      borderRadius: 10,
+                      padding: 16,
+                      background: "#fff",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns:
+                          "repeat(2, minmax(0, 1fr))",
+                        gap: 15,
+                      }}
+                    >
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: "#71808d",
+                            marginBottom: 4,
+                          }}
+                        >
+                          Patient
+                        </div>
+
+                        <strong>
+                          {request.patientName}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: "#71808d",
+                            marginBottom: 4,
+                          }}
+                        >
+                          Card Number
+                        </div>
+
+                        <strong>
+                          {request.card}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: "#71808d",
+                            marginBottom: 4,
+                          }}
+                        >
+                          Laboratory Test
+                        </div>
+
+                        <strong>
+                          {request.test}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: "#71808d",
+                            marginBottom: 4,
+                          }}
+                        >
+                          Date
+                        </div>
+
+                        <strong>
+                          {request.date}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 15,
+                        padding: 15,
+                        background: "#f7f9fb",
+                        borderRadius: 8,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: "#71808d",
+                          fontWeight: 800,
+                          marginBottom: 6,
+                        }}
+                      >
+                        RESULT
+                      </div>
+
+                      <div
+                        style={{
+                          whiteSpace: "pre-wrap",
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        {request.result ||
+                          "No result entered yet."}
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 12 }}>
+                      <span className="status-badge active-status">
+                        {request.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </>
       )}
     </div>
   );
 }
-{/* Laboratory Results */}
-<div className="mt-6 rounded-xl border bg-white p-5 shadow-sm">
-  <div className="mb-4">
-    <h2 className="text-xl font-bold">Laboratory Results</h2>
-    <p className="text-sm text-gray-500">
-      Results returned from Laboratory for Consultant review.
-    </p>
-  </div>
-
-  {labRequests.filter(
-    (request) =>
-      request.status === "Result Ready" ||
-      request.status === "Sent to Consultant"
-  ).length === 0 ? (
-    <div className="rounded-lg bg-gray-50 p-4 text-sm text-gray-500">
-      No laboratory results are ready for review.
-    </div>
-  ) : (
-    <div className="space-y-4">
-      {labRequests
-        .filter(
-          (request) =>
-            request.status === "Result Ready" ||
-            request.status === "Sent to Consultant"
-        )
-        .map((request) => (
-          <div
-            key={request.id}
-            className="rounded-lg border p-4"
-          >
-            <div className="grid gap-3 md:grid-cols-2">
-              <div>
-                <p className="text-xs text-gray-500">
-                  Patient
-                </p>
-                <p className="font-semibold">
-                  {request.patientName}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-xs text-gray-500">
-                  Card Number
-                </p>
-                <p className="font-semibold">
-                  {request.card}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-xs text-gray-500">
-                  Laboratory Test
-                </p>
-                <p className="font-semibold">
-                  {request.test}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-xs text-gray-500">
-                  Date
-                </p>
-                <p className="font-semibold">
-                  {request.date}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 rounded-lg bg-gray-50 p-4">
-              <p className="mb-1 text-xs font-semibold text-gray-500">
-                RESULT
-              </p>
-
-              <p className="whitespace-pre-wrap">
-                {request.result || "No result entered yet."}
-              </p>
-            </div>
-
-            <div className="mt-3">
-              <span className="inline-flex rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
-                {request.status}
-              </span>
-            </div>
-          </div>
-        ))}
-    </div>
-  )}
-</div>
 
 function StatCard({ title, value, icon, text }) {
   return (
