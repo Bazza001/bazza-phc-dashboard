@@ -3809,43 +3809,6 @@ function PharmacyPage({
   const [paymentMethod, setPaymentMethod] = useState("Cash");
   const [paymentStatus, setPaymentStatus] = useState("Pending");
 
-  const [prescriptions, setPrescriptions] = useState([
-    {
-      id: "RX-001",
-      patientId: "BZ-P001",
-      patientName: "Aisha Musa",
-      card: "BZ-P001",
-      medicine: "Paracetamol 500mg",
-      quantity: 10,
-      instructions: "Take 1 tablet three times daily",
-      duration: "3 days",
-      consultant: "Consultant Room",
-      status: "New",
-      paymentStatus: "Pending",
-      paymentMethod: "Cash",
-      amount: 500,
-      date: new Date().toLocaleString(),
-      dispensedBy: "",
-    },
-    {
-      id: "RX-002",
-      patientId: "BZ-P002",
-      patientName: "Ibrahim Bello",
-      card: "BZ-P002",
-      medicine: "Amoxicillin 500mg",
-      quantity: 21,
-      instructions: "Take 1 capsule three times daily",
-      duration: "7 days",
-      consultant: "Consultant Room",
-      status: "New",
-      paymentStatus: "Paid",
-      paymentMethod: "POS",
-      amount: 1500,
-      date: new Date().toLocaleString(),
-      dispensedBy: "",
-    },
-  ]);
-
   const [stock, setStock] = useState([
     {
       id: 1,
