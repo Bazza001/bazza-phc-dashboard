@@ -3793,6 +3793,8 @@ select {
 `;
 function PharmacyPage({
   patients = [],
+  prescriptions,
+  setPrescriptions,
   showMessage,
   setTransactions,
 }) {
