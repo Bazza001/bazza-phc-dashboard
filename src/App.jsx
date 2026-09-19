@@ -137,6 +137,40 @@ function App() {
   const [staff, setStaff] = useState(initialStaff);
   const [patients, setPatients] = useState(demoPatients);
   const [transactions, setTransactions] = useState([]);
+  const [pharmacyPrescriptions, setPharmacyPrescriptions] = useState([
+  {
+    id: "RX-001",
+    patientId: 1,
+    patientName: "Aisha Musa",
+    card: "BZ-P001",
+    medicine: "Paracetamol 500mg",
+    quantity: 10,
+    instructions: "Take 1 tablet three times daily",
+    duration: "3 Days",
+    consultant: "Consultant Room",
+    status: "New",
+    paymentStatus: "Pending",
+    paymentMethod: "Cash",
+    amount: 500,
+    date: new Date().toLocaleString(),
+  },
+  {
+    id: "RX-002",
+    patientId: 2,
+    patientName: "Ibrahim Bello",
+    card: "BZ-P002",
+    medicine: "Amoxicillin 500mg",
+    quantity: 21,
+    instructions: "Take 1 capsule three times daily",
+    duration: "7 Days",
+    consultant: "Consultant Room",
+    status: "New",
+    paymentStatus: "Paid",
+    paymentMethod: "POS",
+    amount: 1500,
+    date: new Date().toLocaleString(),
+  },
+]);
   const [labRequests, setLabRequests] = useState([
     { id: 1, card: "BZ-P001", patientName: "Aisha Musa", test: "Malaria Test", consultant: "Consultant Room", status: "New", paymentStatus: "Pending", amount: 1500, date: "9/18/2026, 1:20:00 PM" },
     { id: 2, card: "BZ-P002", patientName: "Ibrahim Bello", test: "Full Blood Count (FBC)", consultant: "Consultant Room", status: "Sample Received", paymentStatus: "Paid", amount: 3000, date: "9/18/2026, 1:25:00 PM" },
