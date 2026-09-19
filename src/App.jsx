@@ -661,10 +661,12 @@ function App() {
 
           {page === "Pharmacy Unit" && (
   <PharmacyPage
-    patients={patients}
-    showMessage={showMessage}
-    setTransactions={setTransactions}
-  />
+  patients={patients}
+  prescriptions={pharmacyPrescriptions}
+  setPrescriptions={setPharmacyPrescriptions}
+  showMessage={showMessage}
+  setTransactions={setTransactions}
+/>
 )}
 
           {page === "Ultrasound Room" && (
