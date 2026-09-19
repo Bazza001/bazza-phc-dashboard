@@ -3151,6 +3151,94 @@ function ConsultantPage({
     </div>
   );
 }
+{/* Laboratory Results */}
+<div className="mt-6 rounded-xl border bg-white p-5 shadow-sm">
+  <div className="mb-4">
+    <h2 className="text-xl font-bold">Laboratory Results</h2>
+    <p className="text-sm text-gray-500">
+      Results returned from Laboratory for Consultant review.
+    </p>
+  </div>
+
+  {labRequests.filter(
+    (request) =>
+      request.status === "Result Ready" ||
+      request.status === "Sent to Consultant"
+  ).length === 0 ? (
+    <div className="rounded-lg bg-gray-50 p-4 text-sm text-gray-500">
+      No laboratory results are ready for review.
+    </div>
+  ) : (
+    <div className="space-y-4">
+      {labRequests
+        .filter(
+          (request) =>
+            request.status === "Result Ready" ||
+            request.status === "Sent to Consultant"
+        )
+        .map((request) => (
+          <div
+            key={request.id}
+            className="rounded-lg border p-4"
+          >
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <p className="text-xs text-gray-500">
+                  Patient
+                </p>
+                <p className="font-semibold">
+                  {request.patientName}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs text-gray-500">
+                  Card Number
+                </p>
+                <p className="font-semibold">
+                  {request.card}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs text-gray-500">
+                  Laboratory Test
+                </p>
+                <p className="font-semibold">
+                  {request.test}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs text-gray-500">
+                  Date
+                </p>
+                <p className="font-semibold">
+                  {request.date}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-lg bg-gray-50 p-4">
+              <p className="mb-1 text-xs font-semibold text-gray-500">
+                RESULT
+              </p>
+
+              <p className="whitespace-pre-wrap">
+                {request.result || "No result entered yet."}
+              </p>
+            </div>
+
+            <div className="mt-3">
+              <span className="inline-flex rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
+                {request.status}
+              </span>
+            </div>
+          </div>
+        ))}
+    </div>
+  )}
+</div>
 
 function StatCard({ title, value, icon, text }) {
   return (
