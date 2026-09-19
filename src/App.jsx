@@ -2570,12 +2570,23 @@ function ConsultantPage({
 
   const [consultationNote, setConsultationNote] = useState("");
 
+  const [laboratoryTest, setLaboratoryTest] = useState("");
+
   const medicines = [
     "Paracetamol 500mg",
     "Amoxicillin 500mg",
     "Metronidazole 400mg",
     "Artemether/Lumefantrine",
   ];
+
+  const laboratoryTests = {
+    "Malaria Test": 1500,
+    "Full Blood Count (FBC)": 3000,
+    "Urinalysis": 1000,
+    "Blood Group": 1000,
+    "Widal Test": 2000,
+    "Pregnancy Test": 1000,
+  };
 
   const filteredPatients = patients.filter((patient) => {
     const term = search.toLowerCase().trim();
@@ -2588,11 +2599,16 @@ function ConsultantPage({
     ).toLowerCase();
 
     const card = String(
-      patient.card || patient.cardNumber || patient.id || ""
+      patient.card ||
+        patient.cardNumber ||
+        patient.id ||
+        ""
     ).toLowerCase();
 
     const phone = String(
-      patient.phone || patient.phoneNumber || ""
+      patient.phone ||
+        patient.phoneNumber ||
+        ""
     ).toLowerCase();
 
     return (
@@ -2655,6 +2671,15 @@ function ConsultantPage({
       return;
     }
 
+    if (!setPharmacyPrescriptions) {
+      if (showMessage) {
+        showMessage(
+          "Pharmacy connection is not available."
+        );
+      }
+      return;
+    }
+
     const prescription = {
       id: `CONS-RX-${Date.now()}`,
       patientId: selectedPatient.id,
@@ -2672,16 +2697,10 @@ function ConsultantPage({
       date: new Date().toLocaleString(),
     };
 
-    /*
-      Temporary browser event.
-
-      Pharmacy will listen for this event and add the
-      prescription to its queue.
-    */
     setPharmacyPrescriptions((previous) => [
-  prescription,
-  ...previous,
-]);
+      prescription,
+      ...previous,
+    ]);
 
     if (showMessage) {
       showMessage(
@@ -2698,40 +2717,75 @@ function ConsultantPage({
   };
 
   const sendToLaboratory = () => {
-  if (!selectedPatient) {
-    if (showMessage) {
-      showMessage("Please select a patient first.");
+    if (!selectedPatient) {
+      if (showMessage) {
+        showMessage("Da farko zaɓi patient.");
+      }
+      return;
     }
-    return;
-  }
 
-  const labTest = "Malaria Test";
+    if (!laboratoryTest) {
+      if (showMessage) {
+        showMessage("Da farko zaɓi Laboratory Test.");
+      }
+      return;
+    }
 
-  const request = {
-    id: Date.now(),
-    card: getPatientCard(selectedPatient),
-    patientName: getPatientName(selectedPatient),
-    test: labTest,
-    consultant: "Consultant Room",
-    status: "New",
-    paymentStatus: "Pending",
-    amount: 1500,
-    date: new Date().toLocaleString(),
+    if (!setLabRequests) {
+      if (showMessage) {
+        showMessage(
+          "Laboratory connection is not available."
+        );
+      }
+      return;
+    }
+
+    const amount =
+      laboratoryTests[laboratoryTest] || 0;
+
+    const request = {
+      id: Date.now(),
+
+      patientId: selectedPatient.id,
+
+      card: getPatientCard(selectedPatient),
+
+      patientName: getPatientName(selectedPatient),
+
+      test: laboratoryTest,
+
+      consultant: "Consultant Room",
+
+      status: "New",
+
+      paymentStatus: "Pending",
+
+      paymentMethod: "Cash",
+
+      amount,
+
+      result: "",
+
+      consultationNote,
+
+      date: new Date().toLocaleString(),
+    };
+
+    setLabRequests((previous) => [
+      request,
+      ...previous,
+    ]);
+
+    if (showMessage) {
+      showMessage(
+        `${laboratoryTest} request an aika zuwa Laboratory domin ${getPatientName(
+          selectedPatient
+        )}.`
+      );
+    }
+
+    setLaboratoryTest("");
   };
-
-  setLabRequests((previous) => [
-    request,
-    ...previous,
-  ]);
-
-  if (showMessage) {
-    showMessage(
-      `${labTest} request sent to Laboratory for ${getPatientName(
-        selectedPatient
-      )}.`
-    );
-  }
-};
 
   return (
     <div>
@@ -2767,7 +2821,11 @@ function ConsultantPage({
         />
       </div>
 
-      <div className="panel" style={{ marginTop: 20 }}>
+      {/* PATIENT SEARCH */}
+      <div
+        className="panel"
+        style={{ marginTop: 20 }}
+      >
         <h2 style={{ marginTop: 0 }}>
           Select Patient
         </h2>
@@ -2782,7 +2840,10 @@ function ConsultantPage({
           <input
             className="search-input"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setSelectedPatient(null);
+            }}
             placeholder="Search patient by name, Card Number or phone..."
           />
 
@@ -2813,8 +2874,9 @@ function ConsultantPage({
                     color: "#71808d",
                   }}
                 >
-                  Card: {getPatientCard(patient)}{" "}
-                  • Phone:{" "}
+                  Card: {getPatientCard(patient)}
+                  {" • "}
+                  Phone:{" "}
                   {patient.phone ||
                     patient.phoneNumber ||
                     "-"}
@@ -2826,6 +2888,7 @@ function ConsultantPage({
 
       {selectedPatient && (
         <>
+          {/* PATIENT PROFILE */}
           <div
             className="panel"
             style={{ marginTop: 20 }}
@@ -2867,6 +2930,7 @@ function ConsultantPage({
             </div>
           </div>
 
+          {/* CONSULTATION */}
           <div
             className="panel"
             style={{ marginTop: 20 }}
@@ -2891,6 +2955,107 @@ function ConsultantPage({
             </label>
           </div>
 
+          {/* LABORATORY */}
+          <div
+            className="panel"
+            style={{ marginTop: 20 }}
+          >
+            <h2 style={{ marginTop: 0 }}>
+              Laboratory Services
+            </h2>
+
+            <p
+              style={{
+                marginTop: 0,
+                color: "#71808d",
+              }}
+            >
+              Select the laboratory test required
+              for this patient.
+            </p>
+
+            <div className="form-grid">
+              <label className="form-field">
+                <span>Laboratory Test</span>
+
+                <select
+                  value={laboratoryTest}
+                  onChange={(e) =>
+                    setLaboratoryTest(e.target.value)
+                  }
+                >
+                  <option value="">
+                    Select Laboratory Test
+                  </option>
+
+                  {Object.entries(
+                    laboratoryTests
+                  ).map(([name, price]) => (
+                    <option
+                      key={name}
+                      value={name}
+                    >
+                      {name} — ₦
+                      {price.toLocaleString()}
+                    </option>
+                  ))}
+
+                  <option value="Others">
+                    Others
+                  </option>
+                </select>
+              </label>
+            </div>
+
+            {laboratoryTest && (
+              <div
+                style={{
+                  marginTop: 15,
+                  padding: 15,
+                  background: "#f7f9fb",
+                  borderRadius: 8,
+                }}
+              >
+                <strong>
+                  Selected Test:
+                </strong>{" "}
+                {laboratoryTest}
+
+                {laboratoryTests[
+                  laboratoryTest
+                ] && (
+                  <>
+                    {" • "}
+                    <strong>
+                      ₦
+                      {laboratoryTests[
+                        laboratoryTest
+                      ].toLocaleString()}
+                    </strong>
+                  </>
+                )}
+              </div>
+            )}
+
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                marginTop: 18,
+                flexWrap: "wrap",
+              }}
+            >
+              <button
+                type="button"
+                className="button primary"
+                onClick={sendToLaboratory}
+              >
+                Send Request to Laboratory
+              </button>
+            </div>
+          </div>
+
+          {/* PHARMACY */}
           <div
             className="panel"
             style={{ marginTop: 20 }}
@@ -2914,7 +3079,10 @@ function ConsultantPage({
                   </option>
 
                   {medicines.map((item) => (
-                    <option key={item} value={item}>
+                    <option
+                      key={item}
+                      value={item}
+                    >
                       {item}
                     </option>
                   ))}
@@ -2973,14 +3141,6 @@ function ConsultantPage({
                 onClick={sendToPharmacy}
               >
                 Send Prescription to Pharmacy
-              </button>
-
-              <button
-                type="button"
-                className="button secondary"
-                onClick={sendToLaboratory}
-              >
-                Create Laboratory Request
               </button>
             </div>
           </div>
