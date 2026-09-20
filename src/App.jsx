@@ -703,8 +703,17 @@ function App() {
             />
           )}
 
-          {["Child Ward", "Labour Room"].includes(page) && (
-            <ModulePage title={page} subtitle="Ward patient management and monitoring" icon="▣" stats={[["Occupied Beds", "18"], ["Available Beds", "12"], ["New Admissions", "4"], ["Discharges", "2"]]} />
+          {page === "Child Ward" && (
+            <ChildWardPage
+              patients={patients}
+              records={wardRecords}
+              setRecords={setWardRecords}
+              showMessage={showMessage}
+            />
+          )}
+
+          {page === "Labour Room" && (
+            <ModulePage title="Labour Room" subtitle="Labour room patient management and monitoring" icon="▣" stats={[["Occupied Beds", "18"], ["Available Beds", "12"], ["New Admissions", "4"], ["Discharges", "2"]]} />
           )}
 
           {[
@@ -6202,6 +6211,239 @@ function StatusBadge({ status }) {
     </span>
   );
 }
+function ChildWardPage({ patients = [], records = [], setRecords, showMessage }) {
+  const [view, setView] = useState("patients");
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState("");
+  const [bed, setBed] = useState("");
+  const [condition, setCondition] = useState("Stable");
+  const [age, setAge] = useState("");
+  const [guardian, setGuardian] = useState("");
+  const [relationship, setRelationship] = useState("");
+  const [diagnosis, setDiagnosis] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const wardRecords = records.filter((r) => r.ward === "Child Ward");
+  const beds = Array.from({ length: 12 }, (_, i) => `C-${String(i + 1).padStart(2, "0")}`);
+  const occupied = wardRecords.filter((r) => r.status === "Admitted");
+  const availableBeds = beds.filter((b) => !occupied.some((r) => r.bed === b));
+
+  const filteredPatients = patients.filter((p) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return [p.name, p.card, p.phone].some((v) => String(v || "").toLowerCase().includes(q));
+  });
+
+  const admit = () => {
+    const patient = patients.find((p) => String(p.id) === String(selectedId));
+    if (!patient) return showMessage("Zaɓi child patient daga ICT/Records.");
+    if (!bed) return showMessage("Zaɓi bed.");
+    if (occupied.some((r) => r.bed === bed)) return showMessage("Wannan bed ɗin yana occupied.");
+    if (!age.trim()) return showMessage("Shigar da shekarun yaro.");
+    if (!guardian.trim()) return showMessage("Shigar da sunan guardian/parent.");
+
+    const record = {
+      id: Date.now(),
+      ward: "Child Ward",
+      patientId: patient.id,
+      patientName: patient.name,
+      card: patient.card,
+      bed,
+      age: age.trim(),
+      guardian: guardian.trim(),
+      relationship: relationship || "Parent",
+      condition,
+      diagnosis: diagnosis.trim() || "Not specified",
+      notes: notes.trim(),
+      status: "Admitted",
+      admittedAt: new Date().toLocaleString(),
+      dischargedAt: "",
+    };
+
+    setRecords((prev) => [record, ...prev]);
+    showMessage(`${patient.name} an admitted zuwa Child Ward.`);
+    setSelectedId("");
+    setBed("");
+    setAge("");
+    setGuardian("");
+    setRelationship("");
+    setCondition("Stable");
+    setDiagnosis("");
+    setNotes("");
+    setView("patients");
+  };
+
+  const discharge = (id) => {
+    setRecords((prev) =>
+      prev.map((r) =>
+        r.id === id
+          ? { ...r, status: "Discharged", dischargedAt: new Date().toLocaleString() }
+          : r
+      )
+    );
+    showMessage("An yi discharge na child patient.");
+  };
+
+  const activePatients = occupied.filter((r) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return [r.patientName, r.card, r.bed, r.guardian, r.diagnosis, r.age]
+      .some((v) => String(v || "").toLowerCase().includes(q));
+  });
+
+  return (
+    <div>
+      <PageHeader
+        title="Child Ward"
+        subtitle="Child patient admission, bed assignment, monitoring, guardian details and discharge"
+        icon="C"
+      />
+
+      <div className="stats-grid">
+        <StatCard title="Occupied Beds" value={occupied.length} icon="▣" />
+        <StatCard title="Available Beds" value={availableBeds.length} icon="✓" />
+        <StatCard title="Current Patients" value={occupied.length} icon="👶" />
+        <StatCard title="Discharges" value={wardRecords.filter((r) => r.status === "Discharged").length} icon="↗" />
+      </div>
+
+      <div className="card">
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+          <button className={view === "patients" ? "primary" : "secondary"} onClick={() => setView("patients")}>Ward Patients</button>
+          <button className={view === "beds" ? "primary" : "secondary"} onClick={() => setView("beds")}>Bed Status</button>
+          <button className={view === "history" ? "primary" : "secondary"} onClick={() => setView("history")}>Discharge History</button>
+          <button className="primary" onClick={() => setView("admit")}>+ Admit Child Patient</button>
+        </div>
+
+        {view !== "admit" && (
+          <input
+            className="search"
+            placeholder="Search child, card, bed, guardian or diagnosis"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        )}
+
+        {view === "admit" && (
+          <div style={{ display: "grid", gap: 12, maxWidth: 760 }}>
+            <h2>Admit Child Patient</h2>
+
+            <label>
+              Patient
+              <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
+                <option value="">Select patient from ICT/Records</option>
+                {filteredPatients.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name} — {p.card}</option>
+                ))}
+              </select>
+            </label>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <label>
+                Age
+                <input value={age} onChange={(e) => setAge(e.target.value)} placeholder="e.g. 3 years / 8 months" />
+              </label>
+              <label>
+                Bed
+                <select value={bed} onChange={(e) => setBed(e.target.value)}>
+                  <option value="">Select available bed</option>
+                  {availableBeds.map((b) => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </label>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <label>
+                Guardian / Parent
+                <input value={guardian} onChange={(e) => setGuardian(e.target.value)} placeholder="Guardian name" />
+              </label>
+              <label>
+                Relationship
+                <select value={relationship} onChange={(e) => setRelationship(e.target.value)}>
+                  <option value="">Select relationship</option>
+                  <option>Parent</option>
+                  <option>Mother</option>
+                  <option>Father</option>
+                  <option>Guardian</option>
+                  <option>Other</option>
+                </select>
+              </label>
+            </div>
+
+            <label>
+              Condition
+              <select value={condition} onChange={(e) => setCondition(e.target.value)}>
+                <option>Stable</option>
+                <option>Under Observation</option>
+                <option>Needs Attention</option>
+                <option>Critical</option>
+              </select>
+            </label>
+
+            <label>
+              Diagnosis
+              <input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder="Diagnosis" />
+            </label>
+
+            <label>
+              Ward Notes
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Additional notes" />
+            </label>
+
+            <button className="primary" onClick={admit}>Admit Child Patient</button>
+          </div>
+        )}
+
+        {view === "patients" && (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Patient</th><th>Card No.</th><th>Age</th><th>Bed</th><th>Guardian</th><th>Condition</th><th>Diagnosis</th><th>Action</th></tr>
+              </thead>
+              <tbody>
+                {activePatients.map((r) => (
+                  <tr key={r.id}>
+                    <td>{r.patientName}</td><td>{r.card}</td><td>{r.age}</td><td>{r.bed}</td><td>{r.guardian}</td><td>{r.condition}</td><td>{r.diagnosis}</td>
+                    <td><button className="secondary" onClick={() => discharge(r.id)}>Discharge</button></td>
+                  </tr>
+                ))}
+                {activePatients.length === 0 && <tr><td colSpan="8">No admitted child patient found.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {view === "beds" && (
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Bed</th><th>Status</th><th>Patient</th><th>Card No.</th><th>Guardian</th></tr></thead>
+              <tbody>
+                {beds.map((b) => {
+                  const r = occupied.find((x) => x.bed === b);
+                  return <tr key={b}><td>{b}</td><td>{r ? "Occupied" : "Available"}</td><td>{r ? r.patientName : "—"}</td><td>{r ? r.card : "—"}</td><td>{r ? r.guardian : "—"}</td></tr>;
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {view === "history" && (
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Patient</th><th>Card No.</th><th>Age</th><th>Bed</th><th>Guardian</th><th>Admitted</th><th>Discharged</th></tr></thead>
+              <tbody>
+                {wardRecords.filter((r) => r.status === "Discharged").map((r) => (
+                  <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.age}</td><td>{r.bed}</td><td>{r.guardian}</td><td>{r.admittedAt}</td><td>{r.dischargedAt}</td></tr>
+                ))}
+                {wardRecords.filter((r) => r.status === "Discharged").length === 0 && <tr><td colSpan="7">No discharge history found.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function MaternityWardPage({ patients = [], records = [], setRecords, showMessage }) {
   const [view, setView] = useState("patients");
   const [selectedId, setSelectedId] = useState("");
