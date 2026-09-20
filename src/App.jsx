@@ -137,6 +137,20 @@ function App() {
   const [staff, setStaff] = useState(initialStaff);
   const [patients, setPatients] = useState(demoPatients);
   const [transactions, setTransactions] = useState([]);
+  const [maleWardRecords, setMaleWardRecords] = useState([
+    {
+      id: "MW-001",
+      patientId: 2,
+      card: "BZ-P002",
+      patientName: "Ibrahim Bello",
+      bed: "M-02",
+      admissionDate: "9/20/2026",
+      condition: "Stable",
+      diagnosis: "Under observation",
+      notes: "Routine ward monitoring",
+      status: "Admitted",
+    },
+  ]);
   const [pharmacyPrescriptions, setPharmacyPrescriptions] = useState([
   {
     id: "RX-001",
@@ -685,8 +699,16 @@ function App() {
             />
           )}
 
+          {page === "Male Ward" && (
+            <MaleWardPage
+              patients={patients}
+              records={maleWardRecords}
+              setRecords={setMaleWardRecords}
+              showMessage={showMessage}
+            />
+          )}
+
           {[
-            "Male Ward",
             "Female Ward",
             "Maternity Ward",
             "Child Ward",
@@ -2503,6 +2525,287 @@ function AuditPage({ currentUser }) {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+function MaleWardPage({ patients = [], records = [], setRecords, showMessage }) {
+  const [view, setView] = useState("patients");
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState(null);
+  const [showAdmit, setShowAdmit] = useState(false);
+  const [admitPatientId, setAdmitPatientId] = useState("");
+  const [admitBed, setAdmitBed] = useState("");
+  const [admitDiagnosis, setAdmitDiagnosis] = useState("");
+  const [admitNotes, setAdmitNotes] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+
+  const malePatients = patients.filter((p) => p.sex === "Male");
+  const activeRecords = records.filter((r) => r.status === "Admitted");
+  const dischargedRecords = records.filter((r) => r.status === "Discharged");
+
+  const beds = Array.from({ length: 12 }, (_, i) => `M-${String(i + 1).padStart(2, "0")}`);
+  const occupiedBeds = activeRecords.map((r) => r.bed).filter(Boolean);
+  const availableBeds = beds.filter((bed) => !occupiedBeds.includes(bed));
+
+  const selectedRecord = records.find((r) => r.id === selectedId) || null;
+
+  const filteredRecords = activeRecords.filter((r) => {
+    const q = search.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      r.patientName.toLowerCase().includes(q) ||
+      r.card.toLowerCase().includes(q) ||
+      r.bed.toLowerCase().includes(q) ||
+      r.diagnosis.toLowerCase().includes(q)
+    );
+  });
+
+  const admittedPatientIds = new Set(activeRecords.map((r) => r.patientId));
+  const patientsAvailableForAdmission = malePatients.filter((p) => !admittedPatientIds.has(p.id));
+
+  const admitPatient = () => {
+    const patient = malePatients.find((p) => String(p.id) === String(admitPatientId));
+    if (!patient) {
+      showMessage("Da farko ka zabi patient.");
+      return;
+    }
+    if (!admitBed) {
+      showMessage("Da farko ka zabi bed.");
+      return;
+    }
+    if (occupiedBeds.includes(admitBed)) {
+      showMessage("Wannan bed din yana dauke da patient.");
+      return;
+    }
+
+    const record = {
+      id: `MW-${String(Date.now()).slice(-6)}`,
+      patientId: patient.id,
+      card: patient.card,
+      patientName: patient.name,
+      bed: admitBed,
+      admissionDate: new Date().toLocaleDateString(),
+      condition: "Stable",
+      diagnosis: admitDiagnosis || "Not yet diagnosed",
+      notes: admitNotes || "",
+      status: "Admitted",
+    };
+
+    setRecords((prev) => [record, ...prev]);
+    setSelectedId(record.id);
+    setAdmitPatientId("");
+    setAdmitBed("");
+    setAdmitDiagnosis("");
+    setAdmitNotes("");
+    setShowAdmit(false);
+    setView("patients");
+    showMessage(`${patient.name} an shiga Male Ward.`);
+  };
+
+  const updateRecord = (id, changes) => {
+    setRecords((prev) => prev.map((r) => (r.id === id ? { ...r, ...changes } : r)));
+  };
+
+  const dischargePatient = (record) => {
+    if (!record) return;
+    updateRecord(record.id, {
+      status: "Discharged",
+      dischargeDate: new Date().toLocaleDateString(),
+    });
+    setSelectedId(null);
+    setEditNotes("");
+    showMessage(`${record.patientName} an fita daga Male Ward.`);
+  };
+
+  return (
+    <div style={{ padding: 24 }}>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 12, color: "#74808b", marginBottom: 5 }}>WARDS / MALE WARD</div>
+        <h1 style={{ margin: 0, color: "#263442", fontSize: 24 }}>Male Ward</h1>
+        <p style={{ margin: "7px 0 0", color: "#71808c", fontSize: 13 }}>
+          Male patient admission, bed assignment, monitoring, notes and discharge.
+        </p>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12, marginBottom: 18 }}>
+        {[
+          ["Occupied Beds", activeRecords.length],
+          ["Available Beds", availableBeds.length],
+          ["New Admissions", records.filter((r) => r.admissionDate === new Date().toLocaleDateString() && r.status === "Admitted").length],
+          ["Discharges", dischargedRecords.length],
+        ].map(([label, value]) => (
+          <div key={label} style={{ background: "#fff", border: "1px solid #e4e9ed", borderRadius: 10, padding: 15 }}>
+            <div style={{ color: "#7a8791", fontSize: 11, fontWeight: 800 }}>{label}</div>
+            <div style={{ marginTop: 6, fontSize: 24, fontWeight: 900, color: "#263442" }}>{value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 15 }}>
+        {[
+          ["patients", "Ward Patients"],
+          ["beds", "Bed Status"],
+          ["history", "Discharge History"],
+        ].map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setView(key)}
+            style={{
+              ...secondaryButtonStyle,
+              background: view === key ? "#18a56b" : "#fff",
+              color: view === key ? "#fff" : "#465360",
+              borderColor: view === key ? "#18a56b" : "#dce3e8",
+            }}
+          >
+            {label}
+          </button>
+        ))}
+        <button type="button" onClick={() => setShowAdmit(true)} style={{ ...primaryButtonStyle, marginLeft: "auto" }}>
+          + Admit Male Patient
+        </button>
+      </div>
+
+      {view === "patients" && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 240px", gap: 12, marginBottom: 15 }}>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search patient name, card number, bed or diagnosis..."
+              style={inputStyle}
+            />
+            <select value={selectedId || ""} onChange={(e) => setSelectedId(e.target.value || null)} style={inputStyle}>
+              <option value="">Select patient</option>
+              {activeRecords.map((r) => <option key={r.id} value={r.id}>{r.patientName} — {r.card}</option>)}
+            </select>
+          </div>
+
+          <div style={{ background: "#fff", border: "1px solid #e4e9ed", borderRadius: 10, overflow: "hidden" }}>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+                <thead>
+                  <tr>
+                    <th style={tableHeadStyle}>Patient</th>
+                    <th style={tableHeadStyle}>Card No.</th>
+                    <th style={tableHeadStyle}>Bed</th>
+                    <th style={tableHeadStyle}>Condition</th>
+                    <th style={tableHeadStyle}>Diagnosis</th>
+                    <th style={tableHeadStyle}>Status</th>
+                    <th style={tableHeadStyle}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRecords.length === 0 ? (
+                    <tr><td colSpan="7" style={{ padding: 25, textAlign: "center", color: "#7a8791" }}>No admitted male patient found.</td></tr>
+                  ) : filteredRecords.map((r) => (
+                    <tr key={r.id}>
+                      <td style={tableCellStyle}><strong>{r.patientName}</strong></td>
+                      <td style={tableCellStyle}>{r.card}</td>
+                      <td style={tableCellStyle}><strong>{r.bed}</strong></td>
+                      <td style={tableCellStyle}>{r.condition}</td>
+                      <td style={tableCellStyle}>{r.diagnosis}</td>
+                      <td style={tableCellStyle}><StatusBadge status={r.status} /></td>
+                      <td style={tableCellStyle}>
+                        <button type="button" onClick={() => { setSelectedId(r.id); setEditNotes(r.notes || ""); }} style={smallButtonStyle}>Open</button>
+                        <button type="button" onClick={() => dischargePatient(r)} style={{ ...smallButtonStyle, color: "#9a4545" }}>Discharge</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {view === "beds" && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
+          {beds.map((bed) => {
+            const occupant = activeRecords.find((r) => r.bed === bed);
+            return (
+              <div key={bed} style={{ border: "1px solid #e4e9ed", borderRadius: 10, padding: 15, background: "#fff" }}>
+                <div style={{ fontWeight: 900, color: "#263442" }}>{bed}</div>
+                <div style={{ marginTop: 7, fontSize: 12, color: occupant ? "#9a6b16" : "#287453", fontWeight: 800 }}>
+                  {occupant ? `Occupied — ${occupant.patientName}` : "Available"}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {view === "history" && (
+        <div style={{ background: "#fff", border: "1px solid #e4e9ed", borderRadius: 10, overflow: "hidden" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr><th style={tableHeadStyle}>Patient</th><th style={tableHeadStyle}>Card</th><th style={tableHeadStyle}>Bed</th><th style={tableHeadStyle}>Admission</th><th style={tableHeadStyle}>Discharge</th></tr></thead>
+            <tbody>
+              {dischargedRecords.length === 0 ? (
+                <tr><td colSpan="5" style={{ padding: 25, textAlign: "center", color: "#7a8791" }}>No discharge history yet.</td></tr>
+              ) : dischargedRecords.map((r) => (
+                <tr key={r.id}>
+                  <td style={tableCellStyle}>{r.patientName}</td><td style={tableCellStyle}>{r.card}</td><td style={tableCellStyle}>{r.bed}</td><td style={tableCellStyle}>{r.admissionDate}</td><td style={tableCellStyle}>{r.dischargeDate || "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {selectedRecord && selectedRecord.status === "Admitted" && (
+        <div style={{ marginTop: 18, background: "#fff", border: "1px solid #e4e9ed", borderRadius: 10, padding: 18 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 15 }}>
+            <div>
+              <div style={{ color: "#74808b", fontSize: 11, fontWeight: 800 }}>SELECTED PATIENT</div>
+              <h3 style={{ margin: "4px 0", color: "#263442" }}>{selectedRecord.patientName}</h3>
+              <div style={{ color: "#71808c", fontSize: 12 }}>{selectedRecord.card} · Bed {selectedRecord.bed}</div>
+            </div>
+            <StatusBadge status={selectedRecord.status} />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 }}>
+            <div><label style={labelStyle}>Condition</label><select value={selectedRecord.condition} onChange={(e) => updateRecord(selectedRecord.id, { condition: e.target.value })} style={inputStyle}><option>Stable</option><option>Under Observation</option><option>Needs Attention</option><option>Critical</option></select></div>
+            <div><label style={labelStyle}>Bed</label><select value={selectedRecord.bed} onChange={(e) => updateRecord(selectedRecord.id, { bed: e.target.value })} style={inputStyle}>{beds.filter((b) => b === selectedRecord.bed || !occupiedBeds.includes(b)).map((b) => <option key={b}>{b}</option>)}</select></div>
+            <div><label style={labelStyle}>Diagnosis</label><input value={selectedRecord.diagnosis} onChange={(e) => updateRecord(selectedRecord.id, { diagnosis: e.target.value })} style={inputStyle} /></div>
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            <label style={labelStyle}>Ward Notes / Additional Notes</label>
+            <textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows="4" style={{ ...inputStyle, resize: "vertical" }} />
+          </div>
+
+          <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" onClick={() => { updateRecord(selectedRecord.id, { notes: editNotes }); showMessage("Male Ward notes sun sabunta."); }} style={primaryButtonStyle}>Save Ward Notes</button>
+            <button type="button" onClick={() => dischargePatient(selectedRecord)} style={{ ...secondaryButtonStyle, color: "#9a4545" }}>Discharge Patient</button>
+          </div>
+        </div>
+      )}
+
+      {showAdmit && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.35)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 1000 }}>
+          <div style={{ width: "min(620px, 100%)", background: "#fff", borderRadius: 12, padding: 20, boxSizing: "border-box" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <h2 style={{ margin: 0, color: "#263442", fontSize: 19 }}>Admit Male Patient</h2>
+              <button type="button" onClick={() => setShowAdmit(false)} style={secondaryButtonStyle}>Close</button>
+            </div>
+
+            {patientsAvailableForAdmission.length === 0 ? (
+              <div style={{ padding: 18, background: "#f7f9fb", borderRadius: 8, color: "#687582" }}>No male patient is currently available for admission.</div>
+            ) : (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div><label style={labelStyle}>Patient / Card Number</label><select value={admitPatientId} onChange={(e) => setAdmitPatientId(e.target.value)} style={inputStyle}><option value="">Select male patient</option>{patientsAvailableForAdmission.map((p) => <option key={p.id} value={p.id}>{p.name} — {p.card}</option>)}</select></div>
+                  <div><label style={labelStyle}>Bed</label><select value={admitBed} onChange={(e) => setAdmitBed(e.target.value)} style={inputStyle}><option value="">Select available bed</option>{availableBeds.map((b) => <option key={b}>{b}</option>)}</select></div>
+                </div>
+                <div style={{ marginTop: 12 }}><label style={labelStyle}>Diagnosis / Reason for Admission</label><input value={admitDiagnosis} onChange={(e) => setAdmitDiagnosis(e.target.value)} style={inputStyle} placeholder="Enter diagnosis or reason" /></div>
+                <div style={{ marginTop: 12 }}><label style={labelStyle}>Admission Notes</label><textarea value={admitNotes} onChange={(e) => setAdmitNotes(e.target.value)} rows="4" style={{ ...inputStyle, resize: "vertical" }} placeholder="Additional ward notes" /></div>
+                <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end", gap: 8 }}><button type="button" onClick={() => setShowAdmit(false)} style={secondaryButtonStyle}>Cancel</button><button type="button" onClick={admitPatient} style={primaryButtonStyle}>Admit Patient</button></div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
