@@ -137,20 +137,6 @@ function App() {
   const [staff, setStaff] = useState(initialStaff);
   const [patients, setPatients] = useState(demoPatients);
   const [transactions, setTransactions] = useState([]);
-  const [maleWardRecords, setMaleWardRecords] = useState([
-    {
-      id: "MW-001",
-      patientId: 2,
-      card: "BZ-P002",
-      patientName: "Ibrahim Bello",
-      bed: "M-02",
-      admissionDate: "9/20/2026",
-      condition: "Stable",
-      diagnosis: "Under observation",
-      notes: "Routine ward monitoring",
-      status: "Admitted",
-    },
-  ]);
   const [pharmacyPrescriptions, setPharmacyPrescriptions] = useState([
   {
     id: "RX-001",
@@ -190,6 +176,7 @@ function App() {
     { id: 2, card: "BZ-P002", patientName: "Ibrahim Bello", test: "Full Blood Count (FBC)", consultant: "Consultant Room", status: "Sample Received", paymentStatus: "Paid", amount: 3000, date: "9/18/2026, 1:25:00 PM" },
     { id: 3, card: "BZ-P003", patientName: "Fatima Yusuf", test: "Urinalysis", consultant: "Consultant Room", status: "In Progress", paymentStatus: "Paid", amount: 1000, date: "9/18/2026, 1:30:00 PM" },
   ]);
+  const [wardRecords, setWardRecords] = useState([]);
   const [search, setSearch] = useState("");
   const [loginForm, setLoginForm] = useState({
     username: "",
@@ -700,31 +687,24 @@ function App() {
           )}
 
           {page === "Male Ward" && (
-            <MaleWardPage
+            <MaleWardPage patients={patients} records={wardRecords} setRecords={setWardRecords} showMessage={showMessage} />
+          )}
+
+          {page === "Female Ward" && (
+            <FemaleWardPage patients={patients} records={wardRecords} setRecords={setWardRecords} showMessage={showMessage} />
+          )}
+
+          {page === "Maternity Ward" && (
+            <MaternityWardPage
               patients={patients}
-              records={maleWardRecords}
-              setRecords={setMaleWardRecords}
+              records={wardRecords}
+              setRecords={setWardRecords}
               showMessage={showMessage}
             />
           )}
 
-          {[
-            "Female Ward",
-            "Maternity Ward",
-            "Child Ward",
-            "Labour Room",
-          ].includes(page) && (
-            <ModulePage
-              title={page}
-              subtitle="Ward patient management and monitoring"
-              icon="▣"
-              stats={[
-                ["Occupied Beds", "18"],
-                ["Available Beds", "12"],
-                ["New Admissions", "4"],
-                ["Discharges", "2"],
-              ]}
-            />
+          {["Child Ward", "Labour Room"].includes(page) && (
+            <ModulePage title={page} subtitle="Ward patient management and monitoring" icon="▣" stats={[["Occupied Beds", "18"], ["Available Beds", "12"], ["New Admissions", "4"], ["Discharges", "2"]]} />
           )}
 
           {[
@@ -2529,287 +2509,6 @@ function AuditPage({ currentUser }) {
   );
 }
 
-function MaleWardPage({ patients = [], records = [], setRecords, showMessage }) {
-  const [view, setView] = useState("patients");
-  const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState(null);
-  const [showAdmit, setShowAdmit] = useState(false);
-  const [admitPatientId, setAdmitPatientId] = useState("");
-  const [admitBed, setAdmitBed] = useState("");
-  const [admitDiagnosis, setAdmitDiagnosis] = useState("");
-  const [admitNotes, setAdmitNotes] = useState("");
-  const [editNotes, setEditNotes] = useState("");
-
-  const malePatients = patients.filter((p) => p.sex === "Male");
-  const activeRecords = records.filter((r) => r.status === "Admitted");
-  const dischargedRecords = records.filter((r) => r.status === "Discharged");
-
-  const beds = Array.from({ length: 12 }, (_, i) => `M-${String(i + 1).padStart(2, "0")}`);
-  const occupiedBeds = activeRecords.map((r) => r.bed).filter(Boolean);
-  const availableBeds = beds.filter((bed) => !occupiedBeds.includes(bed));
-
-  const selectedRecord = records.find((r) => r.id === selectedId) || null;
-
-  const filteredRecords = activeRecords.filter((r) => {
-    const q = search.toLowerCase().trim();
-    if (!q) return true;
-    return (
-      r.patientName.toLowerCase().includes(q) ||
-      r.card.toLowerCase().includes(q) ||
-      r.bed.toLowerCase().includes(q) ||
-      r.diagnosis.toLowerCase().includes(q)
-    );
-  });
-
-  const admittedPatientIds = new Set(activeRecords.map((r) => r.patientId));
-  const patientsAvailableForAdmission = malePatients.filter((p) => !admittedPatientIds.has(p.id));
-
-  const admitPatient = () => {
-    const patient = malePatients.find((p) => String(p.id) === String(admitPatientId));
-    if (!patient) {
-      showMessage("Da farko ka zabi patient.");
-      return;
-    }
-    if (!admitBed) {
-      showMessage("Da farko ka zabi bed.");
-      return;
-    }
-    if (occupiedBeds.includes(admitBed)) {
-      showMessage("Wannan bed din yana dauke da patient.");
-      return;
-    }
-
-    const record = {
-      id: `MW-${String(Date.now()).slice(-6)}`,
-      patientId: patient.id,
-      card: patient.card,
-      patientName: patient.name,
-      bed: admitBed,
-      admissionDate: new Date().toLocaleDateString(),
-      condition: "Stable",
-      diagnosis: admitDiagnosis || "Not yet diagnosed",
-      notes: admitNotes || "",
-      status: "Admitted",
-    };
-
-    setRecords((prev) => [record, ...prev]);
-    setSelectedId(record.id);
-    setAdmitPatientId("");
-    setAdmitBed("");
-    setAdmitDiagnosis("");
-    setAdmitNotes("");
-    setShowAdmit(false);
-    setView("patients");
-    showMessage(`${patient.name} an shiga Male Ward.`);
-  };
-
-  const updateRecord = (id, changes) => {
-    setRecords((prev) => prev.map((r) => (r.id === id ? { ...r, ...changes } : r)));
-  };
-
-  const dischargePatient = (record) => {
-    if (!record) return;
-    updateRecord(record.id, {
-      status: "Discharged",
-      dischargeDate: new Date().toLocaleDateString(),
-    });
-    setSelectedId(null);
-    setEditNotes("");
-    showMessage(`${record.patientName} an fita daga Male Ward.`);
-  };
-
-  return (
-    <div style={{ padding: 24 }}>
-      <div style={{ marginBottom: 18 }}>
-        <div style={{ fontSize: 12, color: "#74808b", marginBottom: 5 }}>WARDS / MALE WARD</div>
-        <h1 style={{ margin: 0, color: "#263442", fontSize: 24 }}>Male Ward</h1>
-        <p style={{ margin: "7px 0 0", color: "#71808c", fontSize: 13 }}>
-          Male patient admission, bed assignment, monitoring, notes and discharge.
-        </p>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12, marginBottom: 18 }}>
-        {[
-          ["Occupied Beds", activeRecords.length],
-          ["Available Beds", availableBeds.length],
-          ["New Admissions", records.filter((r) => r.admissionDate === new Date().toLocaleDateString() && r.status === "Admitted").length],
-          ["Discharges", dischargedRecords.length],
-        ].map(([label, value]) => (
-          <div key={label} style={{ background: "#fff", border: "1px solid #e4e9ed", borderRadius: 10, padding: 15 }}>
-            <div style={{ color: "#7a8791", fontSize: 11, fontWeight: 800 }}>{label}</div>
-            <div style={{ marginTop: 6, fontSize: 24, fontWeight: 900, color: "#263442" }}>{value}</div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 15 }}>
-        {[
-          ["patients", "Ward Patients"],
-          ["beds", "Bed Status"],
-          ["history", "Discharge History"],
-        ].map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setView(key)}
-            style={{
-              ...secondaryButtonStyle,
-              background: view === key ? "#18a56b" : "#fff",
-              color: view === key ? "#fff" : "#465360",
-              borderColor: view === key ? "#18a56b" : "#dce3e8",
-            }}
-          >
-            {label}
-          </button>
-        ))}
-        <button type="button" onClick={() => setShowAdmit(true)} style={{ ...primaryButtonStyle, marginLeft: "auto" }}>
-          + Admit Male Patient
-        </button>
-      </div>
-
-      {view === "patients" && (
-        <>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 240px", gap: 12, marginBottom: 15 }}>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search patient name, card number, bed or diagnosis..."
-              style={inputStyle}
-            />
-            <select value={selectedId || ""} onChange={(e) => setSelectedId(e.target.value || null)} style={inputStyle}>
-              <option value="">Select patient</option>
-              {activeRecords.map((r) => <option key={r.id} value={r.id}>{r.patientName} — {r.card}</option>)}
-            </select>
-          </div>
-
-          <div style={{ background: "#fff", border: "1px solid #e4e9ed", borderRadius: 10, overflow: "hidden" }}>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
-                <thead>
-                  <tr>
-                    <th style={tableHeadStyle}>Patient</th>
-                    <th style={tableHeadStyle}>Card No.</th>
-                    <th style={tableHeadStyle}>Bed</th>
-                    <th style={tableHeadStyle}>Condition</th>
-                    <th style={tableHeadStyle}>Diagnosis</th>
-                    <th style={tableHeadStyle}>Status</th>
-                    <th style={tableHeadStyle}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRecords.length === 0 ? (
-                    <tr><td colSpan="7" style={{ padding: 25, textAlign: "center", color: "#7a8791" }}>No admitted male patient found.</td></tr>
-                  ) : filteredRecords.map((r) => (
-                    <tr key={r.id}>
-                      <td style={tableCellStyle}><strong>{r.patientName}</strong></td>
-                      <td style={tableCellStyle}>{r.card}</td>
-                      <td style={tableCellStyle}><strong>{r.bed}</strong></td>
-                      <td style={tableCellStyle}>{r.condition}</td>
-                      <td style={tableCellStyle}>{r.diagnosis}</td>
-                      <td style={tableCellStyle}><StatusBadge status={r.status} /></td>
-                      <td style={tableCellStyle}>
-                        <button type="button" onClick={() => { setSelectedId(r.id); setEditNotes(r.notes || ""); }} style={smallButtonStyle}>Open</button>
-                        <button type="button" onClick={() => dischargePatient(r)} style={{ ...smallButtonStyle, color: "#9a4545" }}>Discharge</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
-      )}
-
-      {view === "beds" && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
-          {beds.map((bed) => {
-            const occupant = activeRecords.find((r) => r.bed === bed);
-            return (
-              <div key={bed} style={{ border: "1px solid #e4e9ed", borderRadius: 10, padding: 15, background: "#fff" }}>
-                <div style={{ fontWeight: 900, color: "#263442" }}>{bed}</div>
-                <div style={{ marginTop: 7, fontSize: 12, color: occupant ? "#9a6b16" : "#287453", fontWeight: 800 }}>
-                  {occupant ? `Occupied — ${occupant.patientName}` : "Available"}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {view === "history" && (
-        <div style={{ background: "#fff", border: "1px solid #e4e9ed", borderRadius: 10, overflow: "hidden" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead><tr><th style={tableHeadStyle}>Patient</th><th style={tableHeadStyle}>Card</th><th style={tableHeadStyle}>Bed</th><th style={tableHeadStyle}>Admission</th><th style={tableHeadStyle}>Discharge</th></tr></thead>
-            <tbody>
-              {dischargedRecords.length === 0 ? (
-                <tr><td colSpan="5" style={{ padding: 25, textAlign: "center", color: "#7a8791" }}>No discharge history yet.</td></tr>
-              ) : dischargedRecords.map((r) => (
-                <tr key={r.id}>
-                  <td style={tableCellStyle}>{r.patientName}</td><td style={tableCellStyle}>{r.card}</td><td style={tableCellStyle}>{r.bed}</td><td style={tableCellStyle}>{r.admissionDate}</td><td style={tableCellStyle}>{r.dischargeDate || "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {selectedRecord && selectedRecord.status === "Admitted" && (
-        <div style={{ marginTop: 18, background: "#fff", border: "1px solid #e4e9ed", borderRadius: 10, padding: 18 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 15 }}>
-            <div>
-              <div style={{ color: "#74808b", fontSize: 11, fontWeight: 800 }}>SELECTED PATIENT</div>
-              <h3 style={{ margin: "4px 0", color: "#263442" }}>{selectedRecord.patientName}</h3>
-              <div style={{ color: "#71808c", fontSize: 12 }}>{selectedRecord.card} · Bed {selectedRecord.bed}</div>
-            </div>
-            <StatusBadge status={selectedRecord.status} />
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 }}>
-            <div><label style={labelStyle}>Condition</label><select value={selectedRecord.condition} onChange={(e) => updateRecord(selectedRecord.id, { condition: e.target.value })} style={inputStyle}><option>Stable</option><option>Under Observation</option><option>Needs Attention</option><option>Critical</option></select></div>
-            <div><label style={labelStyle}>Bed</label><select value={selectedRecord.bed} onChange={(e) => updateRecord(selectedRecord.id, { bed: e.target.value })} style={inputStyle}>{beds.filter((b) => b === selectedRecord.bed || !occupiedBeds.includes(b)).map((b) => <option key={b}>{b}</option>)}</select></div>
-            <div><label style={labelStyle}>Diagnosis</label><input value={selectedRecord.diagnosis} onChange={(e) => updateRecord(selectedRecord.id, { diagnosis: e.target.value })} style={inputStyle} /></div>
-          </div>
-
-          <div style={{ marginTop: 12 }}>
-            <label style={labelStyle}>Ward Notes / Additional Notes</label>
-            <textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows="4" style={{ ...inputStyle, resize: "vertical" }} />
-          </div>
-
-          <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button type="button" onClick={() => { updateRecord(selectedRecord.id, { notes: editNotes }); showMessage("Male Ward notes sun sabunta."); }} style={primaryButtonStyle}>Save Ward Notes</button>
-            <button type="button" onClick={() => dischargePatient(selectedRecord)} style={{ ...secondaryButtonStyle, color: "#9a4545" }}>Discharge Patient</button>
-          </div>
-        </div>
-      )}
-
-      {showAdmit && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.35)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 1000 }}>
-          <div style={{ width: "min(620px, 100%)", background: "#fff", borderRadius: 12, padding: 20, boxSizing: "border-box" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <h2 style={{ margin: 0, color: "#263442", fontSize: 19 }}>Admit Male Patient</h2>
-              <button type="button" onClick={() => setShowAdmit(false)} style={secondaryButtonStyle}>Close</button>
-            </div>
-
-            {patientsAvailableForAdmission.length === 0 ? (
-              <div style={{ padding: 18, background: "#f7f9fb", borderRadius: 8, color: "#687582" }}>No male patient is currently available for admission.</div>
-            ) : (
-              <>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  <div><label style={labelStyle}>Patient / Card Number</label><select value={admitPatientId} onChange={(e) => setAdmitPatientId(e.target.value)} style={inputStyle}><option value="">Select male patient</option>{patientsAvailableForAdmission.map((p) => <option key={p.id} value={p.id}>{p.name} — {p.card}</option>)}</select></div>
-                  <div><label style={labelStyle}>Bed</label><select value={admitBed} onChange={(e) => setAdmitBed(e.target.value)} style={inputStyle}><option value="">Select available bed</option>{availableBeds.map((b) => <option key={b}>{b}</option>)}</select></div>
-                </div>
-                <div style={{ marginTop: 12 }}><label style={labelStyle}>Diagnosis / Reason for Admission</label><input value={admitDiagnosis} onChange={(e) => setAdmitDiagnosis(e.target.value)} style={inputStyle} placeholder="Enter diagnosis or reason" /></div>
-                <div style={{ marginTop: 12 }}><label style={labelStyle}>Admission Notes</label><textarea value={admitNotes} onChange={(e) => setAdmitNotes(e.target.value)} rows="4" style={{ ...inputStyle, resize: "vertical" }} placeholder="Additional ward notes" /></div>
-                <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end", gap: 8 }}><button type="button" onClick={() => setShowAdmit(false)} style={secondaryButtonStyle}>Cancel</button><button type="button" onClick={admitPatient} style={primaryButtonStyle}>Admit Patient</button></div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function ModulePage({ title, subtitle, icon, stats }) {
   return (
     <div>
@@ -2858,129 +2557,24 @@ function PageHeader({ title, subtitle, icon }) {
   );
 }
 
-function MultiSelectDropdown({ label, options = [], value = [], onChange, placeholder = "Select options" }) {
-  const [open, setOpen] = useState(false);
-  const selected = Array.isArray(value) ? value : [];
-
-  const toggle = (option) => {
-    onChange(
-      selected.includes(option)
-        ? selected.filter((item) => item !== option)
-        : [...selected, option]
-    );
-  };
-
-  return (
-    <div className="form-field" style={{ position: "relative" }}>
-      <span>{label}</span>
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        style={{
-          width: "100%",
-          minHeight: 44,
-          textAlign: "left",
-          padding: "10px 12px",
-          border: "1px solid #dce3e8",
-          borderRadius: 8,
-          background: "#fff",
-          cursor: "pointer",
-          color: selected.length ? "#17212b" : "#71808d",
-        }}
-      >
-        {selected.length ? `${selected.length} selected` : placeholder}
-      </button>
-
-      {selected.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-          {selected.map((item) => (
-            <span
-              key={item}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "5px 9px",
-                borderRadius: 999,
-                background: "#eef6ff",
-                border: "1px solid #cfe4f8",
-                fontSize: 12,
-              }}
-            >
-              {item}
-              <button
-                type="button"
-                onClick={() => toggle(item)}
-                style={{ border: 0, background: "transparent", cursor: "pointer", fontWeight: 800 }}
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-
-      {open && (
-        <div
-          style={{
-            position: "absolute",
-            zIndex: 20,
-            left: 0,
-            right: 0,
-            top: "100%",
-            marginTop: 5,
-            background: "#fff",
-            border: "1px solid #dce3e8",
-            borderRadius: 8,
-            boxShadow: "0 8px 24px rgba(0,0,0,.12)",
-            maxHeight: 240,
-            overflowY: "auto",
-          }}
-        >
-          {options.map((option) => (
-            <label
-              key={option}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 9,
-                padding: "10px 12px",
-                cursor: "pointer",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={selected.includes(option)}
-                onChange={() => toggle(option)}
-              />
-              <span>{option}</span>
-            </label>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function ConsultantPage({
   patients = [],
   showMessage,
   setPharmacyPrescriptions,
   setLabRequests,
   labRequests = [],
-  pharmacyPrescriptions = [],
 }) {
   const [search, setSearch] = useState("");
   const [selectedPatient, setSelectedPatient] = useState(null);
 
-  const [medicinesSelected, setMedicinesSelected] = useState([]);
+  const [medicine, setMedicine] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [instructions, setInstructions] = useState("");
   const [duration, setDuration] = useState("");
 
   const [consultationNote, setConsultationNote] = useState("");
 
-  const [laboratoryTestsSelected, setLaboratoryTestsSelected] = useState([]);
+  const [laboratoryTest, setLaboratoryTest] = useState("");
 
   const medicines = [
     "Paracetamol 500mg",
@@ -3061,29 +2655,41 @@ function ConsultantPage({
 
   const sendToPharmacy = () => {
     if (!selectedPatient) {
-      showMessage?.("Please select a patient first.");
-      return;
-    }
-    if (!medicinesSelected.length) {
-      showMessage?.("Please select at least one medicine.");
-      return;
-    }
-    if (!quantity || Number(quantity) < 1) {
-      showMessage?.("Please enter a valid quantity.");
-      return;
-    }
-    if (!setPharmacyPrescriptions) {
-      showMessage?.("Pharmacy connection is not available.");
+      if (showMessage) {
+        showMessage("Please select a patient first.");
+      }
       return;
     }
 
-    const now = Date.now();
-    const prescriptions = medicinesSelected.map((item, index) => ({
-      id: `CONS-RX-${now}-${index + 1}`,
+    if (!medicine) {
+      if (showMessage) {
+        showMessage("Please select medicine.");
+      }
+      return;
+    }
+
+    if (!quantity || Number(quantity) < 1) {
+      if (showMessage) {
+        showMessage("Please enter a valid quantity.");
+      }
+      return;
+    }
+
+    if (!setPharmacyPrescriptions) {
+      if (showMessage) {
+        showMessage(
+          "Pharmacy connection is not available."
+        );
+      }
+      return;
+    }
+
+    const prescription = {
+      id: `CONS-RX-${Date.now()}`,
       patientId: selectedPatient.id,
       patientName: getPatientName(selectedPatient),
       card: getPatientCard(selectedPatient),
-      medicine: item,
+      medicine,
       quantity: Number(quantity),
       instructions,
       duration,
@@ -3093,15 +2699,22 @@ function ConsultantPage({
       paymentMethod: "Cash",
       amount: 0,
       date: new Date().toLocaleString(),
-    }));
+    };
 
     setPharmacyPrescriptions((previous) => [
-      ...prescriptions,
+      prescription,
       ...previous,
     ]);
 
-    showMessage?.(`${medicinesSelected.length} medicine(s) prescription sent to Pharmacy for ${getPatientName(selectedPatient)}.`);
-    setMedicinesSelected([]);
+    if (showMessage) {
+      showMessage(
+        `${medicine} prescription sent to Pharmacy for ${getPatientName(
+          selectedPatient
+        )}.`
+      );
+    }
+
+    setMedicine("");
     setQuantity(1);
     setInstructions("");
     setDuration("");
@@ -3109,38 +2722,61 @@ function ConsultantPage({
 
   const sendToLaboratory = () => {
     if (!selectedPatient) {
-      showMessage?.("Da farko zaɓi patient.");
-      return;
-    }
-    if (!laboratoryTestsSelected.length) {
-      showMessage?.("Da farko zaɓi aƙalla Laboratory Test ɗaya.");
-      return;
-    }
-    if (!setLabRequests) {
-      showMessage?.("Laboratory connection is not available.");
+      if (showMessage) {
+        showMessage("Da farko zaɓi patient.");
+      }
       return;
     }
 
-    const now = Date.now();
-    const requests = laboratoryTestsSelected.map((test, index) => ({
-      id: now + index,
+    if (!laboratoryTest) {
+      if (showMessage) {
+        showMessage("Da farko zaɓi Laboratory Test.");
+      }
+      return;
+    }
+
+    if (!setLabRequests) {
+      if (showMessage) {
+        showMessage(
+          "Laboratory connection is not available."
+        );
+      }
+      return;
+    }
+
+    const amount =
+      laboratoryTests[laboratoryTest] || 0;
+
+    const request = {
+      id: Date.now(),
       patientId: selectedPatient.id,
       card: getPatientCard(selectedPatient),
       patientName: getPatientName(selectedPatient),
-      test,
+      test: laboratoryTest,
       consultant: "Consultant Room",
       status: "New",
       paymentStatus: "Pending",
       paymentMethod: "Cash",
-      amount: laboratoryTests[test] || 0,
+      amount,
       result: "",
       consultationNote,
       date: new Date().toLocaleString(),
-    }));
+    };
 
-    setLabRequests((previous) => [...requests, ...previous]);
-    showMessage?.(`${laboratoryTestsSelected.length} laboratory request(s) an aika zuwa Laboratory domin ${getPatientName(selectedPatient)}.`);
-    setLaboratoryTestsSelected([]);
+    setLabRequests((previous) => [
+      request,
+      ...previous,
+    ]);
+
+    if (showMessage) {
+      showMessage(
+        `${laboratoryTest} request an aika zuwa Laboratory domin ${getPatientName(
+          selectedPatient
+        )}.`
+      );
+    }
+
+    setLaboratoryTest("");
   };
 
   const readyLabResults = labRequests.filter(
@@ -3340,16 +2976,39 @@ function ConsultantPage({
             </p>
 
             <div className="form-grid">
-              <MultiSelectDropdown
-                label="Laboratory Tests"
-                options={[...Object.keys(laboratoryTests), "Others"]}
-                value={laboratoryTestsSelected}
-                onChange={setLaboratoryTestsSelected}
-                placeholder="Select one or more laboratory tests"
-              />
+              <label className="form-field">
+                <span>Laboratory Test</span>
+
+                <select
+                  value={laboratoryTest}
+                  onChange={(e) =>
+                    setLaboratoryTest(e.target.value)
+                  }
+                >
+                  <option value="">
+                    Select Laboratory Test
+                  </option>
+
+                  {Object.entries(
+                    laboratoryTests
+                  ).map(([name, price]) => (
+                    <option
+                      key={name}
+                      value={name}
+                    >
+                      {name} — ₦
+                      {price.toLocaleString()}
+                    </option>
+                  ))}
+
+                  <option value="Others">
+                    Others
+                  </option>
+                </select>
+              </label>
             </div>
 
-            {laboratoryTestsSelected.length > 0 && (
+            {laboratoryTest && (
               <div
                 style={{
                   marginTop: 15,
@@ -3358,7 +3017,24 @@ function ConsultantPage({
                   borderRadius: 8,
                 }}
               >
-                <strong>Selected Tests:</strong> {laboratoryTestsSelected.join(", ")}
+                <strong>
+                  Selected Test:
+                </strong>{" "}
+                {laboratoryTest}
+
+                {laboratoryTests[
+                  laboratoryTest
+                ] && (
+                  <>
+                    {" • "}
+                    <strong>
+                      ₦
+                      {laboratoryTests[
+                        laboratoryTest
+                      ].toLocaleString()}
+                    </strong>
+                  </>
+                )}
               </div>
             )}
 
@@ -3390,13 +3066,29 @@ function ConsultantPage({
             </h2>
 
             <div className="form-grid">
-              <MultiSelectDropdown
-                label="Medicine"
-                options={medicines}
-                value={medicinesSelected}
-                onChange={setMedicinesSelected}
-                placeholder="Select one or more medicines"
-              />
+              <label className="form-field">
+                <span>Medicine</span>
+
+                <select
+                  value={medicine}
+                  onChange={(e) =>
+                    setMedicine(e.target.value)
+                  }
+                >
+                  <option value="">
+                    Select medicine
+                  </option>
+
+                  {medicines.map((item) => (
+                    <option
+                      key={item}
+                      value={item}
+                    >
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
               <label className="form-field">
                 <span>Quantity</span>
@@ -3614,35 +3306,6 @@ function ConsultantPage({
                     </div>
                   </div>
                 ))}
-              </div>
-            )}
-          </div>
-
-          {/* PHARMACY RESULTS / DISPENSING STATUS */}
-          <div className="panel" style={{ marginTop: 20 }}>
-            <h2 style={{ marginTop: 0 }}>Pharmacy Results / Dispensing Status</h2>
-            <p style={{ marginTop: 0, color: "#71808d" }}>
-              Pharmacy prescriptions and dispensing status for the selected patient.
-            </p>
-            {pharmacyPrescriptions.filter((item) => item.patientId === selectedPatient?.id).length === 0 ? (
-              <div style={{ padding: 15, background: "#f7f9fb", borderRadius: 8, color: "#71808d" }}>
-                No Pharmacy prescription is available for this patient.
-              </div>
-            ) : (
-              <div style={{ display: "grid", gap: 10 }}>
-                {pharmacyPrescriptions
-                  .filter((item) => item.patientId === selectedPatient?.id)
-                  .map((item) => (
-                    <div key={item.id} style={{ border: "1px solid #dce3e8", borderRadius: 8, padding: 12 }}>
-                      <strong>{item.medicine}</strong> — Qty: {item.quantity}
-                      <div style={{ marginTop: 5, color: "#71808d", fontSize: 12 }}>
-                        Instructions: {item.instructions || "-"} · Duration: {item.duration || "-"}
-                      </div>
-                      <div style={{ marginTop: 5, fontSize: 12 }}>
-                        Status: <strong>{item.status || "Pending"}</strong> · Payment: {item.paymentStatus || "Pending"}
-                      </div>
-                    </div>
-                  ))}
               </div>
             )}
           </div>
@@ -5939,7 +5602,7 @@ function PharmacyPage({
           </div>
 
           {/* AMOUNT PREVIEW */}
-          {medicinesSelected.length > 0 && (
+          {medicine && (
             <div
               style={{
                 marginTop: 20,
@@ -6539,4 +6202,367 @@ function StatusBadge({ status }) {
     </span>
   );
 }
+function MaternityWardPage({ patients = [], records = [], setRecords, showMessage }) {
+  const [view, setView] = useState("patients");
+  const [selectedId, setSelectedId] = useState("");
+  const [bed, setBed] = useState("");
+  const [condition, setCondition] = useState("Stable");
+  const [pregnancyStage, setPregnancyStage] = useState("Antenatal");
+  const [gestationalAge, setGestationalAge] = useState("");
+  const [gravida, setGravida] = useState("");
+  const [para, setPara] = useState("");
+  const [deliveryStatus, setDeliveryStatus] = useState("Not Delivered");
+  const [diagnosis, setDiagnosis] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const wardRecords = records.filter((r) => r.ward === "Maternity Ward");
+  const beds = Array.from({ length: 12 }, (_, i) => `MT-${String(i + 1).padStart(2, "0")}`);
+  const occupied = wardRecords.filter((r) => r.status === "Admitted");
+  const availableBeds = beds.filter((b) => !occupied.some((r) => r.bed === b));
+
+  const antenatalPatients = wardRecords.filter(
+    (r) => r.status === "Admitted" && r.pregnancyStage === "Antenatal"
+  ).length;
+  const deliveredPatients = wardRecords.filter(
+    (r) => r.status === "Admitted" && r.deliveryStatus === "Delivered"
+  ).length;
+
+  const admit = () => {
+    const patient = patients.find((p) => String(p.id) === String(selectedId));
+
+    if (!patient) return showMessage("Zaɓi mace mara lafiya.");
+    if (patient.sex !== "Female") return showMessage("Maternity Ward na karɓar female patient kawai.");
+    if (!bed) return showMessage("Zaɓi bed.");
+    if (occupied.some((r) => r.bed === bed)) return showMessage("Wannan bed ɗin yana occupied.");
+
+    const record = {
+      id: Date.now(),
+      ward: "Maternity Ward",
+      patientId: patient.id,
+      patientName: patient.name,
+      card: patient.card,
+      bed,
+      condition,
+      pregnancyStage,
+      gestationalAge: gestationalAge.trim(),
+      gravida: gravida.trim(),
+      para: para.trim(),
+      deliveryStatus,
+      diagnosis: diagnosis.trim() || "Not specified",
+      notes: notes.trim(),
+      status: "Admitted",
+      admittedAt: new Date().toLocaleString(),
+      dischargedAt: "",
+    };
+
+    setRecords((prev) => [record, ...prev]);
+    showMessage(`${patient.name} an admitted zuwa Maternity Ward.`);
+
+    setSelectedId("");
+    setBed("");
+    setCondition("Stable");
+    setPregnancyStage("Antenatal");
+    setGestationalAge("");
+    setGravida("");
+    setPara("");
+    setDeliveryStatus("Not Delivered");
+    setDiagnosis("");
+    setNotes("");
+    setView("patients");
+  };
+
+  const discharge = (id) => {
+    setRecords((prev) =>
+      prev.map((r) =>
+        r.id === id
+          ? { ...r, status: "Discharged", dischargedAt: new Date().toLocaleString() }
+          : r
+      )
+    );
+    showMessage("An yi discharge.");
+  };
+
+  const updateRecord = (id, changes) => {
+    setRecords((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, ...changes } : r))
+    );
+  };
+
+  return (
+    <div>
+      <PageHeader
+        title="Maternity Ward"
+        subtitle="Maternity admission, pregnancy monitoring, bed assignment, delivery status and discharge"
+        icon="♡"
+      />
+
+      <div className="stats-grid">
+        <StatCard title="Occupied Beds" value={occupied.length} icon="▣" />
+        <StatCard title="Available Beds" value={availableBeds.length} icon="✓" />
+        <StatCard title="Antenatal Patients" value={antenatalPatients} icon="♡" />
+        <StatCard title="Delivered" value={deliveredPatients} icon="+" />
+      </div>
+
+      <div className="card">
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+          <button className={view === "patients" ? "primary" : "secondary"} onClick={() => setView("patients")}>Ward Patients</button>
+          <button className={view === "beds" ? "primary" : "secondary"} onClick={() => setView("beds")}>Bed Status</button>
+          <button className={view === "history" ? "primary" : "secondary"} onClick={() => setView("history")}>Discharge History</button>
+          <button className="primary" onClick={() => setView("admit")}>+ Admit Maternity Patient</button>
+        </div>
+
+        {view === "admit" && (
+          <div style={{ display: "grid", gap: 12, maxWidth: 800 }}>
+            <h2>Admit Maternity Patient</h2>
+
+            <label>
+              Patient
+              <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
+                <option value="">Select female patient</option>
+                {patients.filter((p) => p.sex === "Female").map((p) => (
+                  <option key={p.id} value={p.id}>{p.name} — {p.card}</option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              Bed
+              <select value={bed} onChange={(e) => setBed(e.target.value)}>
+                <option value="">Select available bed</option>
+                {availableBeds.map((b) => <option key={b} value={b}>{b}</option>)}
+              </select>
+            </label>
+
+            <div className="form-grid">
+              <label className="form-field">
+                <span>Pregnancy Stage</span>
+                <select value={pregnancyStage} onChange={(e) => setPregnancyStage(e.target.value)}>
+                  <option>Antenatal</option>
+                  <option>Early Labour</option>
+                  <option>Active Labour</option>
+                  <option>Postnatal</option>
+                </select>
+              </label>
+
+              <label className="form-field">
+                <span>Gestational Age</span>
+                <input value={gestationalAge} onChange={(e) => setGestationalAge(e.target.value)} placeholder="e.g. 32 weeks" />
+              </label>
+
+              <label className="form-field">
+                <span>Gravida</span>
+                <input value={gravida} onChange={(e) => setGravida(e.target.value)} placeholder="e.g. G3" />
+              </label>
+
+              <label className="form-field">
+                <span>Para</span>
+                <input value={para} onChange={(e) => setPara(e.target.value)} placeholder="e.g. P2" />
+              </label>
+
+              <label className="form-field">
+                <span>Condition</span>
+                <select value={condition} onChange={(e) => setCondition(e.target.value)}>
+                  <option>Stable</option>
+                  <option>Under Observation</option>
+                  <option>Needs Attention</option>
+                  <option>Critical</option>
+                </select>
+              </label>
+
+              <label className="form-field">
+                <span>Delivery Status</span>
+                <select value={deliveryStatus} onChange={(e) => setDeliveryStatus(e.target.value)}>
+                  <option>Not Delivered</option>
+                  <option>Delivered</option>
+                  <option>Delivery Complication</option>
+                </select>
+              </label>
+            </div>
+
+            <label>
+              Diagnosis / Assessment
+              <input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder="Diagnosis or maternity assessment" />
+            </label>
+
+            <label>
+              Ward Notes
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Additional maternity/ward notes" />
+            </label>
+
+            <button className="primary" onClick={admit}>Admit Patient</button>
+          </div>
+        )}
+
+        {view === "patients" && (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Patient</th>
+                  <th>Card No.</th>
+                  <th>Bed</th>
+                  <th>Stage</th>
+                  <th>Gestation</th>
+                  <th>Condition</th>
+                  <th>Delivery</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {occupied.map((r) => (
+                  <tr key={r.id}>
+                    <td>{r.patientName}</td>
+                    <td>{r.card}</td>
+                    <td>{r.bed}</td>
+                    <td>{r.pregnancyStage}</td>
+                    <td>{r.gestationalAge || "—"}</td>
+                    <td>{r.condition}</td>
+                    <td>{r.deliveryStatus}</td>
+                    <td>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <button className="secondary" onClick={() => updateRecord(r.id, { deliveryStatus: "Delivered", pregnancyStage: "Postnatal" })}>Mark Delivered</button>
+                        <button className="secondary" onClick={() => discharge(r.id)}>Discharge</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {occupied.length === 0 && <tr><td colSpan="8">No admitted maternity patient found.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {view === "beds" && (
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Bed</th><th>Status</th><th>Patient</th><th>Card No.</th><th>Stage</th></tr></thead>
+              <tbody>
+                {beds.map((b) => {
+                  const r = occupied.find((x) => x.bed === b);
+                  return (
+                    <tr key={b}>
+                      <td>{b}</td>
+                      <td>{r ? "Occupied" : "Available"}</td>
+                      <td>{r ? r.patientName : "—"}</td>
+                      <td>{r ? r.card : "—"}</td>
+                      <td>{r ? r.pregnancyStage : "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {view === "history" && (
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Stage</th><th>Delivery</th><th>Admitted</th><th>Discharged</th></tr></thead>
+              <tbody>
+                {wardRecords.filter((r) => r.status === "Discharged").map((r) => (
+                  <tr key={r.id}>
+                    <td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.pregnancyStage}</td><td>{r.deliveryStatus}</td><td>{r.admittedAt}</td><td>{r.dischargedAt}</td>
+                  </tr>
+                ))}
+                {wardRecords.filter((r) => r.status === "Discharged").length === 0 && <tr><td colSpan="7">No discharge history found.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MaleWardPage({ patients = [], records = [], setRecords, showMessage }) {
+  const [view, setView] = useState("patients");
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState(null);
+  const [bed, setBed] = useState("");
+  const [condition, setCondition] = useState("Stable");
+  const [diagnosis, setDiagnosis] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const wardRecords = records.filter((r) => r.ward === "Male Ward");
+  const beds = Array.from({ length: 12 }, (_, i) => `M-${String(i + 1).padStart(2, "0")}`);
+  const occupied = wardRecords.filter((r) => r.status === "Admitted");
+  const availableBeds = beds.filter((b) => !occupied.some((r) => r.bed === b));
+  const filtered = wardRecords.filter((r) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return [r.patientName, r.card, r.bed, r.diagnosis, r.condition].some((v) => String(v || "").toLowerCase().includes(q));
+  });
+
+  const admit = () => {
+    const patient = patients.find((p) => String(p.id) === String(selectedId));
+    if (!patient) return showMessage("Zaɓi mara lafiya na namiji.");
+    if (patient.sex !== "Male") return showMessage("Male Ward na karɓar male patient kawai.");
+    if (!bed) return showMessage("Zaɓi bed.");
+    if (occupied.some((r) => r.bed === bed)) return showMessage("Wannan bed ɗin yana occupied.");
+    const record = { id: Date.now(), ward: "Male Ward", patientId: patient.id, patientName: patient.name, card: patient.card, bed, condition, diagnosis: diagnosis.trim() || "Not specified", notes: notes.trim(), status: "Admitted", admittedAt: new Date().toLocaleString(), dischargedAt: "" };
+    setRecords((prev) => [record, ...prev]);
+    showMessage(`${patient.name} an admitted zuwa Male Ward.`);
+    setSelectedId(null); setBed(""); setCondition("Stable"); setDiagnosis(""); setNotes(""); setView("patients");
+  };
+
+  const discharge = (id) => {
+    setRecords((prev) => prev.map((r) => r.id === id ? { ...r, status: "Discharged", dischargedAt: new Date().toLocaleString() } : r));
+    showMessage("An yi discharge.");
+  };
+
+  return (
+    <div>
+      <PageHeader title="Male Ward" subtitle="Male patient admission, bed assignment, monitoring, notes and discharge" icon="M" />
+      <div className="stats-grid">
+        <StatCard title="Occupied Beds" value={occupied.length} icon="▣" />
+        <StatCard title="Available Beds" value={availableBeds.length} icon="✓" />
+        <StatCard title="New Admissions" value={wardRecords.filter((r) => r.status === "Admitted").length} icon="+" />
+        <StatCard title="Discharges" value={wardRecords.filter((r) => r.status === "Discharged").length} icon="↗" />
+      </div>
+      <div className="card">
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+          <button className={view === "patients" ? "primary" : "secondary"} onClick={() => setView("patients")}>Ward Patients</button>
+          <button className={view === "beds" ? "primary" : "secondary"} onClick={() => setView("beds")}>Bed Status</button>
+          <button className={view === "history" ? "primary" : "secondary"} onClick={() => setView("history")}>Discharge History</button>
+          <button className="primary" onClick={() => setView("admit")}>+ Admit Male Patient</button>
+        </div>
+        {view !== "admit" && <input className="search" placeholder="Search patient, card, bed or diagnosis" value={search} onChange={(e) => setSearch(e.target.value)} />}
+        {view === "admit" && (
+          <div style={{ display: "grid", gap: 12, maxWidth: 700 }}>
+            <h2>Admit Male Patient</h2>
+            <label>Patient<select value={selectedId || ""} onChange={(e) => setSelectedId(e.target.value)}><option value="">Select male patient</option>{patients.filter((p) => p.sex === "Male").map((p) => <option key={p.id} value={p.id}>{p.name} — {p.card}</option>)}</select></label>
+            <label>Bed<select value={bed} onChange={(e) => setBed(e.target.value)}><option value="">Select available bed</option>{availableBeds.map((b) => <option key={b} value={b}>{b}</option>)}</select></label>
+            <label>Condition<select value={condition} onChange={(e) => setCondition(e.target.value)}><option>Stable</option><option>Under Observation</option><option>Needs Attention</option><option>Critical</option></select></label>
+            <label>Diagnosis<input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder="Diagnosis" /></label>
+            <label>Ward Notes<textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Additional notes" /></label>
+            <button className="primary" onClick={admit}>Admit Patient</button>
+          </div>
+        )}
+        {view === "patients" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Condition</th><th>Diagnosis</th><th>Status</th><th>Action</th></tr></thead><tbody>{filtered.filter((r) => r.status === "Admitted").map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.condition}</td><td>{r.diagnosis}</td><td><StatusBadge status={r.status} /></td><td><button className="secondary" onClick={() => discharge(r.id)}>Discharge</button></td></tr>)}{filtered.filter((r) => r.status === "Admitted").length === 0 && <tr><td colSpan="7">No admitted male patient found.</td></tr>}</tbody></table></div>}
+        {view === "beds" && <div className="table-wrap"><table><thead><tr><th>Bed</th><th>Status</th><th>Patient</th><th>Card No.</th></tr></thead><tbody>{beds.map((b) => { const r = occupied.find((x) => x.bed === b); return <tr key={b}><td>{b}</td><td>{r ? "Occupied" : "Available"}</td><td>{r ? r.patientName : "—"}</td><td>{r ? r.card : "—"}</td></tr>; })}</tbody></table></div>}
+        {view === "history" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Admitted</th><th>Discharged</th></tr></thead><tbody>{wardRecords.filter((r) => r.status === "Discharged").map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.admittedAt}</td><td>{r.dischargedAt}</td></tr>)}{wardRecords.filter((r) => r.status === "Discharged").length === 0 && <tr><td colSpan="5">No discharge history found.</td></tr>}</tbody></table></div>}
+      </div>
+    </div>
+  );
+}
+
+function FemaleWardPage({ patients = [], records = [], setRecords, showMessage }) {
+  return <WardPageGeneric title="Female Ward" prefix="F" sex="Female" patients={patients} records={records} setRecords={setRecords} showMessage={showMessage} />;
+}
+
+function WardPageGeneric({ title, prefix, sex, patients = [], records = [], setRecords, showMessage }) {
+  const [view, setView] = useState("patients");
+  const [selectedId, setSelectedId] = useState("");
+  const [bed, setBed] = useState("");
+  const [condition, setCondition] = useState("Stable");
+  const [diagnosis, setDiagnosis] = useState("");
+  const wardRecords = records.filter((r) => r.ward === title);
+  const beds = Array.from({ length: 12 }, (_, i) => `${prefix}-${String(i + 1).padStart(2, "0")}`);
+  const occupied = wardRecords.filter((r) => r.status === "Admitted");
+  const available = beds.filter((b) => !occupied.some((r) => r.bed === b));
+  const admit = () => { const p = patients.find((x) => String(x.id) === String(selectedId)); if (!p) return showMessage("Zaɓi patient."); if (p.sex !== sex) return showMessage(`${title} na karɓar ${sex.toLowerCase()} patient kawai.`); if (!bed) return showMessage("Zaɓi bed."); if (occupied.some((r) => r.bed === bed)) return showMessage("Bed ɗin yana occupied."); setRecords((prev) => [{ id: Date.now(), ward: title, patientId: p.id, patientName: p.name, card: p.card, bed, condition, diagnosis: diagnosis.trim() || "Not specified", status: "Admitted", admittedAt: new Date().toLocaleString(), dischargedAt: "" }, ...prev]); showMessage(`${p.name} an admitted zuwa ${title}.`); setSelectedId(""); setBed(""); setDiagnosis(""); setView("patients"); };
+  const discharge = (id) => { setRecords((prev) => prev.map((r) => r.id === id ? { ...r, status: "Discharged", dischargedAt: new Date().toLocaleString() } : r)); showMessage("An yi discharge."); };
+  return <div><PageHeader title={title} subtitle={`${sex} patient admission, bed assignment, monitoring, notes and discharge`} icon={prefix} /><div className="stats-grid"><StatCard title="Occupied Beds" value={occupied.length} icon="▣" /><StatCard title="Available Beds" value={available.length} icon="✓" /><StatCard title="New Admissions" value={wardRecords.filter((r) => r.status === "Admitted").length} icon="+" /><StatCard title="Discharges" value={wardRecords.filter((r) => r.status === "Discharged").length} icon="↗" /></div><div className="card"><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}><button className="primary" onClick={() => setView("patients")}>Ward Patients</button><button className="secondary" onClick={() => setView("beds")}>Bed Status</button><button className="secondary" onClick={() => setView("history")}>Discharge History</button><button className="primary" onClick={() => setView("admit")}>+ Admit {sex} Patient</button></div>{view === "admit" && <div style={{ display: "grid", gap: 12, maxWidth: 700 }}><h2>Admit {sex} Patient</h2><select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}><option value="">Select patient</option>{patients.filter((p) => p.sex === sex).map((p) => <option key={p.id} value={p.id}>{p.name} — {p.card}</option>)}</select><select value={bed} onChange={(e) => setBed(e.target.value)}><option value="">Select available bed</option>{available.map((b) => <option key={b}>{b}</option>)}</select><select value={condition} onChange={(e) => setCondition(e.target.value)}><option>Stable</option><option>Under Observation</option><option>Needs Attention</option><option>Critical</option></select><input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder="Diagnosis" /><button className="primary" onClick={admit}>Admit Patient</button></div>}{view === "patients" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Condition</th><th>Diagnosis</th><th>Status</th><th>Action</th></tr></thead><tbody>{occupied.map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.condition}</td><td>{r.diagnosis}</td><td><StatusBadge status={r.status} /></td><td><button className="secondary" onClick={() => discharge(r.id)}>Discharge</button></td></tr>)}{occupied.length === 0 && <tr><td colSpan="7">No admitted patient found.</td></tr>}</tbody></table></div>}{view === "beds" && <div className="table-wrap"><table><thead><tr><th>Bed</th><th>Status</th><th>Patient</th><th>Card No.</th></tr></thead><tbody>{beds.map((b) => { const r = occupied.find((x) => x.bed === b); return <tr key={b}><td>{b}</td><td>{r ? "Occupied" : "Available"}</td><td>{r ? r.patientName : "—"}</td><td>{r ? r.card : "—"}</td></tr>; })}</tbody></table></div>}{view === "history" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Admitted</th><th>Discharged</th></tr></thead><tbody>{wardRecords.filter((r) => r.status === "Discharged").map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.admittedAt}</td><td>{r.dischargedAt}</td></tr>)}</tbody></table></div>}</div></div>;
+}
+
 export default App;
