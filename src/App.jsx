@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 const departments = [
   "ICT Centre",
@@ -725,11 +725,11 @@ function App() {
             <GeneralCashierPage transactions={transactions} />
           )}
 
-          {page === "Roster & Attendance" && (
+          {(page === "Roster & Attendance" || page === "Roster & Staff Attendance") && (
             <RosterPage staff={staff} setStaff={setStaff} showMessage={showMessage} />
           )}
 
-          {page === "Reports" && (
+          {(page === "Reports" || page === "Report") && (
             <ReportsPage
               patients={patients}
               transactions={transactions}
@@ -2357,8 +2357,12 @@ function RosterPage({ staff = [], setStaff, showMessage }) {
   const [selectedStaffId, setSelectedStaffId] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("All");
   const [categoryFilter, setCategoryFilter] = useState("All");
-  const [attendance, setAttendance] = useState({});
-  const [roster, setRoster] = useState({ monthly: [], weekly: [] });
+  const [attendance, setAttendance] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("bazzaRosterAttendance") || "{}"); } catch { return {}; }
+  });
+  const [roster, setRoster] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("bazzaRosterData") || '{"monthly":[],"weekly":[]}'); } catch { return { monthly: [], weekly: [] }; }
+  });
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({
     name: "",
@@ -2440,6 +2444,14 @@ function RosterPage({ staff = [], setStaff, showMessage }) {
     return result;
   };
 
+  useEffect(() => {
+    try { localStorage.setItem("bazzaRosterData", JSON.stringify(roster)); } catch {}
+  }, [roster]);
+
+  useEffect(() => {
+    try { localStorage.setItem("bazzaRosterAttendance", JSON.stringify(attendance)); } catch {}
+  }, [attendance]);
+
   const generateMonthly = () => {
     const days = daysInMonth(month);
     const rows = [];
@@ -2509,9 +2521,10 @@ function RosterPage({ staff = [], setStaff, showMessage }) {
   const currentRows = rosterType === "monthly" ? roster.monthly : roster.weekly;
   const selectedRows = selectedStaffId ? currentRows.filter((r) => String(r.id) === String(selectedStaffId)) : currentRows;
   const today = new Date().toISOString().slice(0, 10);
-  const presentToday = currentRows.filter((r) => r.date === today && r.status === "Duty").length;
-  const onDuty = currentRows.filter((r) => r.date === today && r.status === "Duty").length;
-  const absentToday = currentRows.filter((r) => r.date === today && r.status === "Off").length;
+  const todayRows = currentRows.filter((r) => r.date === today);
+  const presentToday = todayRows.filter((r) => attendance[dateKey(r.date, r.id, r.shift)]?.signIn && !attendance[dateKey(r.date, r.id, r.shift)]?.signOut).length;
+  const onDuty = todayRows.filter((r) => r.status === "Duty").length;
+  const absentToday = todayRows.filter((r) => r.status === "Off").length;
 
   const signIn = (row) => {
     const key = dateKey(row.date, row.id, row.shift);
@@ -2605,9 +2618,11 @@ function RosterPage({ staff = [], setStaff, showMessage }) {
           {rosterType === "monthly" ? (<>
             <button className="button primary" onClick={generateMonthly}>Generate Monthly Roster</button>
             <button className="button secondary" onClick={() => printRoster("monthly")}>🖨️ Print Monthly Roster</button>
+            <button className="button secondary" onClick={() => { setRoster(r => ({ ...r, monthly: [] })); setAttendance({}); showMessage?.("Monthly roster cleared"); }}>Clear Monthly</button>
           </>) : (<>
             <button className="button primary" onClick={generateWeekly}>Generate Weekly Student Roster</button>
             <button className="button secondary" onClick={() => printRoster("weekly")}>🖨️ Print Weekly Student Roster</button>
+            <button className="button secondary" onClick={() => { setRoster(r => ({ ...r, weekly: [] })); setAttendance({}); showMessage?.("Weekly roster cleared"); }}>Clear Weekly</button>
           </>)}
         </div>
       </div>
