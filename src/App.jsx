@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState } from "react";
 
 const departments = [
@@ -500,6 +499,15 @@ function App() {
             onClick={() => setPage("In-Charge")}
           />
 
+          {currentUser.role === "Super Admin" && (
+            <MenuItem
+              label="Super Admin"
+              icon="★"
+              active={page === "Super Admin"}
+              onClick={() => setPage("Super Admin")}
+            />
+          )}
+
           <MenuItem
             label="Staff & Permissions"
             icon="♟"
@@ -602,6 +610,21 @@ function App() {
               currentUser={currentUser}
               patients={patients}
               staff={staff}
+              setPage={setPage}
+            />
+          )}
+
+          {page === "Super Admin" && currentUser.role === "Super Admin" && (
+            <SuperAdminPage
+              staff={staff}
+              patients={patients}
+              transactions={transactions}
+              labRequests={labRequests}
+              pharmacyPrescriptions={pharmacyPrescriptions}
+              ultrasoundRequests={ultrasoundRequests}
+              enabledPermissions={enabledPermissions}
+              togglePermission={togglePermission}
+              showMessage={showMessage}
               setPage={setPage}
             />
           )}
@@ -957,6 +980,123 @@ function App() {
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+function SuperAdminPage({
+  staff = [],
+  patients = [],
+  transactions = [],
+  labRequests = [],
+  pharmacyPrescriptions = [],
+  ultrasoundRequests = [],
+  enabledPermissions = {},
+  togglePermission,
+  showMessage,
+  setPage,
+}) {
+  const activeStaff = staff.filter((item) => item.status === "Active").length;
+  const pendingLab = labRequests.filter(
+    (item) => !["Result Ready", "Sent to Consultant"].includes(item.status)
+  ).length;
+  const pendingPharmacy = pharmacyPrescriptions.filter(
+    (item) => item.status !== "Dispensed"
+  ).length;
+  const pendingUltrasound = ultrasoundRequests.filter(
+    (item) => item.status !== "Sent to Consultant"
+  ).length;
+
+  const controls = [
+    ["Staff & Permissions", "Manage staff accounts, roles and permissions", "Staff & Permissions"],
+    ["ICT Centre", "Patient registration, card numbers and patient profiles", "ICT Centre"],
+    ["Cashier", "Review payment activity and cashier records", "General Cashier"],
+    ["Roster & Attendance", "Monitor staff roster and attendance", "Roster & Attendance"],
+    ["Reports", "Open hospital and department reports", "Reports"],
+    ["Audit Logs", "Review system activity and audit records", "Audit Logs"],
+    ["Alerts", "Review department alerts", "Alerts"],
+    ["SMS / Notifications", "Manage notification area", "SMS / Notifications"],
+    ["Settings", "Open system settings", "Settings"],
+  ];
+
+  return (
+    <div>
+      <PageHeader
+        title="Super Admin"
+        subtitle="Full system administration, access control and monitoring"
+        icon="★"
+      />
+
+      <div className="stats-grid">
+        <StatCard label="Total Staff" value={staff.length} icon="♟" />
+        <StatCard label="Active Staff" value={activeStaff} icon="✓" />
+        <StatCard label="Patients" value={patients.length} icon="◉" />
+        <StatCard label="Transactions" value={transactions.length} icon="₦" />
+        <StatCard label="Lab Pending" value={pendingLab} icon="▣" />
+        <StatCard label="Pharmacy Pending" value={pendingPharmacy} icon="✚" />
+        <StatCard label="Ultrasound Pending" value={pendingUltrasound} icon="◌" />
+      </div>
+
+      <div className="section-card">
+        <div className="section-header">
+          <div>
+            <h2>System Administration</h2>
+            <p>Super Admin can open the main administrative areas from one place.</p>
+          </div>
+        </div>
+
+        <div className="card-grid">
+          {controls.map(([title, description, target]) => (
+            <button
+              key={target}
+              className="action-card"
+              onClick={() => setPage(target)}
+              type="button"
+            >
+              <strong>{title}</strong>
+              <span>{description}</span>
+              <em>Open →</em>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="section-card">
+        <div className="section-header">
+          <div>
+            <h2>Global Permissions</h2>
+            <p>These controls show the currently enabled system permissions.</p>
+          </div>
+        </div>
+
+        <div className="permission-grid">
+          {permissions.map((permission) => (
+            <label className="permission-item" key={permission}>
+              <input
+                type="checkbox"
+                checked={!!enabledPermissions[permission]}
+                onChange={() => togglePermission(permission)}
+              />
+              <span>{permission}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="section-card">
+        <div className="section-header">
+          <div>
+            <h2>Quick Monitoring</h2>
+            <p>Open the monitoring areas without changing departmental records.</p>
+          </div>
+        </div>
+
+        <div className="button-row">
+          <button className="button primary" onClick={() => setPage("In-Charge")}>In-Charge Monitor</button>
+          <button className="button secondary" onClick={() => setPage("Staff & Permissions")}>Staff & Permissions</button>
+          <button className="button secondary" onClick={() => setPage("Audit Logs")}>Audit Logs</button>
+        </div>
+      </div>
     </div>
   );
 }
