@@ -730,7 +730,7 @@ function App() {
           )}
 
           {page === "Adolescent Unit" && (
-            <ProgramUnitPage title={page} patients={patients} showMessage={showMessage} />
+            <AdolescentUnitPage patients={patients} setPatients={setPatients} showMessage={showMessage} />
           )}
 
           {page === "General Cashier" && (
@@ -3955,7 +3955,125 @@ function ImmunizationUnitPage({ patients = [], setPatients, showMessage }) {
   );
 }
 
-function FamilyPlanningUnitPage({ patients = [], setPatients, showMessage }) {
+function AdolescentUnitPage({ patients = [], setPatients, showMessage }) {
+  const [view, setView] = useState("new");
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState("");
+  const [service, setService] = useState("");
+  const [visitDate, setVisitDate] = useState(new Date().toISOString().slice(0,10));
+  const [followUpDate, setFollowUpDate] = useState("");
+  const [notes, setNotes] = useState("");
+  const [status, setStatus] = useState("Completed");
+  const [records, setRecords] = useState([]);
+
+  const services = [
+    "Adolescent Counselling",
+    "General Adolescent Health",
+    "Sexual & Reproductive Health Education",
+    "Mental Health Counselling",
+    "Nutrition Counselling",
+    "School Health Follow-up",
+    "Menstrual Health Support",
+    "Substance-use Prevention Counselling",
+    "Follow-up Visit",
+    "Other",
+  ];
+
+  const filteredPatients = patients.filter((p) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return [p.name, p.cardNumber, p.phone].some((v) => String(v || "").toLowerCase().includes(q));
+  });
+
+  const selectedPatient = patients.find((p) => String(p.id) === String(selectedId));
+
+  const saveVisit = () => {
+    if (!selectedPatient) return showMessage?.("Please select a patient.");
+    if (!service) return showMessage?.("Please select an adolescent service.");
+    const record = {
+      id: `AD-${Date.now()}`,
+      patientId: selectedPatient.id,
+      patientName: selectedPatient.name,
+      cardNumber: selectedPatient.cardNumber,
+      phone: selectedPatient.phone,
+      service,
+      visitDate,
+      followUpDate,
+      notes,
+      status,
+      createdAt: new Date().toLocaleString(),
+    };
+    setRecords((prev) => [record, ...prev]);
+    if (setPatients) {
+      setPatients((prev) => prev.map((p) => String(p.id) === String(selectedPatient.id)
+        ? { ...p, adolescent: { ...(p.adolescent || {}), latestVisit: record } }
+        : p));
+    }
+    showMessage?.("Adolescent Unit visit saved successfully.");
+    setView(followUpDate ? "followup" : "history");
+    setService(""); setFollowUpDate(""); setNotes("");
+  };
+
+  const followUps = records.filter((r) => r.followUpDate);
+
+  return (
+    <div className="page-shell">
+      <PageHeader title="Adolescent Unit" subtitle="Adolescent counselling, health services, follow-up and patient records" />
+      <div className="stats-grid">
+        <StatCard label="Total Visits" value={records.length} />
+        <StatCard label="Completed" value={records.filter((r) => r.status === "Completed").length} />
+        <StatCard label="Follow-up" value={followUps.length} />
+        <StatCard label="Patients" value={new Set(records.map((r) => r.patientId)).size} />
+      </div>
+      <div className="tabs">
+        <button onClick={() => setView("new")}>New Visit</button>
+        <button onClick={() => setView("history")}>Visit History</button>
+        <button onClick={() => setView("followup")}>Follow-up</button>
+      </div>
+
+      {view === "new" && (
+        <section className="card">
+          <h2>New Adolescent Visit</h2>
+          <p className="muted">Patient/Card Number yana zuwa daga ICT/Records. Wannan unit ba ya ƙirƙirar sabon Card Number.</p>
+          <FormField label="Search Patient">
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, card number or phone" />
+          </FormField>
+          <FormField label="Patient">
+            <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
+              <option value="">Select Patient</option>
+              {filteredPatients.map((p) => <option key={p.id} value={p.id}>{p.name} — {p.cardNumber} — {p.phone}</option>)}
+            </select>
+          </FormField>
+          {selectedPatient && <div className="info-box"><strong>{selectedPatient.name}</strong> — {selectedPatient.cardNumber} — {selectedPatient.phone}</div>}
+          <FormField label="Adolescent Service">
+            <select value={service} onChange={(e) => setService(e.target.value)}>
+              <option value="">Select Service</option>
+              {services.map((x) => <option key={x}>{x}</option>)}
+            </select>
+          </FormField>
+          <div className="form-grid">
+            <FormField label="Visit Date"><input type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} /></FormField>
+            <FormField label="Follow-up Date"><input type="date" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} /></FormField>
+          </div>
+          <FormField label="Status">
+            <select value={status} onChange={(e) => setStatus(e.target.value)}><option>Completed</option><option>Pending</option><option>Follow-up Required</option></select>
+          </FormField>
+          <FormField label="Counselling / Additional Notes"><textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} /></FormField>
+          <button className="primary" onClick={saveVisit}>Save Visit</button>
+        </section>
+      )}
+
+      {view === "history" && (
+        <section className="card"><h2>Adolescent Visit History</h2>{records.length === 0 ? <p className="muted">No adolescent visit found.</p> : <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card</th><th>Service</th><th>Visit Date</th><th>Status</th><th>Follow-up</th></tr></thead><tbody>{records.map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.cardNumber}</td><td>{r.service}</td><td>{r.visitDate}</td><td>{r.status}</td><td>{r.followUpDate || "—"}</td></tr>)}</tbody></table></div>}</section>
+      )}
+
+      {view === "followup" && (
+        <section className="card"><h2>Follow-up</h2>{followUps.length === 0 ? <p className="muted">No follow-up record found.</p> : <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card</th><th>Service</th><th>Follow-up Date</th><th>Phone</th></tr></thead><tbody>{followUps.map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.cardNumber}</td><td>{r.service}</td><td>{r.followUpDate}</td><td>{r.phone || "—"}</td></tr>)}</tbody></table></div>}</section>
+      )}
+    </div>
+  );
+}
+) {
   const [view, setView] = useState("new");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState("");
