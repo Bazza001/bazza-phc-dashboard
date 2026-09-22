@@ -499,15 +499,6 @@ function App() {
             onClick={() => setPage("In-Charge")}
           />
 
-          {currentUser.role === "Super Admin" && (
-            <MenuItem
-              label="Super Admin"
-              icon="★"
-              active={page === "Super Admin"}
-              onClick={() => setPage("Super Admin")}
-            />
-          )}
-
           <MenuItem
             label="Staff & Permissions"
             icon="♟"
@@ -610,21 +601,6 @@ function App() {
               currentUser={currentUser}
               patients={patients}
               staff={staff}
-              setPage={setPage}
-            />
-          )}
-
-          {page === "Super Admin" && currentUser.role === "Super Admin" && (
-            <SuperAdminPage
-              staff={staff}
-              patients={patients}
-              transactions={transactions}
-              labRequests={labRequests}
-              pharmacyPrescriptions={pharmacyPrescriptions}
-              ultrasoundRequests={ultrasoundRequests}
-              enabledPermissions={enabledPermissions}
-              togglePermission={togglePermission}
-              showMessage={showMessage}
               setPage={setPage}
             />
           )}
@@ -754,7 +730,7 @@ function App() {
           )}
 
           {page === "Adolescent Unit" && (
-            <AdolescentUnitPage patients={patients} setPatients={setPatients} showMessage={showMessage} />
+            <ProgramUnitPage title={page} patients={patients} showMessage={showMessage} />
           )}
 
           {page === "General Cashier" && (
@@ -980,123 +956,6 @@ function App() {
           </div>
         </Modal>
       )}
-    </div>
-  );
-}
-
-function SuperAdminPage({
-  staff = [],
-  patients = [],
-  transactions = [],
-  labRequests = [],
-  pharmacyPrescriptions = [],
-  ultrasoundRequests = [],
-  enabledPermissions = {},
-  togglePermission,
-  showMessage,
-  setPage,
-}) {
-  const activeStaff = staff.filter((item) => item.status === "Active").length;
-  const pendingLab = labRequests.filter(
-    (item) => !["Result Ready", "Sent to Consultant"].includes(item.status)
-  ).length;
-  const pendingPharmacy = pharmacyPrescriptions.filter(
-    (item) => item.status !== "Dispensed"
-  ).length;
-  const pendingUltrasound = ultrasoundRequests.filter(
-    (item) => item.status !== "Sent to Consultant"
-  ).length;
-
-  const controls = [
-    ["Staff & Permissions", "Manage staff accounts, roles and permissions", "Staff & Permissions"],
-    ["ICT Centre", "Patient registration, card numbers and patient profiles", "ICT Centre"],
-    ["Cashier", "Review payment activity and cashier records", "General Cashier"],
-    ["Roster & Attendance", "Monitor staff roster and attendance", "Roster & Attendance"],
-    ["Reports", "Open hospital and department reports", "Reports"],
-    ["Audit Logs", "Review system activity and audit records", "Audit Logs"],
-    ["Alerts", "Review department alerts", "Alerts"],
-    ["SMS / Notifications", "Manage notification area", "SMS / Notifications"],
-    ["Settings", "Open system settings", "Settings"],
-  ];
-
-  return (
-    <div>
-      <PageHeader
-        title="Super Admin"
-        subtitle="Full system administration, access control and monitoring"
-        icon="★"
-      />
-
-      <div className="stats-grid">
-        <StatCard label="Total Staff" value={staff.length} icon="♟" />
-        <StatCard label="Active Staff" value={activeStaff} icon="✓" />
-        <StatCard label="Patients" value={patients.length} icon="◉" />
-        <StatCard label="Transactions" value={transactions.length} icon="₦" />
-        <StatCard label="Lab Pending" value={pendingLab} icon="▣" />
-        <StatCard label="Pharmacy Pending" value={pendingPharmacy} icon="✚" />
-        <StatCard label="Ultrasound Pending" value={pendingUltrasound} icon="◌" />
-      </div>
-
-      <div className="section-card">
-        <div className="section-header">
-          <div>
-            <h2>System Administration</h2>
-            <p>Super Admin can open the main administrative areas from one place.</p>
-          </div>
-        </div>
-
-        <div className="card-grid">
-          {controls.map(([title, description, target]) => (
-            <button
-              key={target}
-              className="action-card"
-              onClick={() => setPage(target)}
-              type="button"
-            >
-              <strong>{title}</strong>
-              <span>{description}</span>
-              <em>Open →</em>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="section-card">
-        <div className="section-header">
-          <div>
-            <h2>Global Permissions</h2>
-            <p>These controls show the currently enabled system permissions.</p>
-          </div>
-        </div>
-
-        <div className="permission-grid">
-          {permissions.map((permission) => (
-            <label className="permission-item" key={permission}>
-              <input
-                type="checkbox"
-                checked={!!enabledPermissions[permission]}
-                onChange={() => togglePermission(permission)}
-              />
-              <span>{permission}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <div className="section-card">
-        <div className="section-header">
-          <div>
-            <h2>Quick Monitoring</h2>
-            <p>Open the monitoring areas without changing departmental records.</p>
-          </div>
-        </div>
-
-        <div className="button-row">
-          <button className="button primary" onClick={() => setPage("In-Charge")}>In-Charge Monitor</button>
-          <button className="button secondary" onClick={() => setPage("Staff & Permissions")}>Staff & Permissions</button>
-          <button className="button secondary" onClick={() => setPage("Audit Logs")}>Audit Logs</button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -4096,125 +3955,7 @@ function ImmunizationUnitPage({ patients = [], setPatients, showMessage }) {
   );
 }
 
-function AdolescentUnitPage({ patients = [], setPatients, showMessage }) {
-  const [view, setView] = useState("new");
-  const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState("");
-  const [service, setService] = useState("");
-  const [visitDate, setVisitDate] = useState(new Date().toISOString().slice(0,10));
-  const [followUpDate, setFollowUpDate] = useState("");
-  const [notes, setNotes] = useState("");
-  const [status, setStatus] = useState("Completed");
-  const [records, setRecords] = useState([]);
-
-  const services = [
-    "Adolescent Counselling",
-    "General Adolescent Health",
-    "Sexual & Reproductive Health Education",
-    "Mental Health Counselling",
-    "Nutrition Counselling",
-    "School Health Follow-up",
-    "Menstrual Health Support",
-    "Substance-use Prevention Counselling",
-    "Follow-up Visit",
-    "Other",
-  ];
-
-  const filteredPatients = patients.filter((p) => {
-    const q = search.trim().toLowerCase();
-    if (!q) return true;
-    return [p.name, p.cardNumber, p.phone].some((v) => String(v || "").toLowerCase().includes(q));
-  });
-
-  const selectedPatient = patients.find((p) => String(p.id) === String(selectedId));
-
-  const saveVisit = () => {
-    if (!selectedPatient) return showMessage?.("Please select a patient.");
-    if (!service) return showMessage?.("Please select an adolescent service.");
-    const record = {
-      id: `AD-${Date.now()}`,
-      patientId: selectedPatient.id,
-      patientName: selectedPatient.name,
-      cardNumber: selectedPatient.cardNumber,
-      phone: selectedPatient.phone,
-      service,
-      visitDate,
-      followUpDate,
-      notes,
-      status,
-      createdAt: new Date().toLocaleString(),
-    };
-    setRecords((prev) => [record, ...prev]);
-    if (setPatients) {
-      setPatients((prev) => prev.map((p) => String(p.id) === String(selectedPatient.id)
-        ? { ...p, adolescent: { ...(p.adolescent || {}), latestVisit: record } }
-        : p));
-    }
-    showMessage?.("Adolescent Unit visit saved successfully.");
-    setView(followUpDate ? "followup" : "history");
-    setService(""); setFollowUpDate(""); setNotes("");
-  };
-
-  const followUps = records.filter((r) => r.followUpDate);
-
-  return (
-    <div className="page-shell">
-      <PageHeader title="Adolescent Unit" subtitle="Adolescent counselling, health services, follow-up and patient records" />
-      <div className="stats-grid">
-        <StatCard label="Total Visits" value={records.length} />
-        <StatCard label="Completed" value={records.filter((r) => r.status === "Completed").length} />
-        <StatCard label="Follow-up" value={followUps.length} />
-        <StatCard label="Patients" value={new Set(records.map((r) => r.patientId)).size} />
-      </div>
-      <div className="tabs">
-        <button onClick={() => setView("new")}>New Visit</button>
-        <button onClick={() => setView("history")}>Visit History</button>
-        <button onClick={() => setView("followup")}>Follow-up</button>
-      </div>
-
-      {view === "new" && (
-        <section className="card">
-          <h2>New Adolescent Visit</h2>
-          <p className="muted">Patient/Card Number yana zuwa daga ICT/Records. Wannan unit ba ya ƙirƙirar sabon Card Number.</p>
-          <FormField label="Search Patient">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, card number or phone" />
-          </FormField>
-          <FormField label="Patient">
-            <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
-              <option value="">Select Patient</option>
-              {filteredPatients.map((p) => <option key={p.id} value={p.id}>{p.name} — {p.cardNumber} — {p.phone}</option>)}
-            </select>
-          </FormField>
-          {selectedPatient && <div className="info-box"><strong>{selectedPatient.name}</strong> — {selectedPatient.cardNumber} — {selectedPatient.phone}</div>}
-          <FormField label="Adolescent Service">
-            <select value={service} onChange={(e) => setService(e.target.value)}>
-              <option value="">Select Service</option>
-              {services.map((x) => <option key={x}>{x}</option>)}
-            </select>
-          </FormField>
-          <div className="form-grid">
-            <FormField label="Visit Date"><input type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} /></FormField>
-            <FormField label="Follow-up Date"><input type="date" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} /></FormField>
-          </div>
-          <FormField label="Status">
-            <select value={status} onChange={(e) => setStatus(e.target.value)}><option>Completed</option><option>Pending</option><option>Follow-up Required</option></select>
-          </FormField>
-          <FormField label="Counselling / Additional Notes"><textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} /></FormField>
-          <button className="primary" onClick={saveVisit}>Save Visit</button>
-        </section>
-      )}
-
-      {view === "history" && (
-        <section className="card"><h2>Adolescent Visit History</h2>{records.length === 0 ? <p className="muted">No adolescent visit found.</p> : <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card</th><th>Service</th><th>Visit Date</th><th>Status</th><th>Follow-up</th></tr></thead><tbody>{records.map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.cardNumber}</td><td>{r.service}</td><td>{r.visitDate}</td><td>{r.status}</td><td>{r.followUpDate || "—"}</td></tr>)}</tbody></table></div>}</section>
-      )}
-
-      {view === "followup" && (
-        <section className="card"><h2>Follow-up</h2>{followUps.length === 0 ? <p className="muted">No follow-up record found.</p> : <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card</th><th>Service</th><th>Follow-up Date</th><th>Phone</th></tr></thead><tbody>{followUps.map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.cardNumber}</td><td>{r.service}</td><td>{r.followUpDate}</td><td>{r.phone || "—"}</td></tr>)}</tbody></table></div>}</section>
-      )}
-    </div>
-  );
-}
-) {
+function FamilyPlanningUnitPage({ patients = [], setPatients, showMessage }) {
   const [view, setView] = useState("new");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState("");
