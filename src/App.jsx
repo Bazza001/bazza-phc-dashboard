@@ -48,7 +48,63 @@ const roles = [
   "Immunization Staff",
   "Family Planning Staff",
   "Adolescent Staff",
+  "Records Cashier",
+  "Laboratory Cashier",
+  "Pharmacy Cashier",
+  "Ultrasound Cashier",
 ];
+
+const ROLE_PAGE_RULES = {
+  "Super Admin": "ALL",
+  "In-Charge": ["Dashboard", "In-Charge", "Reports", "Audit Logs", "Roster & Attendance"],
+  "General Cashier": ["Dashboard", "General Cashier", "Reports"],
+  "ICT Staff": ["Dashboard", "ICT Centre", "ICT Stock / Inventory", "Patient Card Printing", "Appointments"],
+  "Records Staff": ["Dashboard", "Records Unit", "Patient Card Printing", "Alerts"],
+  "Records Cashier": ["Dashboard", "Records Unit"],
+  "Nurse": ["Dashboard", "Nursing Unit", "Alerts", "Reception / Next Patient"],
+  "Consultant": ["Dashboard", "Consultant Room", "Reception / Next Patient", "Alerts"],
+  "Laboratory Staff": ["Dashboard", "Laboratory Unit", "Alerts"],
+  "Laboratory Cashier": ["Dashboard", "Laboratory Unit"],
+  "Pharmacy Staff": ["Dashboard", "Pharmacy Unit", "Alerts"],
+  "Pharmacy Cashier": ["Dashboard", "Pharmacy Unit"],
+  "Ultrasound Staff": ["Dashboard", "Ultrasound Room", "Alerts"],
+  "Ultrasound Cashier": ["Dashboard", "Ultrasound Room"],
+  "Ward Staff": ["Dashboard", "Male Ward", "Female Ward", "Maternity Ward", "Child Ward", "Labour Room", "Alerts"],
+  "Immunization Staff": ["Dashboard", "Immunization Unit", "Alerts"],
+  "Family Planning Staff": ["Dashboard", "Family Planning Unit", "Alerts"],
+  "Adolescent Staff": ["Dashboard", "Adolescent Unit", "Alerts"],
+};
+
+const ROLE_ACTIONS = {
+  "Super Admin": ["View", "Create", "Edit", "Delete", "Print", "Cashier", "Reports", "Stock", "SMS", "Alerts"],
+  "In-Charge": ["View", "Reports", "Alerts"],
+};
+
+function getUserDepartments(user) {
+  if (!user) return [];
+  const list = Array.isArray(user.departments) && user.departments.length ? user.departments : [user.department];
+  return [...new Set(list.filter(Boolean))];
+}
+
+function userCanAccessPage(user, targetPage) {
+  if (!user) return false;
+  if (user.role === "Super Admin") return true;
+  const explicit = ROLE_PAGE_RULES[user.role];
+  if (Array.isArray(explicit) && explicit.includes(targetPage)) return true;
+  const depts = getUserDepartments(user);
+  if (depts.includes(targetPage)) return true;
+  if (targetPage === "Reports" && (user.permissions || []).includes("Reports")) return true;
+  if (targetPage === "Alerts" && (user.permissions || []).includes("Alerts")) return true;
+  return false;
+}
+
+function userCanAction(user, action) {
+  if (!user) return false;
+  if (user.role === "Super Admin") return true;
+  if (user.role === "In-Charge") return ["View", "Reports", "Alerts"].includes(action);
+  if (Array.isArray(user.permissions) && user.permissions.length) return user.permissions.includes(action);
+  return ["View"].includes(action);
+}
 
 const initialStaff = [
   {
@@ -210,6 +266,16 @@ function App() {
   const [smsMessages, setSmsMessages] = usePersistentState("bazza_sms_messages", []);
   const [receptionQueue, setReceptionQueue] = usePersistentState("bazza_reception_queue", []);
   const [outpatientVisits, setOutpatientVisits] = usePersistentState("bazza_outpatient_visits", []);
+  const [inventory, setInventory] = usePersistentState("bazza_inventory", []);
+  const [inventoryMovements, setInventoryMovements] = usePersistentState("bazza_inventory_movements", []);
+  const [appointments, setAppointments] = usePersistentState("bazza_appointments", []);
+  const [staffPermissions, setStaffPermissions] = usePersistentState("bazza_staff_permissions", {});
+  const [hospitalSettings, setHospitalSettings] = usePersistentState("bazza_hospital_settings", {
+    facilityName: "COMPREHENSIVE HEALTH CLINIC BAZZAH",
+    departmentName: "PRIMARY HEALTH CARE DEPARTMENT",
+    address: "Waziri Maccido Road, Bazza Area, Sokoto",
+    phone: "08169640287",
+  });
 
   const staffWithRosterMeta = useMemo(() =>
     staff.map((person) => ({
@@ -261,6 +327,16 @@ function App() {
   );
 
   const [notification, setNotification] = useState("");
+
+  const canAccessPage = (targetPage) => userCanAccessPage(currentUser, targetPage);
+  const canAction = (action) => userCanAction(currentUser, action);
+  const goToPage = (targetPage) => {
+    if (!canAccessPage(targetPage)) {
+      showMessage("Ba ka da izinin shiga wannan department/module.");
+      return;
+    }
+    setPage(targetPage);
+  };
 
   const filteredStaff = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -325,22 +401,29 @@ function App() {
   };
 
   const handleLogout = () => {
-    logAudit("Logout", "Security", `User logged out: ${currentUser?.username || "鈥�"}`);
+    logAudit("Logout", "Security", `User logged out: ${currentUser?.username || "—"}`);
     setCurrentUser(null);
     setPage("Dashboard");
   };
 
   useEffect(() => {
-    if (currentUser && page) logAudit("Open Module", page, "Module viewed", currentUser);
-  }, [page]);
+    if (!currentUser) return;
+    if (!userCanAccessPage(currentUser, page)) {
+      setPage("Dashboard");
+      return;
+    }
+    logAudit("Open Module", page, "Module viewed", currentUser);
+  }, [page, currentUser]);
 
   const openAddStaff = () => {
+    if (currentUser?.role !== "Super Admin") return showMessage("Only Super Admin zai iya kara ma'aikaci.");
     setEditingStaff(null);
     setStaffForm(emptyStaffForm);
     setShowStaffModal(true);
   };
 
   const openEditStaff = (person) => {
+    if (currentUser?.role !== "Super Admin") return showMessage("Only Super Admin zai iya gyara ma'aikaci.");
     setEditingStaff(person);
 
     setStaffForm({
@@ -360,6 +443,7 @@ function App() {
   };
 
   const saveStaff = (e) => {
+    if (currentUser?.role !== "Super Admin") return showMessage("Only Super Admin zai iya canza staff.");
     e.preventDefault();
 
     if (
@@ -392,7 +476,7 @@ function App() {
       };
 
       setStaff((prev) => [...prev, newStaff]);
-      showMessage("An 茩ara sabon ma'aikaci.");
+      showMessage("An ƙara sabon ma'aikaci.");
     }
 
     setShowStaffModal(false);
@@ -401,6 +485,7 @@ function App() {
   };
 
   const deleteStaff = (id) => {
+    if (currentUser?.role !== "Super Admin") return showMessage("Only Super Admin zai iya goge staff.");
     const person = staff.find((item) => item.id === id);
 
     if (!person) return;
@@ -451,200 +536,232 @@ function App() {
         </div>
 
         <nav className="menu">
-          <MenuItem
+          <SecureMenuItem
             label="Dashboard"
-            icon="鈱�"
+            icon="⌂"
+            currentUser={currentUser}
             active={page === "Dashboard"}
-            onClick={() => setPage("Dashboard")}
+            onClick={() => goToPage("Dashboard")}
           />
 
           <div className="menu-section">PATIENT SERVICES</div>
 
-          <MenuItem
+          <SecureMenuItem
             label="ICT Centre"
-            icon="鈻�"
+            icon="▣"
+            currentUser={currentUser}
             active={page === "ICT Centre"}
-            onClick={() => setPage("ICT Centre")}
+            onClick={() => goToPage("ICT Centre")}
           />
 
-          <MenuItem
+          <SecureMenuItem
             label="Records Unit"
-            icon="鈻�"
+            icon="▤"
+            currentUser={currentUser}
             active={page === "Records Unit"}
-            onClick={() => setPage("Records Unit")}
+            onClick={() => goToPage("Records Unit")}
           />
 
-          <MenuItem
+          <SecureMenuItem
             label="Nursing Unit"
-            icon="鈾�"
+            icon="♙"
+            currentUser={currentUser}
             active={page === "Nursing Unit"}
-            onClick={() => setPage("Nursing Unit")}
+            onClick={() => goToPage("Nursing Unit")}
           />
 
-          <MenuItem
+          <SecureMenuItem
             label="Consultant Room"
-            icon="鉁�"
+            icon="✚"
+            currentUser={currentUser}
             active={page === "Consultant Room"}
-            onClick={() => setPage("Consultant Room")}
+            onClick={() => goToPage("Consultant Room")}
           />
 
-          <MenuItem
+          <SecureMenuItem
             label="Laboratory"
-            icon="鈿�"
+            icon="⚗"
+            currentUser={currentUser}
             active={page === "Laboratory Unit"}
-            onClick={() => setPage("Laboratory Unit")}
+            onClick={() => goToPage("Laboratory Unit")}
           />
 
-          <MenuItem
+          <SecureMenuItem
             label="Pharmacy"
-            icon="鈿�"
+            icon="⚕"
+            currentUser={currentUser}
             active={page === "Pharmacy Unit"}
-            onClick={() => setPage("Pharmacy Unit")}
+            onClick={() => goToPage("Pharmacy Unit")}
           />
 
-          <MenuItem
+          <SecureMenuItem
             label="Ultrasound"
-            icon="鈼�"
+            icon="◉"
+            currentUser={currentUser}
             active={page === "Ultrasound Room"}
-            onClick={() => setPage("Ultrasound Room")}
+            onClick={() => goToPage("Ultrasound Room")}
           />
 
           <div className="menu-section">WARDS & PROGRAMS</div>
 
-          <MenuItem
+          <SecureMenuItem
             label="Male Ward"
             icon="M"
+            currentUser={currentUser}
             active={page === "Male Ward"}
-            onClick={() => setPage("Male Ward")}
+            onClick={() => goToPage("Male Ward")}
           />
 
-          <MenuItem
+          <SecureMenuItem
             label="Female Ward"
             icon="F"
+            currentUser={currentUser}
             active={page === "Female Ward"}
-            onClick={() => setPage("Female Ward")}
+            onClick={() => goToPage("Female Ward")}
           />
 
-          <MenuItem
+          <SecureMenuItem
             label="Maternity Ward"
-            icon="鈾�"
+            icon="♥"
+            currentUser={currentUser}
             active={page === "Maternity Ward"}
-            onClick={() => setPage("Maternity Ward")}
+            onClick={() => goToPage("Maternity Ward")}
           />
 
-          <MenuItem
+          <SecureMenuItem
             label="Child Ward"
             icon="C"
+            currentUser={currentUser}
             active={page === "Child Ward"}
-            onClick={() => setPage("Child Ward")}
+            onClick={() => goToPage("Child Ward")}
           />
 
-          <MenuItem
+          <SecureMenuItem
             label="Labour Room"
             icon="L"
+            currentUser={currentUser}
             active={page === "Labour Room"}
-            onClick={() => setPage("Labour Room")}
+            onClick={() => goToPage("Labour Room")}
           />
 
-          <MenuItem
+          <SecureMenuItem
             label="Immunization"
             icon="I"
+            currentUser={currentUser}
             active={page === "Immunization Unit"}
-            onClick={() => setPage("Immunization Unit")}
+            onClick={() => goToPage("Immunization Unit")}
           />
 
-          <MenuItem
+          <SecureMenuItem
             label="Family Planning"
             icon="P"
+            currentUser={currentUser}
             active={page === "Family Planning Unit"}
-            onClick={() => setPage("Family Planning Unit")}
+            onClick={() => goToPage("Family Planning Unit")}
           />
 
-          <MenuItem
+          <SecureMenuItem
             label="Adolescent Unit"
             icon="A"
+            currentUser={currentUser}
             active={page === "Adolescent Unit"}
-            onClick={() => setPage("Adolescent Unit")}
+            onClick={() => goToPage("Adolescent Unit")}
           />
 
-          <MenuItem
+          <SecureMenuItem
             label="Outpatient Services"
             icon="O"
+            currentUser={currentUser}
             active={page === "Outpatient Services"}
-            onClick={() => setPage("Outpatient Services")}
+            onClick={() => goToPage("Outpatient Services")}
           />
 
-          <MenuItem
+          <SecureMenuItem
             label="Reception / Next Patient"
             icon="R"
+            currentUser={currentUser}
             active={page === "Reception / Next Patient"}
-            onClick={() => setPage("Reception / Next Patient")}
+            onClick={() => goToPage("Reception / Next Patient")}
           />
 
           <div className="menu-section">ADMINISTRATION</div>
 
-          <MenuItem
+          <SecureMenuItem
             label="In-Charge"
-            icon="鈼�"
+            icon="◈"
+            currentUser={currentUser}
             active={page === "In-Charge"}
-            onClick={() => setPage("In-Charge")}
+            onClick={() => goToPage("In-Charge")}
           />
 
-          <MenuItem
+          {currentUser.role === "Super Admin" && <SecureMenuItem
             label="Staff & Permissions"
-            icon="鈾�"
+            icon="♟"
+            currentUser={currentUser}
             active={page === "Staff & Permissions"}
-            onClick={() => setPage("Staff & Permissions")}
-          />
+            onClick={() => goToPage("Staff & Permissions")}
+          />}
 
-          <MenuItem
+          <SecureMenuItem
             label="General Cashier"
-            icon="鈧�"
+            icon="₦"
+            currentUser={currentUser}
             active={page === "General Cashier"}
-            onClick={() => setPage("General Cashier")}
+            onClick={() => goToPage("General Cashier")}
           />
 
-          <MenuItem
+          <SecureMenuItem
             label="Roster & Attendance"
-            icon="鈻�"
+            icon="▦"
+            currentUser={currentUser}
             active={page === "Roster & Attendance"}
-            onClick={() => setPage("Roster & Attendance")}
+            onClick={() => goToPage("Roster & Attendance")}
           />
 
-          <MenuItem
+          <SecureMenuItem
             label="Reports"
-            icon="鈻�"
+            icon="▥"
+            currentUser={currentUser}
             active={page === "Reports"}
-            onClick={() => setPage("Reports")}
+            onClick={() => goToPage("Reports")}
           />
 
-          <MenuItem
+          <SecureMenuItem
             label="Alerts"
             icon="!"
+            currentUser={currentUser}
             active={page === "Alerts"}
-            onClick={() => setPage("Alerts")}
+            onClick={() => goToPage("Alerts")}
           />
 
-          <MenuItem
+          <SecureMenuItem
             label="SMS / Notifications"
-            icon="鉁�"
+            icon="✉"
+            currentUser={currentUser}
             active={page === "SMS / Notifications"}
-            onClick={() => setPage("SMS / Notifications")}
+            onClick={() => goToPage("SMS / Notifications")}
           />
 
-          <MenuItem
+          <SecureMenuItem
             label="Audit Logs"
-            icon="鈼�"
+            icon="◌"
+            currentUser={currentUser}
             active={page === "Audit Logs"}
-            onClick={() => setPage("Audit Logs")}
+            onClick={() => goToPage("Audit Logs")}
           />
 
-          <MenuItem
+          {currentUser.role === "Super Admin" && <SecureMenuItem
             label="Settings"
-            icon="鈿�"
+            icon="⚙"
+            currentUser={currentUser}
             active={page === "Settings"}
-            onClick={() => setPage("Settings")}
-          />
+            onClick={() => goToPage("Settings")}
+          />}
+
+          <SecureMenuItem label="ICT Stock / Inventory" icon="📦" currentUser={currentUser} active={page === "ICT Stock / Inventory"} onClick={() => goToPage("ICT Stock / Inventory")} />
+          <SecureMenuItem label="Appointments" icon="📅" currentUser={currentUser} active={page === "Appointments"} onClick={() => goToPage("Appointments")} />
+          <SecureMenuItem label="Patient Card Printing" icon="▤" currentUser={currentUser} active={page === "Patient Card Printing"} onClick={() => goToPage("Patient Card Printing")} />
+          {currentUser.role === "Super Admin" && <SecureMenuItem label="Backup & Restore" icon="↕" currentUser={currentUser} active={page === "Backup & Restore"} onClick={() => goToPage("Backup & Restore")} />}
         </nav>
 
         <div className="sidebar-footer">
@@ -663,8 +780,8 @@ function App() {
           </div>
 
           <div className="top-actions">
-            <button className="icon-button" onClick={() => setPage("Alerts")}>
-              馃敂
+            <button className="icon-button" onClick={() => goToPage("Alerts")}>
+              🔔
             </button>
 
             <div className="user-box">
@@ -694,7 +811,8 @@ function App() {
               staff={staff}
               attendance={attendance}
               setAttendance={setAttendance}
-              setPage={setPage}
+              setPage={goToPage}
+              canAccessPage={canAccessPage}
             />
           )}
 
@@ -819,7 +937,13 @@ function App() {
           )}
 
           {["Immunization Unit", "Family Planning Unit", "Adolescent Unit"].includes(page) && (
-            <ProgramUnitPage title={page} patients={patients} showMessage={showMessage} />
+            <ProgramUnitPage
+              title={page}
+              patients={patients}
+              setPatients={setPatients}
+              showMessage={showMessage}
+              logAudit={logAudit}
+            />
           )}
 
           {page === "General Cashier" && (
@@ -894,16 +1018,35 @@ function App() {
           )}
 
           {page === "Settings" && (
-            <ModulePage
-              title="System Settings"
-              subtitle="Hospital configuration and system controls"
-              icon="鈿�"
-              stats={[
-                ["Departments", departments.length],
-                ["Staff", staff.length],
-                ["Permissions", permissions.length],
-                ["System", "Active"],
-              ]}
+            <SystemAdministrationPage
+              currentUser={currentUser}
+              staff={staff}
+              setStaff={setStaff}
+              staffPermissions={staffPermissions}
+              setStaffPermissions={setStaffPermissions}
+              settings={hospitalSettings}
+              setSettings={setHospitalSettings}
+              showMessage={showMessage}
+            />
+          )}
+
+          {page === "ICT Stock / Inventory" && (
+            <InventoryPage inventory={inventory} setInventory={setInventory} movements={inventoryMovements} setMovements={setInventoryMovements} showMessage={showMessage} />
+          )}
+
+          {page === "Appointments" && (
+            <AppointmentsPage patients={patients} appointments={appointments} setAppointments={setAppointments} showMessage={showMessage} />
+          )}
+
+          {page === "Patient Card Printing" && (
+            <PatientCardPage patients={patients} settings={hospitalSettings} />
+          )}
+
+          {page === "Backup & Restore" && (
+            <BackupRestorePage
+              data={{ patients, staff, transactions, pharmacyPrescriptions, labRequests, wardRecords, ultrasoundRequests, attendance, rosterEntries, auditLogs, alerts, smsMessages, receptionQueue, outpatientVisits, inventory, inventoryMovements, appointments, staffPermissions, hospitalSettings }}
+              setters={{ setPatients, setStaff, setTransactions, setPharmacyPrescriptions, setLabRequests, setWardRecords, setUltrasoundRequests, setAttendance, setRosterEntries, setAuditLogs, setAlerts, setSmsMessages, setReceptionQueue, setOutpatientVisits, setInventory, setInventoryMovements, setAppointments, setStaffPermissions, setHospitalSettings }}
+              showMessage={showMessage}
             />
           )}
         </section>
@@ -1022,7 +1165,7 @@ function App() {
 
       {showPermissions && selectedStaff && (
         <Modal
-          title={`Permissions 鈥� ${selectedStaff.name}`}
+          title={`Permissions — ${selectedStaff.name}`}
           onClose={() => setShowPermissions(false)}
         >
           <p className="modal-description">
@@ -1131,7 +1274,7 @@ function LoginScreen({
         </div>
 
         <footer>
-          Primary Health Care Department 鈥� Sokoto State
+          Primary Health Care Department • Sokoto State
         </footer>
       </div>
     </div>
@@ -1140,17 +1283,32 @@ function LoginScreen({
 
 function MenuItem({ label, icon, active, onClick }) {
   return (
-    <button
-      className={`menu-item ${active ? "active" : ""}`}
-      onClick={onClick}
-    >
+    <button className={`menu-item ${active ? "active" : ""}`} onClick={onClick}>
       <span className="menu-icon">{icon}</span>
       <span>{label}</span>
     </button>
   );
 }
 
-function DashboardPage({ currentUser, patients, staff, attendance = [], setAttendance, setPage }) {
+function SecureMenuItem({ label, icon, active, onClick, currentUser }) {
+  const labelMap = {
+    Laboratory: "Laboratory Unit",
+    Pharmacy: "Pharmacy Unit",
+    Ultrasound: "Ultrasound Room",
+    Immunization: "Immunization Unit",
+    "Family Planning": "Family Planning Unit",
+    "Adolescent Unit": "Adolescent Unit",
+    "Patient Card Printing": "Patient Card Printing",
+    "ICT Stock / Inventory": "ICT Stock / Inventory",
+    Appointments: "Appointments",
+    "Backup & Restore": "Backup & Restore",
+  };
+  const target = labelMap[label] || label;
+  if (!userCanAccessPage(currentUser, target)) return null;
+  return <MenuItem label={label} icon={icon} active={active} onClick={onClick} />;
+}
+
+function DashboardPage({ currentUser, patients, staff, attendance = [], setAttendance, setPage, canAccessPage }) {
   return (
     <div>
       <div className="welcome">
@@ -1172,21 +1330,21 @@ function DashboardPage({ currentUser, patients, staff, attendance = [], setAtten
         <StatCard
           title="Total Patients"
           value={patients.length}
-          icon="鈾�"
+          icon="♙"
           text="Registered patients"
         />
 
         <StatCard
           title="Staff"
           value={staff.length}
-          icon="鈾�"
+          icon="♟"
           text="Active staff accounts"
         />
 
         <StatCard
           title="Today's Visits"
           value="42"
-          icon="鈻�"
+          icon="▣"
           text="Patient visits today"
         />
 
@@ -1201,7 +1359,7 @@ function DashboardPage({ currentUser, patients, staff, attendance = [], setAtten
       <div className="panel" style={{ marginBottom: 18 }}>
         <div className="panel-header">
           <div>
-            <h2>Today鈥檚 Staff Attendance</h2>
+            <h2>Today’s Staff Attendance</h2>
             <p>Sign-in / sign-out status for today</p>
           </div>
           <button className="button secondary" onClick={() => setPage("Roster & Attendance")}>
@@ -1209,9 +1367,9 @@ function DashboardPage({ currentUser, patients, staff, attendance = [], setAtten
           </button>
         </div>
         <div className="stats-grid">
-          <StatCard title="Signed In" value={attendance.filter((a) => a.date === new Date().toLocaleDateString() && a.signIn && !a.signOut).length} icon="鉁�" />
-          <StatCard title="Signed Out" value={attendance.filter((a) => a.date === new Date().toLocaleDateString() && a.signOut).length} icon="鈫�" />
-          <StatCard title="On Duty" value={attendance.filter((a) => a.date === new Date().toLocaleDateString() && a.dutyStatus === "On Duty").length} icon="鈻�" />
+          <StatCard title="Signed In" value={attendance.filter((a) => a.date === new Date().toLocaleDateString() && a.signIn && !a.signOut).length} icon="✓" />
+          <StatCard title="Signed Out" value={attendance.filter((a) => a.date === new Date().toLocaleDateString() && a.signOut).length} icon="↗" />
+          <StatCard title="On Duty" value={attendance.filter((a) => a.date === new Date().toLocaleDateString() && a.dutyStatus === "On Duty").length} icon="▦" />
         </div>
       </div>
 
@@ -1243,32 +1401,35 @@ function DashboardPage({ currentUser, patients, staff, attendance = [], setAtten
         <div className="panel">
           <div className="panel-header">
             <div>
-              <h2>Department Overview</h2>
-              <p>Current activity by department</p>
+              <h2>{currentUser?.role === "Super Admin" || currentUser?.role === "In-Charge" ? "Department Overview" : "My Department"}</h2>
+              <p>{currentUser?.role === "Super Admin" || currentUser?.role === "In-Charge" ? "System-wide monitoring" : "Only your assigned department workspace is shown here"}</p>
             </div>
           </div>
 
-          <div className="department-list">
-            {[
-              ["Records Unit", "12 patients waiting"],
-              ["Nursing Unit", "8 patients waiting"],
-              ["Consultant Room", "5 consultations"],
-              ["Laboratory Unit", "7 new requests"],
-              ["Pharmacy Unit", "9 prescriptions"],
-              ["Ultrasound Room", "4 new requests"],
-            ].map(([name, info]) => (
-              <div className="department-row" key={name}>
-                <div className="dept-icon">+</div>
-
-                <div>
-                  <strong>{name}</strong>
-                  <span>{info}</span>
+          {(currentUser?.role === "Super Admin" || currentUser?.role === "In-Charge") ? (
+            <div className="department-list">
+              {[
+                ["Records Unit", "12 patients waiting"],
+                ["Nursing Unit", "8 patients waiting"],
+                ["Consultant Room", "5 consultations"],
+                ["Laboratory Unit", "7 new requests"],
+                ["Pharmacy Unit", "9 prescriptions"],
+                ["Ultrasound Room", "4 new requests"],
+              ].map(([name, info]) => (
+                <div className="department-row" key={name}>
+                  <div className="dept-icon">+</div>
+                  <div><strong>{name}</strong><span>{info}</span></div>
+                  <span className="status-dot"></span>
                 </div>
-
-                <span className="status-dot"></span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="card" style={{margin:0}}>
+              <h3>{currentUser?.department || "Assigned Department"}</h3>
+              <p className="muted">You can only access work assigned to your department and approved workflows.</p>
+              <p><strong>Role:</strong> {currentUser?.role}</p>
+            </div>
+          )}
         </div>
 
         <div className="panel">
@@ -1280,46 +1441,23 @@ function DashboardPage({ currentUser, patients, staff, attendance = [], setAtten
           </div>
 
           <div className="quick-actions">
-            <button onClick={() => setPage("ICT Centre")}>
-              <span>鈻�</span>
-              Register Patient
-            </button>
-
-            <button onClick={() => setPage("Records Unit")}>
-              <span>鈻�</span>
-              Patient Records
-            </button>
-
-            <button onClick={() => setPage("General Cashier")}>
-              <span>鈧�</span>
-              Cashier
-            </button>
-
-            <button onClick={() => setPage("Roster & Attendance")}>
-              <span>鈻�</span>
-              Attendance
-            </button>
+            {canAccessPage?.("ICT Centre") && <button onClick={() => setPage("ICT Centre")}><span>▣</span>Register Patient</button>}
+            {canAccessPage?.("Records Unit") && <button onClick={() => setPage("Records Unit")}><span>▤</span>Patient Records</button>}
+            {canAccessPage?.("General Cashier") && <button onClick={() => setPage("General Cashier")}><span>₦</span>Cashier</button>}
+            {canAccessPage?.("Roster & Attendance") && <button onClick={() => setPage("Roster & Attendance")}><span>▦</span>Attendance</button>}
           </div>
         </div>
       </div>
 
-      <div className="panel recent-panel">
-        <div className="panel-header">
-          <div>
-            <h2>Recent Patients</h2>
-            <p>Latest patient registrations</p>
+      {(currentUser?.role === "Super Admin" || currentUser?.role === "In-Charge") && (
+        <div className="panel recent-panel">
+          <div className="panel-header">
+            <div><h2>Recent Patients</h2><p>Latest patient registrations</p></div>
+            <button className="text-button" onClick={() => setPage("ICT Centre")}>View All</button>
           </div>
-
-          <button
-            className="text-button"
-            onClick={() => setPage("ICT Centre")}
-          >
-            View All
-          </button>
+          <PatientTable patients={patients} />
         </div>
-
-        <PatientTable patients={patients} />
-      </div>
+      )}
     </div>
   );
 }
@@ -1368,14 +1506,14 @@ function ICTPage({ patients, setPatients, showMessage }) {
       <PageHeader
         title="ICT Centre"
         subtitle="Patient registration and central information technology services"
-        icon="鈻�"
+        icon="▣"
       />
 
       <div className="stats-grid">
-        <StatCard title="Patients" value={patients.length} icon="鈾�" />
+        <StatCard title="Patients" value={patients.length} icon="♙" />
         <StatCard title="New Today" value="12" icon="+" />
-        <StatCard title="SMS Sent" value="38" icon="鉁�" />
-        <StatCard title="System Status" value="Online" icon="鈼�" />
+        <StatCard title="SMS Sent" value="38" icon="✉" />
+        <StatCard title="System Status" value="Online" icon="●" />
       </div>
 
       <div className="panel">
@@ -1491,14 +1629,14 @@ function RecordsDashboard({ patients, onOpenService }) {
         <StatCard
           title="Today's Cards"
           value="12"
-          icon="鈻�"
+          icon="▣"
           text="Cards issued"
         />
 
         <StatCard
           title="Files Issued"
           value="18"
-          icon="鉁�"
+          icon="✓"
           text="Files issued"
         />
 
@@ -1512,7 +1650,7 @@ function RecordsDashboard({ patients, onOpenService }) {
         <StatCard
           title="Total Records"
           value={patients.length}
-          icon="鈼�"
+          icon="◉"
           text="Registered patients"
         />
       </div>
@@ -1565,7 +1703,7 @@ function RecordsPage({ patients, showMessage, setTransactions, transactions = []
     }
 
     if (!service) {
-      showMessage("Za蓳i Card, File ko Card + File.");
+      showMessage("Zaɓi Card, File ko Card + File.");
       return;
     }
 
@@ -1589,7 +1727,7 @@ function RecordsPage({ patients, showMessage, setTransactions, transactions = []
     setTransactions((prev) => [transaction, ...prev]);
 
     showMessage(
-      `${service} na ${selectedPatient.name} an yi payment 鈧�${amount}.`
+      `${service} na ${selectedPatient.name} an yi payment ₦${amount}.`
     );
 
     setSearch("");
@@ -1612,14 +1750,14 @@ function RecordsPage({ patients, showMessage, setTransactions, transactions = []
         <StatCard
           title="Today's Cards"
           value="12"
-          icon="鈻�"
+          icon="▤"
           text="Cards issued"
         />
 
         <StatCard
           title="Files Issued"
           value="18"
-          icon="馃搧"
+          icon="📁"
           text="Files issued"
         />
 
@@ -1633,7 +1771,7 @@ function RecordsPage({ patients, showMessage, setTransactions, transactions = []
         <StatCard
           title="Total Records"
           value={patients.length}
-          icon="馃懁"
+          icon="👤"
           text="Registered patients"
         />
       </div>
@@ -1668,7 +1806,7 @@ function RecordsPage({ patients, showMessage, setTransactions, transactions = []
                   }}
                   onClick={() => setSelectedPatient(patient)}
                 >
-                  <strong>{patient.card}</strong> 鈥� {patient.name} 鈥攞" "}
+                  <strong>{patient.card}</strong> — {patient.name} —{" "}
                   {patient.phone}
                 </button>
               ))
@@ -1714,15 +1852,15 @@ function RecordsPage({ patients, showMessage, setTransactions, transactions = []
               onChange={(e) => setService(e.target.value)}
             >
               <option value="">Select Service</option>
-              <option value="Card">Card 鈥� 鈧�100</option>
-              <option value="File">File 鈥� 鈧�500</option>
-              <option value="Card + File">Card + File 鈥� 鈧�600</option>
+              <option value="Card">Card — ₦100</option>
+              <option value="File">File — ₦500</option>
+              <option value="Card + File">Card + File — ₦600</option>
             </select>
 
             {service && (
               <div className="access-box">
                 <strong>Amount</strong>
-                <span>鈧prices[service]}</span>
+                <span>₦{prices[service]}</span>
               </div>
             )}
 
@@ -1778,7 +1916,7 @@ function StaffManagement({
       <PageHeader
         title="Staff & Permissions"
         subtitle="Manage staff accounts, departments, roles and permissions"
-        icon="鈾�"
+        icon="♟"
       />
 
       <div className="toolbar">
@@ -1936,17 +2074,17 @@ function LaboratoryPage({
     {
       title: "Samples Received",
       value: requests.filter((r) => r.status === "Sample Received").length,
-      icon: "鈼�",
+      icon: "◉",
     },
     {
       title: "In Progress",
       value: requests.filter((r) => r.status === "In Progress").length,
-      icon: "鈿�",
+      icon: "⚗",
     },
     {
       title: "Results Ready",
       value: requests.filter((r) => r.status === "Result Ready").length,
-      icon: "鉁�",
+      icon: "✓",
     },
   ];
 
@@ -1957,7 +2095,7 @@ function LaboratoryPage({
     }
 
     if (!test) {
-      showMessage("Za蓳i laboratory test.");
+      showMessage("Zaɓi laboratory test.");
       return;
     }
 
@@ -2004,7 +2142,7 @@ function LaboratoryPage({
     }
 
     showMessage(
-      `${test} na ${selectedPatient.name} an 茩ir茩ira successfully.`
+      `${test} na ${selectedPatient.name} an ƙirƙira successfully.`
     );
 
     setSearch("");
@@ -2016,7 +2154,7 @@ function LaboratoryPage({
 
   const updateStatus = (status) => {
     if (!selectedRequest) {
-      showMessage("Da farko za蓳i laboratory request.");
+      showMessage("Da farko zaɓi laboratory request.");
       return;
     }
 
@@ -2040,7 +2178,7 @@ function LaboratoryPage({
 
   const saveResult = () => {
     if (!selectedRequest) {
-      showMessage("Da farko za蓳i request.");
+      showMessage("Da farko zaɓi request.");
       return;
     }
 
@@ -2072,7 +2210,7 @@ function LaboratoryPage({
 
   const sendToConsultant = () => {
     if (!selectedRequest) {
-      showMessage("Da farko za蓳i request.");
+      showMessage("Da farko zaɓi request.");
       return;
     }
 
@@ -2199,7 +2337,7 @@ function LaboratoryPage({
         {selectedPatient && (
           <div className="selected-patient">
             <strong>Selected Patient:</strong>{" "}
-            {selectedPatient.name} 鈥� {selectedPatient.card}
+            {selectedPatient.name} • {selectedPatient.card}
           </div>
         )}
 
@@ -2257,7 +2395,7 @@ function LaboratoryPage({
                     </td>
 
                     <td>
-                      鈧Number(request.amount || 0).toLocaleString()}
+                      ₦{Number(request.amount || 0).toLocaleString()}
                     </td>
 
                     <td>{request.date}</td>
@@ -2288,8 +2426,8 @@ function LaboratoryPage({
               <h2>Laboratory Request</h2>
 
               <p>
-                {selectedRequest.patientName} 鈥" "}
-                {selectedRequest.card} 鈥" "}
+                {selectedRequest.patientName} •{" "}
+                {selectedRequest.card} •{" "}
                 {selectedRequest.test}
               </p>
             </div>
@@ -2308,10 +2446,10 @@ function LaboratoryPage({
           <div className="selected-patient">
             <strong>Patient:</strong>{" "}
             {selectedRequest.patientName}
-            {" 鈥� "}
+            {" • "}
             <strong>Card:</strong>{" "}
             {selectedRequest.card}
-            {" 鈥� "}
+            {" • "}
             <strong>Test:</strong>{" "}
             {selectedRequest.test}
           </div>
@@ -2401,15 +2539,15 @@ function openBazzaReceiptPrint(transaction) {
       .amount{font-size:20px;font-weight:700;margin-top:12px;border-top:2px solid #111}.footer{text-align:center;margin-top:24px;font-size:11px}
     </style></head><body><div class="receipt">
       <h1>BAZZA PRIMARY HEALTH CARE</h1><div class="sub">Receipt</div>
-      <div class="row"><span class="label">Receipt No.</span><span>${transaction.transactionNo || transaction.transactionNumber || "鈥�"}</span></div>
-      <div class="row"><span class="label">Patient</span><span>${transaction.patientName || "鈥�"}</span></div>
-      <div class="row"><span class="label">Card Number</span><span>${transaction.card || "鈥�"}</span></div>
-      <div class="row"><span class="label">Item / Service</span><span>${transaction.service || "鈥�"}</span></div>
-      <div class="row amount"><span>Amount</span><span>鈧�${amount}</span></div>
-      <div class="row"><span class="label">Payment Method</span><span>${transaction.paymentMethod || "鈥�"}</span></div>
-      <div class="row"><span class="label">Payment Status</span><span>${transaction.paymentStatus || "鈥�"}</span></div>
-      <div class="row"><span class="label">Cashier</span><span>${transaction.cashier || "鈥�"}</span></div>
-      <div class="row"><span class="label">Date / Time</span><span>${transaction.date || "鈥�"}</span></div>
+      <div class="row"><span class="label">Receipt No.</span><span>${transaction.transactionNo || transaction.transactionNumber || "—"}</span></div>
+      <div class="row"><span class="label">Patient</span><span>${transaction.patientName || "—"}</span></div>
+      <div class="row"><span class="label">Card Number</span><span>${transaction.card || "—"}</span></div>
+      <div class="row"><span class="label">Item / Service</span><span>${transaction.service || "—"}</span></div>
+      <div class="row amount"><span>Amount</span><span>₦${amount}</span></div>
+      <div class="row"><span class="label">Payment Method</span><span>${transaction.paymentMethod || "—"}</span></div>
+      <div class="row"><span class="label">Payment Status</span><span>${transaction.paymentStatus || "—"}</span></div>
+      <div class="row"><span class="label">Cashier</span><span>${transaction.cashier || "—"}</span></div>
+      <div class="row"><span class="label">Date / Time</span><span>${transaction.date || "—"}</span></div>
       <div class="footer">Thank you.</div>
     </div><script>window.onload=function(){window.print();};</script></body></html>`);
   printWindow.document.close();
@@ -2431,7 +2569,7 @@ function SearchableSelect({ label, value, onChange, options = [], placeholder = 
     <div className="field searchable-select-wrap">
       {label && <label>{label}</label>}
       <button type="button" className="searchable-select-trigger" disabled={disabled} onClick={() => setOpen((v) => !v)}>
-        {selected ? selected.label : placeholder}<span>鈱�</span>
+        {selected ? selected.label : placeholder}<span>⌄</span>
       </button>
       {open && !disabled && (
         <div className="searchable-select-menu">
@@ -2439,7 +2577,7 @@ function SearchableSelect({ label, value, onChange, options = [], placeholder = 
           <button type="button" className="searchable-option" onClick={() => { onChange(""); setQuery(""); setOpen(false); }}>{placeholder}</button>
           {filtered.map((item) => (
             <button key={String(item.value)} type="button" className="searchable-option" onClick={() => { onChange(item.value); setQuery(""); setOpen(false); }}>
-              <span>{item.label}</span>{showPrice && item.price !== undefined ? <strong>鈧Number(item.price).toLocaleString()}</strong> : null}
+              <span>{item.label}</span>{showPrice && item.price !== undefined ? <strong>₦{Number(item.price).toLocaleString()}</strong> : null}
             </button>
           ))}
           {!filtered.length && <div className="muted" style={{padding:10}}>Babu abin da ya dace da wannan harafi.</div>}
@@ -2464,18 +2602,18 @@ function DepartmentCashierPanel({ department, transactions = [], setTransactions
       ...t,
       paymentMethod: method,
       paymentStatus: "Paid",
-      cashier: currentUser.role === "General Cashier" ? "General Cashier" : `${currentUser.name} 鈥� ${department} Cashier`,
+      cashier: currentUser.role === "General Cashier" ? "General Cashier" : `${currentUser.name} — ${department} Cashier`,
       date: new Date().toLocaleString(),
     } : t));
-    showMessage?.("An kar蓳i payment kuma receipt ya shirya.");
+    showMessage?.("An karɓi payment kuma receipt ya shirya.");
   };
   return (
     <div className="card">
-      <h2>{department} 鈥� Cashier</h2>
-      <p className="muted">Cashier na wannan department na iya kar蓳ar payment da buga receipt. General Cashier kuma yana iya yin aikin wannan department.</p>
+      <h2>{department} — Cashier</h2>
+      <p className="muted">Cashier na wannan department na iya karɓar payment da buga receipt. General Cashier kuma yana iya yin aikin wannan department.</p>
       {!own.length ? <p className="muted">Babu transaction na wannan department tukuna.</p> : (
         <div className="table-scroll"><table><thead><tr><th>Patient</th><th>Item / Service</th><th>Amount</th><th>Status</th><th>Cashier</th><th>Action</th></tr></thead>
-        <tbody>{own.map((t) => <tr key={t.id}><td>{t.patientName} 鈥� {t.card}</td><td>{t.service}</td><td>鈧Number(t.amount || 0).toLocaleString()}</td><td>{t.paymentStatus}</td><td>{t.cashier || "鈥�"}</td><td>
+        <tbody>{own.map((t) => <tr key={t.id}><td>{t.patientName} — {t.card}</td><td>{t.service}</td><td>₦{Number(t.amount || 0).toLocaleString()}</td><td>{t.paymentStatus}</td><td>{t.cashier || "—"}</td><td>
           {t.paymentStatus !== "Paid" && t.paymentStatus !== "FREE" ? <div style={{display:"flex",gap:6,flexWrap:"wrap"}}><button className="small-button" onClick={() => settle(t,"Cash")}>Cash</button><button className="small-button" onClick={() => settle(t,"POS")}>POS</button><button className="small-button" onClick={() => settle(t,"Bank Transfer")}>Transfer</button></div> : null}
           {(t.paymentStatus === "Paid" || t.paymentStatus === "FREE") && <button className="small-button" onClick={() => openBazzaReceiptPrint(t)}>Print Receipt</button>}
         </td></tr>)}</tbody></table></div>
@@ -2516,26 +2654,26 @@ function GeneralCashierPage({ transactions }) {
       <div className="stats-grid">
         <StatCard
           title="Total Collections"
-          value={`鈧�${total.toLocaleString()}`}
-          icon="鈧�"
+          value={`₦${total.toLocaleString()}`}
+          icon="₦"
           text="All transactions"
         />
         <StatCard
           title="Cash"
-          value={`鈧�${cashTotal.toLocaleString()}`}
-          icon="鈧�"
+          value={`₦${cashTotal.toLocaleString()}`}
+          icon="₦"
           text="Cash payments"
         />
         <StatCard
           title="POS"
-          value={`鈧�${posTotal.toLocaleString()}`}
-          icon="鈻�"
+          value={`₦${posTotal.toLocaleString()}`}
+          icon="▣"
           text="POS payments"
         />
         <StatCard
           title="Bank Transfer"
-          value={`鈧�${transferTotal.toLocaleString()}`}
-          icon="鈫�"
+          value={`₦${transferTotal.toLocaleString()}`}
+          icon="↗"
           text="Transfer payments"
         />
       </div>
@@ -2570,7 +2708,7 @@ function GeneralCashierPage({ transactions }) {
                     <td>{transaction.patientName}</td>
                     <td>{transaction.card}</td>
                     <td>{transaction.service}</td>
-                    <td>鈧Number(transaction.amount).toLocaleString()}</td>
+                    <td>₦{Number(transaction.amount).toLocaleString()}</td>
                     <td>{transaction.paymentMethod}</td>
                     <td>{transaction.paymentStatus}</td>
                     <td>{transaction.cashier}</td>
@@ -2658,13 +2796,13 @@ function RosterPage({
           date: d.toLocaleDateString(),
           dateKey: d.toISOString().slice(0, 10),
           period: isStudent ? "Weekly" : "Monthly",
-          shifts: Object.fromEntries(shifts.map((shift) => [shift, allowed.includes(shift) ? cycleDuty(shift, i) : "鈥�"])),
-          rules: "Morning 6 duty/1 off 鈥� Evening 5 duty/2 off 鈥� Night 4 duty/3 off",
+          shifts: Object.fromEntries(shifts.map((shift) => [shift, allowed.includes(shift) ? cycleDuty(shift, i) : "—"])),
+          rules: "Morning 6 duty/1 off • Evening 5 duty/2 off • Night 4 duty/3 off",
         });
       }
     });
     setRosterEntries(generated);
-    showMessage("An 茩ir茩iri sabon roster kuma an ajiye shi.");
+    showMessage("An ƙirƙiri sabon roster kuma an ajiye shi.");
   };
 
   const signIn = (person) => {
@@ -2746,13 +2884,13 @@ function RosterPage({
 
   return (
     <div>
-      <PageHeader title="Roster & Staff Attendance" subtitle="General roster, department rosters, sign in/out and attendance" icon="鈻�" />
+      <PageHeader title="Roster & Staff Attendance" subtitle="General roster, department rosters, sign in/out and attendance" icon="▦" />
 
       <div className="stats-grid">
-        <StatCard title="Total Staff" value={staff.length} icon="鈾�" />
-        <StatCard title="Signed In Today" value={signedIn.length} icon="鉁�" />
-        <StatCard title="Signed Out Today" value={signedOut.length} icon="鈫�" />
-        <StatCard title="On Duty" value={onDuty.length} icon="鈻�" />
+        <StatCard title="Total Staff" value={staff.length} icon="♟" />
+        <StatCard title="Signed In Today" value={signedIn.length} icon="✓" />
+        <StatCard title="Signed Out Today" value={signedOut.length} icon="↗" />
+        <StatCard title="On Duty" value={onDuty.length} icon="▦" />
       </div>
 
       <div className="toolbar">
@@ -2789,13 +2927,13 @@ function RosterPage({
               <thead><tr><th>Staff</th><th>Category</th><th>Department(s)</th><th>Period</th><th>Morning</th><th>Evening</th><th>Night</th><th>Sign In</th><th>Sign Out</th><th>Rules</th></tr></thead>
               <tbody>
                 {(visibleEntries.length ? visibleEntries.slice(0, 120) : visibleStaff.map((person, index) => ({
-                  id: `preview-${person.id}`, name: person.name, category: person.category || "Staff", departments: person.departments || [person.department], period: person.category === "Student" ? "Weekly" : "Monthly", shifts: Object.fromEntries(shifts.map((sh) => [sh, eligibleShifts(person).includes(sh) ? cycleDuty(sh, index) : "鈥�"])), rules: "Morning 6/1 鈥� Evening 5/2 鈥� Night 4/3"
+                  id: `preview-${person.id}`, name: person.name, category: person.category || "Staff", departments: person.departments || [person.department], period: person.category === "Student" ? "Weekly" : "Monthly", shifts: Object.fromEntries(shifts.map((sh) => [sh, eligibleShifts(person).includes(sh) ? cycleDuty(sh, index) : "—"])), rules: "Morning 6/1 • Evening 5/2 • Night 4/3"
                 }))).map((entry) => (
                   <tr key={entry.id}>
                     <td>{entry.name}</td><td>{entry.category}</td><td>{(entry.departments || []).join(", ")}</td><td>{entry.period}</td>
-                    {shifts.map((sh) => <td key={sh}><span className="shift-badge">{entry.shifts?.[sh] || "鈥�"}</span></td>)}
-                    <td>{[...attendance].reverse().find((a) => a.staffId === entry.staffId && a.date === entry.date)?.signIn || "鈥�"}</td>
-                    <td>{[...attendance].reverse().find((a) => a.staffId === entry.staffId && a.date === entry.date)?.signOut || "鈥�"}</td>
+                    {shifts.map((sh) => <td key={sh}><span className="shift-badge">{entry.shifts?.[sh] || "—"}</span></td>)}
+                    <td>{[...attendance].reverse().find((a) => a.staffId === entry.staffId && a.date === entry.date)?.signIn || "—"}</td>
+                    <td>{[...attendance].reverse().find((a) => a.staffId === entry.staffId && a.date === entry.date)?.signOut || "—"}</td>
                     <td>{entry.rules}</td>
                   </tr>
                 ))}
@@ -2813,7 +2951,7 @@ function RosterPage({
             <tbody>{staff.map((person) => {
               const record = [...attendance].reverse().find((a) => a.staffId === person.staffId && a.date === todayKey);
               return <tr key={person.id}>
-                <td>{person.name}</td><td>{person.category || "Staff"}</td><td>{person.department}</td><td>{todayKey}</td><td>{record?.signIn || "鈥�"}</td><td>{record?.signOut || "鈥�"}</td><td>{record?.dutyStatus || "Not Signed In"}</td>
+                <td>{person.name}</td><td>{person.category || "Staff"}</td><td>{person.department}</td><td>{todayKey}</td><td>{record?.signIn || "—"}</td><td>{record?.signOut || "—"}</td><td>{record?.dutyStatus || "Not Signed In"}</td>
                 <td><div className="table-actions"><button className="small-button" onClick={() => signIn(person)}>Sign In</button><button className="small-button" onClick={() => signOut(person)}>Sign Out</button></div></td>
               </tr>;
             })}</tbody>
@@ -2836,21 +2974,21 @@ function RosterPage({
         <div className="shift-rules">
           <div><strong>Staff + Volunteers</strong><span>Monthly roster</span></div>
           <div><strong>Students</strong><span>Weekly roster</span></div>
-          <div><strong>Morning</strong><span>6 duty days 鈫� 1 off</span></div>
-          <div><strong>Evening</strong><span>5 duty days 鈫� 2 off</span></div>
-          <div><strong>Night</strong><span>4 duty days 鈫� 3 off</span></div>
+          <div><strong>Morning</strong><span>6 duty days → 1 off</span></div>
+          <div><strong>Evening</strong><span>5 duty days → 2 off</span></div>
+          <div><strong>Night</strong><span>4 duty days → 3 off</span></div>
           <div><strong>Married Staff</strong><span>Morning + Evening only</span></div>
           <div><strong>HOD</strong><span>Morning + Evening + Night</span></div>
         </div>
       </div>
 
       {setupOpen && (
-        <Modal title={`Roster Setup 鈥� ${staff.find((p) => p.staffId === selectedStaffId)?.name || "Staff"}`} onClose={() => setSetupOpen(false)}>
+        <Modal title={`Roster Setup — ${staff.find((p) => p.staffId === selectedStaffId)?.name || "Staff"}`} onClose={() => setSetupOpen(false)}>
           <div className="form-grid">
             <FormField label="Category"><select value={setup.category} onChange={(e) => setSetup({ ...setup, category: e.target.value })}>{categories.map((c) => <option key={c}>{c}</option>)}</select></FormField>
             <FormField label="Marital Status"><select value={setup.maritalStatus} onChange={(e) => setSetup({ ...setup, maritalStatus: e.target.value })}><option>Single</option><option>Married</option></select></FormField>
           </div>
-          <label className="permission-item" style={{ marginBottom: 14 }}><input type="checkbox" checked={setup.isHOD} onChange={(e) => setSetup({ ...setup, isHOD: e.target.checked })} /> <span>HOD 鈥� always Morning + Evening + Night</span></label>
+          <label className="permission-item" style={{ marginBottom: 14 }}><input type="checkbox" checked={setup.isHOD} onChange={(e) => setSetup({ ...setup, isHOD: e.target.checked })} /> <span>HOD — always Morning + Evening + Night</span></label>
           <div className="field"><label>Department(s)</label><div className="button-row">{departments.filter((d) => !["General Cashier", "In-Charge"].includes(d)).map((d) => <button type="button" key={d} className={`small-button ${setup.departments.includes(d) ? "primary" : ""}`} onClick={() => setSetup({ ...setup, departments: setup.departments.includes(d) ? setup.departments.filter((x) => x !== d) : [...setup.departments, d] })}>{d}</button>)}</div></div>
           <div className="field"><label>Allowed Shifts</label><div className="button-row">{shifts.map((sh) => <button type="button" key={sh} className={`small-button ${setup.allowedShifts.includes(sh) ? "primary" : ""}`} onClick={() => setSetup({ ...setup, allowedShifts: setup.allowedShifts.includes(sh) ? setup.allowedShifts.filter((x) => x !== sh) : [...setup.allowedShifts, sh] })}>{sh}</button>)}</div></div>
           <div className="modal-actions"><button className="button secondary" onClick={() => setSetupOpen(false)}>Cancel</button><button className="button primary" onClick={saveSetup}>Save Setup</button></div>
@@ -2863,7 +3001,7 @@ function RosterPage({
 function AuditPage({ currentUser, logs = [] }) {
   return (
     <div>
-      <PageHeader title="Audit Logs" subtitle="System activity and accountability records" icon="鈼�" />
+      <PageHeader title="Audit Logs" subtitle="System activity and accountability records" icon="◌" />
       <div className="panel">
         <div className="table-scroll">
           <table>
@@ -2871,7 +3009,7 @@ function AuditPage({ currentUser, logs = [] }) {
             <tbody>
               {logs.length ? logs.map((log) => (
                 <tr key={log.id}>
-                  <td>{log.action}</td><td>{log.user}</td><td>{log.module}</td><td>{log.details || "鈥�"}</td><td>{log.time}</td>
+                  <td>{log.action}</td><td>{log.user}</td><td>{log.module}</td><td>{log.details || "—"}</td><td>{log.time}</td>
                   <td><span className="status-badge active-status">Recorded</span></td>
                 </tr>
               )) : <tr><td colSpan="6">No audit records yet.</td></tr>}
@@ -2908,9 +3046,9 @@ function ChildWardPage({ patients = [], records = [], setRecords, showMessage })
 
   const admit = () => {
     const patient = patients.find((p) => String(p.id) === String(selectedId));
-    if (!patient) return showMessage("Za蓳i child patient daga ICT/Records.");
-    if (!bed) return showMessage("Za蓳i bed.");
-    if (occupied.some((r) => r.bed === bed)) return showMessage("Wannan bed 蓷in yana occupied.");
+    if (!patient) return showMessage("Zaɓi child patient daga ICT/Records.");
+    if (!bed) return showMessage("Zaɓi bed.");
+    if (occupied.some((r) => r.bed === bed)) return showMessage("Wannan bed ɗin yana occupied.");
     if (!age.trim()) return showMessage("Shigar da shekarun yaro.");
     if (!guardian.trim()) return showMessage("Shigar da sunan guardian/parent.");
 
@@ -2972,10 +3110,10 @@ function ChildWardPage({ patients = [], records = [], setRecords, showMessage })
       />
 
       <div className="stats-grid">
-        <StatCard title="Occupied Beds" value={occupied.length} icon="鈻�" />
-        <StatCard title="Available Beds" value={availableBeds.length} icon="鉁�" />
-        <StatCard title="Current Patients" value={occupied.length} icon="馃懚" />
-        <StatCard title="Discharges" value={wardRecords.filter((r) => r.status === "Discharged").length} icon="鈫�" />
+        <StatCard title="Occupied Beds" value={occupied.length} icon="▣" />
+        <StatCard title="Available Beds" value={availableBeds.length} icon="✓" />
+        <StatCard title="Current Patients" value={occupied.length} icon="👶" />
+        <StatCard title="Discharges" value={wardRecords.filter((r) => r.status === "Discharged").length} icon="↗" />
       </div>
 
       <div className="card">
@@ -3004,7 +3142,7 @@ function ChildWardPage({ patients = [], records = [], setRecords, showMessage })
               <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
                 <option value="">Select patient from ICT/Records</option>
                 {filteredPatients.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name} 鈥� {p.card}</option>
+                  <option key={p.id} value={p.id}>{p.name} — {p.card}</option>
                 ))}
               </select>
             </label>
@@ -3091,7 +3229,7 @@ function ChildWardPage({ patients = [], records = [], setRecords, showMessage })
               <tbody>
                 {beds.map((b) => {
                   const r = occupied.find((x) => x.bed === b);
-                  return <tr key={b}><td>{b}</td><td>{r ? "Occupied" : "Available"}</td><td>{r ? r.patientName : "鈥�"}</td><td>{r ? r.card : "鈥�"}</td><td>{r ? r.guardian : "鈥�"}</td></tr>;
+                  return <tr key={b}><td>{b}</td><td>{r ? "Occupied" : "Available"}</td><td>{r ? r.patientName : "—"}</td><td>{r ? r.card : "—"}</td><td>{r ? r.guardian : "—"}</td></tr>;
                 })}
               </tbody>
             </table>
@@ -3145,10 +3283,10 @@ function MaternityWardPage({ patients = [], records = [], setRecords, showMessag
   const admit = () => {
     const patient = patients.find((p) => String(p.id) === String(selectedId));
 
-    if (!patient) return showMessage("Za蓳i mace mara lafiya.");
-    if (patient.sex !== "Female") return showMessage("Maternity Ward na kar蓳ar female patient kawai.");
-    if (!bed) return showMessage("Za蓳i bed.");
-    if (occupied.some((r) => r.bed === bed)) return showMessage("Wannan bed 蓷in yana occupied.");
+    if (!patient) return showMessage("Zaɓi mace mara lafiya.");
+    if (patient.sex !== "Female") return showMessage("Maternity Ward na karɓar female patient kawai.");
+    if (!bed) return showMessage("Zaɓi bed.");
+    if (occupied.some((r) => r.bed === bed)) return showMessage("Wannan bed ɗin yana occupied.");
 
     const record = {
       id: Date.now(),
@@ -3208,13 +3346,13 @@ function MaternityWardPage({ patients = [], records = [], setRecords, showMessag
       <PageHeader
         title="Maternity Ward"
         subtitle="Maternity admission, pregnancy monitoring, bed assignment, delivery status and discharge"
-        icon="鈾�"
+        icon="♡"
       />
 
       <div className="stats-grid">
-        <StatCard title="Occupied Beds" value={occupied.length} icon="鈻�" />
-        <StatCard title="Available Beds" value={availableBeds.length} icon="鉁�" />
-        <StatCard title="Antenatal Patients" value={antenatalPatients} icon="鈾�" />
+        <StatCard title="Occupied Beds" value={occupied.length} icon="▣" />
+        <StatCard title="Available Beds" value={availableBeds.length} icon="✓" />
+        <StatCard title="Antenatal Patients" value={antenatalPatients} icon="♡" />
         <StatCard title="Delivered" value={deliveredPatients} icon="+" />
       </div>
 
@@ -3235,7 +3373,7 @@ function MaternityWardPage({ patients = [], records = [], setRecords, showMessag
               <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
                 <option value="">Select female patient</option>
                 {patients.filter((p) => p.sex === "Female").map((p) => (
-                  <option key={p.id} value={p.id}>{p.name} 鈥� {p.card}</option>
+                  <option key={p.id} value={p.id}>{p.name} — {p.card}</option>
                 ))}
               </select>
             </label>
@@ -3330,7 +3468,7 @@ function MaternityWardPage({ patients = [], records = [], setRecords, showMessag
                     <td>{r.card}</td>
                     <td>{r.bed}</td>
                     <td>{r.pregnancyStage}</td>
-                    <td>{r.gestationalAge || "鈥�"}</td>
+                    <td>{r.gestationalAge || "—"}</td>
                     <td>{r.condition}</td>
                     <td>{r.deliveryStatus}</td>
                     <td>
@@ -3358,9 +3496,9 @@ function MaternityWardPage({ patients = [], records = [], setRecords, showMessag
                     <tr key={b}>
                       <td>{b}</td>
                       <td>{r ? "Occupied" : "Available"}</td>
-                      <td>{r ? r.patientName : "鈥�"}</td>
-                      <td>{r ? r.card : "鈥�"}</td>
-                      <td>{r ? r.pregnancyStage : "鈥�"}</td>
+                      <td>{r ? r.patientName : "—"}</td>
+                      <td>{r ? r.card : "—"}</td>
+                      <td>{r ? r.pregnancyStage : "—"}</td>
                     </tr>
                   );
                 })}
@@ -3390,6 +3528,30 @@ function MaternityWardPage({ patients = [], records = [], setRecords, showMessag
 }
 
 
+
+function SearchableMultiSelectButtons({ label, options = [], value = [], onChange, placeholder = "Search..." }) {
+  const [query, setQuery] = useState("");
+  const filtered = options.filter((option) => String(option).toLowerCase().includes(query.trim().toLowerCase()));
+  const toggle = (option) => {
+    const next = value.includes(option) ? value.filter((item) => item !== option) : [...value, option];
+    onChange?.(next);
+  };
+  return (
+    <div className="form-field">
+      <span>{label}</span>
+      <input className="search-input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={placeholder} style={{marginTop:8}} />
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
+        {filtered.map((option) => (
+          <button key={option} type="button" className={value.includes(option) ? "button primary" : "button secondary"} onClick={() => toggle(option)}>
+            {value.includes(option) ? "✓ " : "＋ "}{option}
+          </button>
+        ))}
+        {!filtered.length && <span className="muted">No matching option.</span>}
+      </div>
+      {value.length > 0 && <div style={{marginTop:10}}><strong>Selected:</strong> {value.join(", ")}</div>}
+    </div>
+  );
+}
 
 function NursingUnitPage({ patients = [], setPatients, showMessage }) {
   const [view, setView] = useState("queue");
@@ -3431,9 +3593,9 @@ function NursingUnitPage({ patients = [], setPatients, showMessage }) {
   };
 
   const save = () => {
-    if (!selected) return showMessage("Za蓳i patient da farko.");
-    if (!tasks.length) return showMessage("Za蓳i a茩alla nursing task 蓷aya.");
-    if (!result) return showMessage("Za蓳i nursing result.");
+    if (!selected) return showMessage("Zaɓi patient da farko.");
+    if (tasks.length < 2) return showMessage("Zaɓi aƙalla nursing tasks guda 2.");
+    if (!result) return showMessage("Zaɓi nursing result.");
 
     const record = {
       id: Date.now(),
@@ -3465,12 +3627,12 @@ function NursingUnitPage({ patients = [], setPatients, showMessage }) {
 
   return (
     <div>
-      <PageHeader title="Nursing Unit" subtitle="Nursing assessment, patient flow and ward assignment" icon="鈾�" />
+      <PageHeader title="Nursing Unit" subtitle="Nursing assessment, patient flow and ward assignment" icon="♙" />
       <div className="stats-grid">
-        <StatCard title="Patients" value={patients.length} icon="鈼�" />
-        <StatCard title="Nursing Records" value={savedRecords.length} icon="鉁�" />
-        <StatCard title="Ready for Consultant" value={ready.length} icon="鈫�" />
-        <StatCard title="Completed" value={savedRecords.filter(r => r.status === "Completed").length} icon="鈻�" />
+        <StatCard title="Patients" value={patients.length} icon="◉" />
+        <StatCard title="Nursing Records" value={savedRecords.length} icon="✓" />
+        <StatCard title="Ready for Consultant" value={ready.length} icon="→" />
+        <StatCard title="Completed" value={savedRecords.filter(r => r.status === "Completed").length} icon="▣" />
       </div>
 
       <div className="panel">
@@ -3487,7 +3649,7 @@ function NursingUnitPage({ patients = [], setPatients, showMessage }) {
             <div className="search-results">
               {filtered.map(p => (
                 <button key={p.id} className="result-item" onClick={() => { setSelected(p); setSearch(p.name); }}>
-                  {p.name} 鈥� {p.card} 鈥� {p.phone || "No phone"}
+                  {p.name} — {p.card} — {p.phone || "No phone"}
                 </button>
               ))}
             </div>
@@ -3497,14 +3659,13 @@ function NursingUnitPage({ patients = [], setPatients, showMessage }) {
                 <h2>{selected.name}</h2>
                 <p><strong>Card Number:</strong> {selected.card}</p>
 
-                <div className="form-field">
-                  <span>Routine Nursing Tasks 鈥� click to select multiple</span>
-                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
-                    {routineTasks.map(t => (
-                      <button key={t} type="button" className={tasks.includes(t) ? "button primary" : "button secondary"} onClick={() => toggleTask(t)}>{t}</button>
-                    ))}
-                  </div>
-                </div>
+                <SearchableMultiSelectButtons
+                  label="Routine Nursing Tasks — Select 2 or more"
+                  options={routineTasks}
+                  value={tasks}
+                  onChange={setTasks}
+                  placeholder="Search nursing task..."
+                />
 
                 <div className="form-grid">
                   <FormField label="Nursing Result">
@@ -3546,7 +3707,7 @@ function NursingUnitPage({ patients = [], setPatients, showMessage }) {
 
         {view === "ready" && (
           <div className="table-wrapper"><table><thead><tr><th>Patient</th><th>Card</th><th>Result</th><th>Notes</th><th>Date</th></tr></thead><tbody>
-            {ready.map(r => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.result}</td><td>{r.notes || "鈥�"}</td><td>{r.date}</td></tr>)}
+            {ready.map(r => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.result}</td><td>{r.notes || "—"}</td><td>{r.date}</td></tr>)}
             {!ready.length && <tr><td colSpan="5">No patient is ready for Consultant.</td></tr>}
           </tbody></table></div>
         )}
@@ -3583,8 +3744,8 @@ function UltrasoundRoomPage({ patients = [], requests = [], setRequests, setTran
   }).slice(0, 12);
 
   const createRequest = () => {
-    if (!selected) return showMessage?.("Za蓳i patient.");
-    if (!type) return showMessage?.("Za蓳i ultrasound type.");
+    if (!selected) return showMessage?.("Zaɓi patient.");
+    if (!type) return showMessage?.("Zaɓi ultrasound type.");
     if (type === "Other" && !otherType.trim()) return showMessage?.("Rubuta sunan ultrasound na Other.");
     if (!setRequests) return showMessage?.("Ultrasound connection is not available.");
 
@@ -3721,13 +3882,13 @@ function UltrasoundRoomPage({ patients = [], requests = [], setRequests, setTran
 
   return (
     <div>
-      <PageHeader title="Ultrasound Room" subtitle="Consultant requests, scanning, reports, payment and results" icon="鈼�" />
+      <PageHeader title="Ultrasound Room" subtitle="Consultant requests, scanning, reports, payment and results" icon="◉" />
 
       <div className="stats-grid">
         <StatCard title="New Requests" value={newRequests.length} icon="!" />
-        <StatCard title="In Progress" value={inProgress.length} icon="鈼�" />
-        <StatCard title="Results Ready" value={ready.length} icon="鉁�" />
-        <StatCard title="Sent to Consultant" value={sent.length} icon="鈫�" />
+        <StatCard title="In Progress" value={inProgress.length} icon="◉" />
+        <StatCard title="Results Ready" value={ready.length} icon="✓" />
+        <StatCard title="Sent to Consultant" value={sent.length} icon="→" />
       </div>
 
       <DepartmentCashierPanel department="Ultrasound Room" transactions={transactions} setTransactions={setTransactions} currentUser={currentUser} showMessage={showMessage} />
@@ -3747,12 +3908,12 @@ function UltrasoundRoomPage({ patients = [], requests = [], setRequests, setTran
               <div className="search-results" style={{ marginTop: 10 }}>
                 {filtered.map((patient) => (
                   <button key={patient.id} className="result-item" onClick={() => { setSelected(patient); setSearch(patient.name); }}>
-                    {patient.name} 鈥� {patient.card} 鈥� {patient.phone || patient.phoneNumber || "No phone"}
+                    {patient.name} — {patient.card} — {patient.phone || patient.phoneNumber || "No phone"}
                   </button>
                 ))}
               </div>
             )}
-            {selected && <p><strong>{selected.name}</strong> 鈥� {selected.card} 鈥� {selected.phone || selected.phoneNumber || "No phone"}</p>}
+            {selected && <p><strong>{selected.name}</strong> — {selected.card} — {selected.phone || selected.phoneNumber || "No phone"}</p>}
 
             <div className="form-grid">
               <FormField label="Ultrasound Type">
@@ -3800,7 +3961,7 @@ function UltrasoundRoomPage({ patients = [], requests = [], setRequests, setTran
                       <td>{request.patientName}</td>
                       <td>{request.card}</td>
                       <td>{request.type}</td>
-                      <td>鈧Number(request.amount || 0).toLocaleString()} / {request.paymentStatus || "Pending"}</td>
+                      <td>₦{Number(request.amount || 0).toLocaleString()} / {request.paymentStatus || "Pending"}</td>
                       <td>{request.status}</td>
                       <td>
                         <button className="small-button" onClick={() => setSelectedRequestId(request.id)}>View</button>
@@ -3822,8 +3983,8 @@ function UltrasoundRoomPage({ patients = [], requests = [], setRequests, setTran
                 <p><strong>Card:</strong> {selectedRequest.card}</p>
                 <p><strong>Ultrasound:</strong> {selectedRequest.type}</p>
                 <p><strong>Consultant:</strong> {selectedRequest.consultant}</p>
-                <p><strong>Clinical Request:</strong> {selectedRequest.notes || "鈥�"}</p>
-                <p><strong>Payment:</strong> 鈧Number(selectedRequest.amount || 0).toLocaleString()} / {selectedRequest.paymentStatus || "Pending"} / {selectedRequest.paymentMethod || "鈥�"}</p>
+                <p><strong>Clinical Request:</strong> {selectedRequest.notes || "—"}</p>
+                <p><strong>Payment:</strong> ₦{Number(selectedRequest.amount || 0).toLocaleString()} / {selectedRequest.paymentStatus || "Pending"} / {selectedRequest.paymentMethod || "—"}</p>
                 <p><strong>Requested:</strong> {selectedRequest.requestedAt}</p>
                 {selectedRequest.report && <p style={{ whiteSpace: "pre-wrap" }}><strong>Report:</strong> {selectedRequest.report}</p>}
                 <button className="small-button" onClick={() => setSelectedRequestId("")}>Close</button>
@@ -3838,9 +3999,9 @@ function UltrasoundRoomPage({ patients = [], requests = [], setRequests, setTran
             <div style={{ display: "grid", gap: 14 }}>
               {requests.filter((r) => ["In Progress", "Result Ready", "Sent to Consultant"].includes(r.status)).map((request) => (
                 <div key={request.id} style={{ border: "1px solid #dce3e8", borderRadius: 10, padding: 15 }}>
-                  <strong>{request.patientName}</strong> 鈥� {request.card}
-                  <div style={{ marginTop: 5, fontSize: 12, color: "#71808d" }}>{request.type} 鈥� Consultant: {request.consultant}</div>
-                  <div style={{ marginTop: 8, fontSize: 12 }}><strong>Clinical Request:</strong> {request.notes || "鈥�"}</div>
+                  <strong>{request.patientName}</strong> — {request.card}
+                  <div style={{ marginTop: 5, fontSize: 12, color: "#71808d" }}>{request.type} • Consultant: {request.consultant}</div>
+                  <div style={{ marginTop: 8, fontSize: 12 }}><strong>Clinical Request:</strong> {request.notes || "—"}</div>
                   <label className="form-field" style={{ marginTop: 10 }}>
                     <span>Ultrasound Report / Findings</span>
                     <textarea
@@ -3872,14 +4033,58 @@ function UltrasoundRoomPage({ patients = [], requests = [], setRequests, setTran
 function LabourRoomPage({ patients = [], records = [], setRecords, showMessage }) {
  const [selectedId,setSelectedId]=useState(""); const [bed,setBed]=useState(""); const [stage,setStage]=useState("Early Labour"); const [condition,setCondition]=useState("Stable"); const [notes,setNotes]=useState("");
  const beds=Array.from({length:12},(_,i)=>`LR-${String(i+1).padStart(2,"0")}`); const ward=records.filter(r=>r.ward==="Labour Room"); const occupied=ward.filter(r=>r.status==="Admitted"); const available=beds.filter(b=>!occupied.some(r=>r.bed===b));
- const admit=()=>{const p=patients.find(x=>String(x.id)===String(selectedId));if(!p)return showMessage("Za蓳i patient.");if(p.sex!=="Female")return showMessage("Labour Room na kar蓳ar female patient kawai.");if(!bed)return showMessage("Za蓳i bed.");if(occupied.some(r=>r.bed===bed))return showMessage("Bed yana occupied.");const rec={id:Date.now(),ward:"Labour Room",patientId:p.id,patientName:p.name,card:p.card,bed,stage,condition,notes,status:"Admitted",admittedAt:new Date().toLocaleString(),dischargedAt:""};setRecords(prev=>[rec,...prev]);showMessage(`${p.name} an admitted Labour Room.`);setSelectedId("");setBed("");setNotes("");};
+ const admit=()=>{const p=patients.find(x=>String(x.id)===String(selectedId));if(!p)return showMessage("Zaɓi patient.");if(p.sex!=="Female")return showMessage("Labour Room na karɓar female patient kawai.");if(!bed)return showMessage("Zaɓi bed.");if(occupied.some(r=>r.bed===bed))return showMessage("Bed yana occupied.");const rec={id:Date.now(),ward:"Labour Room",patientId:p.id,patientName:p.name,card:p.card,bed,stage,condition,notes,status:"Admitted",admittedAt:new Date().toLocaleString(),dischargedAt:""};setRecords(prev=>[rec,...prev]);showMessage(`${p.name} an admitted Labour Room.`);setSelectedId("");setBed("");setNotes("");};
  const discharge=id=>{setRecords(prev=>prev.map(r=>r.id===id?{...r,status:"Discharged",dischargedAt:new Date().toLocaleString()}:r));showMessage("An yi discharge.")};
- return <div><PageHeader title="Labour Room" subtitle="Labour room patient management and monitoring" icon="鈻�"/><div className="stats-grid"><StatCard title="Occupied Beds" value={occupied.length} icon="鈻�"/><StatCard title="Available Beds" value={available.length} icon="鉁�"/><StatCard title="New Admissions" value={occupied.length} icon="!"/><StatCard title="Discharges" value={ward.filter(r=>r.status==="Discharged").length} icon="鈼�"/></div><div className="panel"><h2>Admit Patient</h2><div className="form-grid"><FormField label="Patient"><select value={selectedId} onChange={e=>setSelectedId(e.target.value)}><option value="">Select patient</option>{patients.filter(p=>p.sex==="Female").map(p=><option key={p.id} value={p.id}>{p.name} 鈥� {p.card}</option>)}</select></FormField><FormField label="Bed"><select value={bed} onChange={e=>setBed(e.target.value)}><option value="">Select bed</option>{available.map(b=><option key={b}>{b}</option>)}</select></FormField><FormField label="Labour Stage"><select value={stage} onChange={e=>setStage(e.target.value)}><option>Early Labour</option><option>Active Labour</option><option>Second Stage</option><option>Post Delivery</option></select></FormField><FormField label="Condition"><select value={condition} onChange={e=>setCondition(e.target.value)}><option>Stable</option><option>Under Observation</option><option>Critical</option></select></FormField><FormField label="Notes"><textarea value={notes} onChange={e=>setNotes(e.target.value)}/></FormField></div><button className="button primary" onClick={admit}>Admit to Labour Room</button></div><div className="panel"><h2>Current Patients</h2><div className="table-wrapper"><table><thead><tr><th>Patient</th><th>Card</th><th>Bed</th><th>Stage</th><th>Condition</th><th>Action</th></tr></thead><tbody>{occupied.map(r=><tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.stage}</td><td>{r.condition}</td><td><button className="small-button" onClick={()=>discharge(r.id)}>Discharge</button></td></tr>)}</tbody></table></div></div></div>;
+ return <div><PageHeader title="Labour Room" subtitle="Labour room patient management and monitoring" icon="▣"/><div className="stats-grid"><StatCard title="Occupied Beds" value={occupied.length} icon="▣"/><StatCard title="Available Beds" value={available.length} icon="✓"/><StatCard title="New Admissions" value={occupied.length} icon="!"/><StatCard title="Discharges" value={ward.filter(r=>r.status==="Discharged").length} icon="◉"/></div><div className="panel"><h2>Admit Patient</h2><div className="form-grid"><FormField label="Patient"><select value={selectedId} onChange={e=>setSelectedId(e.target.value)}><option value="">Select patient</option>{patients.filter(p=>p.sex==="Female").map(p=><option key={p.id} value={p.id}>{p.name} — {p.card}</option>)}</select></FormField><FormField label="Bed"><select value={bed} onChange={e=>setBed(e.target.value)}><option value="">Select bed</option>{available.map(b=><option key={b}>{b}</option>)}</select></FormField><FormField label="Labour Stage"><select value={stage} onChange={e=>setStage(e.target.value)}><option>Early Labour</option><option>Active Labour</option><option>Second Stage</option><option>Post Delivery</option></select></FormField><FormField label="Condition"><select value={condition} onChange={e=>setCondition(e.target.value)}><option>Stable</option><option>Under Observation</option><option>Critical</option></select></FormField><FormField label="Notes"><textarea value={notes} onChange={e=>setNotes(e.target.value)}/></FormField></div><button className="button primary" onClick={admit}>Admit to Labour Room</button></div><div className="panel"><h2>Current Patients</h2><div className="table-wrapper"><table><thead><tr><th>Patient</th><th>Card</th><th>Bed</th><th>Stage</th><th>Condition</th><th>Action</th></tr></thead><tbody>{occupied.map(r=><tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.stage}</td><td>{r.condition}</td><td><button className="small-button" onClick={()=>discharge(r.id)}>Discharge</button></td></tr>)}</tbody></table></div></div></div>;
 }
-function ProgramUnitPage({ title, patients = [], showMessage }) {
- const [search,setSearch]=useState(""); const [selected,setSelected]=useState(null); const [service,setService]=useState(""); const [notes,setNotes]=useState(""); const [visits,setVisits]=usePersistentState(`bazza_program_visits_${title}`, []); const filtered=patients.filter(p=>{const q=search.trim().toLowerCase();if(!q)return true;return [p.name,p.card,p.phone].some(v=>String(v||"").toLowerCase().includes(q))});
- const save=()=>{if(!selected)return showMessage("Za蓳i patient.");if(!service)return showMessage("Za蓳i service.");setVisits(prev=>[{id:Date.now(),patient:selected.name,card:selected.card,service,notes,status:"Completed",date:new Date().toLocaleString()},...prev]);showMessage(`${title}: an ajiye visit.`);setSelected(null);setSearch("");setService("");setNotes("");}; const options=title==="Immunization Unit"?["BCG","OPV","Pentavalent","Measles","Yellow Fever","Other"]:title==="Family Planning Unit"?["Counselling","Contraceptive Service","Implant","IUCD","Injectable","Other"]:["Adolescent Counselling","Health Education","Follow-up","Mental Wellbeing Check","Other"];
- return <div><PageHeader title={title} subtitle="Program services and patient visits" icon="鉁�"/><div className="stats-grid"><StatCard title="Today's Visits" value={visits.length} icon="鈼�"/><StatCard title="Pending" value="0" icon="!"/><StatCard title="Completed" value={visits.length} icon="鉁�"/><StatCard title="Follow-up" value={visits.filter(v=>/follow/i.test(v.service)).length} icon="鈫�"/></div><div className="panel"><h2>New Visit</h2><input className="search-input" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search patient"/>{search&&<div className="search-results">{filtered.map(p=><button key={p.id} className="result-item" onClick={()=>{setSelected(p);setSearch(p.name)}}>{p.name} 鈥� {p.card}</button>)}</div>}{selected&&<p><strong>{selected.name}</strong> 鈥� {selected.card}</p>}<div className="form-grid"><FormField label="Service"><select value={service} onChange={e=>setService(e.target.value)}><option value="">Select service</option>{options.map(o=><option key={o}>{o}</option>)}</select></FormField><FormField label="Notes"><textarea value={notes} onChange={e=>setNotes(e.target.value)}/></FormField></div><button className="button primary" onClick={save}>Save Visit</button></div><div className="panel"><h2>Visit History</h2><div className="table-wrapper"><table><thead><tr><th>Patient</th><th>Card</th><th>Service</th><th>Status</th><th>Date</th></tr></thead><tbody>{visits.map(v=><tr key={v.id}><td>{v.patient}</td><td>{v.card}</td><td>{v.service}</td><td>{v.status}</td><td>{v.date}</td></tr>)}</tbody></table></div></div></div>;
+function ProgramUnitPage({ title, patients = [], setPatients, showMessage, logAudit }) {
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [service, setService] = useState("");
+  const [methodOrDose, setMethodOrDose] = useState("");
+  const [visitDate, setVisitDate] = useState(new Date().toISOString().slice(0, 10));
+  const [followUpDate, setFollowUpDate] = useState("");
+  const [notes, setNotes] = useState("");
+  const [otherText, setOtherText] = useState("");
+  const [visits, setVisits] = usePersistentState(`bazza_program_visits_${title}`, []);
+  const [view, setView] = useState("new");
+  const config = {
+    "Immunization Unit": { subtitle: "Immunization registration, vaccination, follow-up and history", services: ["BCG","OPV","Pentavalent","PCV","Measles","Yellow Fever","Other"], fieldLabel: "Dose / Stage", fieldOptions: ["Birth Dose","1st Dose","2nd Dose","3rd Dose","Booster","Other"] },
+    "Family Planning Unit": { subtitle: "Family planning counselling, services, follow-up and patient records", services: ["Counselling","Contraceptive Service","Implant","IUCD","Injectable","Pills","Condom","Other"], fieldLabel: "Method", fieldOptions: ["Counselling Only","Implant","IUCD","Injectable","Pills","Condom","Other"] },
+    "Adolescent Unit": { subtitle: "Adolescent health services, counselling, follow-up and patient records", services: ["Adolescent Counselling","Health Education","Sexual & Reproductive Health Education","Nutrition Counselling","Follow-up","Other"], fieldLabel: "Service Detail", fieldOptions: ["Routine Visit","Counselling","Follow-up","Other"] }
+  }[title];
+  const filtered = patients.filter((p) => { const q=search.trim().toLowerCase(); if(!q)return true; return [p.name,p.card,p.phone,p.phoneNumber].some(v=>String(v||"").toLowerCase().includes(q)); });
+  const uniquePatients = new Set(visits.map(v=>v.card)).size;
+  const completed = visits.filter(v=>v.status === "Completed").length;
+  const followUps = visits.filter(v=>v.followUpDate).length;
+  const today = new Date().toISOString().slice(0,10);
+  const selectPatient = (p) => { setSelected(p); setSearch(p.name); };
+  const save = () => {
+    if(!selected) return showMessage("Zaɓi patient daga ICT/Records.");
+    if(!service) return showMessage("Zaɓi service.");
+    if(!methodOrDose) return showMessage(`Zaɓi ${config.fieldLabel}.`);
+    if(service === "Other" && !otherText.trim()) return showMessage("Rubuta bayanin Other.");
+    const visit={id:`PRG-${Date.now()}`,unit:title,patientId:selected.id,patient:selected.name,card:selected.card,phone:selected.phone||selected.phoneNumber||"",service,methodOrDose,otherText:otherText.trim(),visitDate,followUpDate,notes:notes.trim(),status:"Completed",date:new Date().toLocaleString()};
+    setVisits(prev=>[visit,...prev]);
+    if(setPatients) setPatients(prev=>prev.map(p=>p.id===selected.id?{...p,programVisits:[visit,...(Array.isArray(p.programVisits)?p.programVisits:[])]}:p));
+    if(logAudit) logAudit(`${title}: visit saved`, title, `${selected.name} (${selected.card})`);
+    showMessage(`${title}: an ajiye visit na ${selected.name}.`);
+    setSelected(null); setSearch(""); setService(""); setMethodOrDose(""); setFollowUpDate(""); setNotes(""); setOtherText(""); setView("history");
+  };
+  return <div>
+    <PageHeader title={title} subtitle={config.subtitle} icon="✚" />
+    <div className="stats-grid"><StatCard title="Total Visits" value={visits.length} icon="◉"/><StatCard title="Completed" value={completed} icon="✓"/><StatCard title="Follow-up" value={followUps} icon="→"/><StatCard title="Patients" value={uniquePatients} icon="●"/></div>
+    <div className="toolbar"><button className={`button ${view==="new"?"primary":"secondary"}`} onClick={()=>setView("new")}>New Visit</button><button className={`button ${view==="history"?"primary":"secondary"}`} onClick={()=>setView("history")}>Visit History</button><button className={`button ${view==="followup"?"primary":"secondary"}`} onClick={()=>setView("followup")}>Follow-up</button></div>
+    {view==="new" && <div className="panel"><h2>New {title.replace(" Unit","")} Visit</h2><p className="muted">Patient/Card Number yana zuwa daga ICT/Records. Wannan unit ba ya ƙirƙirar sabon Card Number.</p>
+      <div className="field"><label>Search Patient</label><input className="search-input" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Name / Card Number / Phone"/></div>
+      {search&&!selected&&<div className="search-results">{filtered.slice(0,10).map(p=><button key={p.id} className="result-item" onClick={()=>selectPatient(p)}>{p.name} — {p.card} — {p.phone||p.phoneNumber||"No phone"}</button>)}{!filtered.length&&<div className="muted">No patient found.</div>}</div>}
+      {selected&&<div className="selected-patient"><strong>{selected.name}</strong> — {selected.card} — {selected.phone||selected.phoneNumber||"No phone"} <button className="small-button" onClick={()=>{setSelected(null);setSearch("");}}>Change</button></div>}
+      <div className="form-grid"><FormField label="Service"><select value={service} onChange={e=>setService(e.target.value)}><option value="">Select service</option>{config.services.map(o=><option key={o}>{o}</option>)}</select></FormField><FormField label={config.fieldLabel}><select value={methodOrDose} onChange={e=>setMethodOrDose(e.target.value)}><option value="">Select</option>{config.fieldOptions.map(o=><option key={o}>{o}</option>)}</select></FormField><FormField label="Visit Date"><input type="date" value={visitDate} onChange={e=>setVisitDate(e.target.value)}/></FormField><FormField label="Follow-up Date"><input type="date" min={today} value={followUpDate} onChange={e=>setFollowUpDate(e.target.value)}/></FormField></div>
+      {service==="Other"&&<FormField label="Other — Additional Detail"><input value={otherText} onChange={e=>setOtherText(e.target.value)} placeholder="Write the service/detail"/></FormField>}
+      <FormField label="Counselling / Additional Notes"><textarea rows="4" value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Additional notes..."/></FormField><button className="button primary" onClick={save}>Save Visit</button></div>}
+    {view==="history"&&<div className="panel"><h2>Visit History</h2><div className="table-scroll"><table><thead><tr><th>Patient</th><th>Card</th><th>Service</th><th>Method/Dose</th><th>Visit Date</th><th>Follow-up</th><th>Status</th></tr></thead><tbody>{visits.map(v=><tr key={v.id}><td>{v.patient}</td><td>{v.card}</td><td>{v.service}{v.otherText?` — ${v.otherText}`:""}</td><td>{v.methodOrDose}</td><td>{v.visitDate}</td><td>{v.followUpDate||"—"}</td><td>{v.status}</td></tr>)}{!visits.length&&<tr><td colSpan="7">No visit recorded.</td></tr>}</tbody></table></div></div>}
+    {view==="followup"&&<div className="panel"><h2>Follow-up List</h2><div className="table-scroll"><table><thead><tr><th>Patient</th><th>Card</th><th>Unit</th><th>Service</th><th>Follow-up Date</th><th>Status</th></tr></thead><tbody>{visits.filter(v=>v.followUpDate).map(v=><tr key={`follow-${v.id}`}><td>{v.patient}</td><td>{v.card}</td><td>{v.unit}</td><td>{v.service}</td><td>{v.followUpDate}</td><td>{v.followUpDate<today?"Due":"Upcoming"}</td></tr>)}{!visits.some(v=>v.followUpDate)&&<tr><td colSpan="6">No follow-up recorded.</td></tr>}</tbody></table></div></div>}
+  </div>;
 }
 
 function InChargePage({
@@ -3911,18 +4116,18 @@ function InChargePage({
       <PageHeader
         title="In-Charge"
         subtitle="Hospital-wide monitoring, reports, staff, patients, cashier and department status"
-        icon="鈼�"
+        icon="◈"
       />
 
       <div className="stats-grid">
-        <StatCard title="Total Patients" value={patients.length} icon="鈼�" />
-        <StatCard title="Admitted Patients" value={admitted.length} icon="鈻�" />
-        <StatCard title="Staff" value={staff.length} icon="鈾�" />
-        <StatCard title="Transactions" value={transactions.length} icon="鈧�" />
-        <StatCard title="Lab Requests" value={labRequests.length} icon="鈿�" />
-        <StatCard title="Pharmacy" value={pharmacyPrescriptions.length} icon="鈿�" />
-        <StatCard title="Ultrasound" value={ultrasoundRequests.length} icon="鈼�" />
-        <StatCard title="Ward Patients" value={admitted.length} icon="鈾�" />
+        <StatCard title="Total Patients" value={patients.length} icon="●" />
+        <StatCard title="Admitted Patients" value={admitted.length} icon="▣" />
+        <StatCard title="Staff" value={staff.length} icon="♟" />
+        <StatCard title="Transactions" value={transactions.length} icon="₦" />
+        <StatCard title="Lab Requests" value={labRequests.length} icon="⚗" />
+        <StatCard title="Pharmacy" value={pharmacyPrescriptions.length} icon="⚕" />
+        <StatCard title="Ultrasound" value={ultrasoundRequests.length} icon="◉" />
+        <StatCard title="Ward Patients" value={admitted.length} icon="♥" />
       </div>
 
       <div className="card">
@@ -3940,7 +4145,7 @@ function InChargePage({
             <div className="table-wrap">
               <table><thead><tr><th>Area</th><th>Total</th><th>Pending / Active</th><th>Status</th></tr></thead>
                 <tbody>
-                  <tr><td>Patients</td><td>{patients.length}</td><td>鈥�</td><td><StatusBadge status="Active" /></td></tr>
+                  <tr><td>Patients</td><td>{patients.length}</td><td>—</td><td><StatusBadge status="Active" /></td></tr>
                   <tr><td>Laboratory</td><td>{labRequests.length}</td><td>{pendingLab.length}</td><td><StatusBadge status={pendingLab.length ? "Pending" : "Clear"} /></td></tr>
                   <tr><td>Pharmacy</td><td>{pharmacyPrescriptions.length}</td><td>{pendingPharmacy.length}</td><td><StatusBadge status={pendingPharmacy.length ? "Pending" : "Clear"} /></td></tr>
                   <tr><td>Ultrasound</td><td>{ultrasoundRequests.length}</td><td>{pendingUltrasound.length}</td><td><StatusBadge status={pendingUltrasound.length ? "Pending" : "Clear"} /></td></tr>
@@ -3957,7 +4162,7 @@ function InChargePage({
             <h2>Global Patient Search</h2>
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, card number or phone" />
             <div className="table-wrap"><table><thead><tr><th>Name</th><th>Card No.</th><th>Phone</th><th>Sex</th></tr></thead>
-              <tbody>{filteredPatients.map((p) => <tr key={p.id}><td>{p.name}</td><td>{p.card}</td><td>{p.phone || "鈥�"}</td><td>{p.sex || "鈥�"}</td></tr>)}
+              <tbody>{filteredPatients.map((p) => <tr key={p.id}><td>{p.name}</td><td>{p.card}</td><td>{p.phone || "—"}</td><td>{p.sex || "—"}</td></tr>)}
               {filteredPatients.length === 0 && <tr><td colSpan="4">No patient found.</td></tr>}</tbody>
             </table></div>
           </div>
@@ -3985,12 +4190,12 @@ function InChargePage({
           <div style={{ display: "grid", gap: 12 }}>
             <h2>Cashier Monitoring</h2>
             <div className="stats-grid">
-              <StatCard title="All Transactions" value={transactions.length} icon="鈧�" />
-              <StatCard title="Paid" value={todayCash.length} icon="鉁�" />
+              <StatCard title="All Transactions" value={transactions.length} icon="₦" />
+              <StatCard title="Paid" value={todayCash.length} icon="✓" />
               <StatCard title="Pending" value={pendingCash.length} icon="!" />
             </div>
             <div className="table-wrap"><table><thead><tr><th>Department</th><th>Patient</th><th>Service</th><th>Amount</th><th>Method</th><th>Status</th></tr></thead>
-              <tbody>{transactions.slice(0, 50).map((t, i) => <tr key={t.id || t.transactionNumber || i}><td>{t.department || "鈥�"}</td><td>{t.patientName || "鈥�"}</td><td>{t.service || t.description || "鈥�"}</td><td>鈧Number(t.amount || 0).toLocaleString()}</td><td>{t.method || "鈥�"}</td><td>{t.status || "鈥�"}</td></tr>)}
+              <tbody>{transactions.slice(0, 50).map((t, i) => <tr key={t.id || t.transactionNumber || i}><td>{t.department || "—"}</td><td>{t.patientName || "—"}</td><td>{t.service || t.description || "—"}</td><td>₦{Number(t.amount || 0).toLocaleString()}</td><td>{t.method || "—"}</td><td>{t.status || "—"}</td></tr>)}
               {transactions.length === 0 && <tr><td colSpan="6">No transactions found.</td></tr>}</tbody>
             </table></div>
           </div>
@@ -4000,7 +4205,7 @@ function InChargePage({
           <div style={{ display: "grid", gap: 12 }}>
             <h2>Staff Monitoring</h2>
             <div className="table-wrap"><table><thead><tr><th>Name</th><th>Department</th><th>Role</th><th>Category</th></tr></thead>
-              <tbody>{staff.map((s, i) => <tr key={s.id || i}><td>{s.name}</td><td>{s.department || "鈥�"}</td><td>{s.role || "鈥�"}</td><td>{s.category || "Staff"}</td></tr>)}
+              <tbody>{staff.map((s, i) => <tr key={s.id || i}><td>{s.name}</td><td>{s.department || "—"}</td><td>{s.role || "—"}</td><td>{s.category || "Staff"}</td></tr>)}
               {staff.length === 0 && <tr><td colSpan="4">No staff found.</td></tr>}</tbody>
             </table></div>
           </div>
@@ -4037,12 +4242,12 @@ function ReportsPage({ patients = [], transactions = [], labRequests = [], pharm
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = `Bazza-PHC-General-Report-${Date.now()}.csv`; a.click(); URL.revokeObjectURL(url);
   };
-  return <div><PageHeader title="Reports" subtitle="General and department reports generated from saved system data" icon="鈻�" />
+  return <div><PageHeader title="Reports" subtitle="General and department reports generated from saved system data" icon="▥" />
     <div className="stats-grid">
-      <StatCard title="Patients" value={patients.length} icon="鈼�" /><StatCard title="Transactions" value={transactions.length} icon="鈧�" />
-      <StatCard title="Collections" value={`鈧�${total.toLocaleString()}`} icon="鉁�" /><StatCard title="Attendance Today" value={todayAttendance.length} icon="鈻�" />
+      <StatCard title="Patients" value={patients.length} icon="●" /><StatCard title="Transactions" value={transactions.length} icon="₦" />
+      <StatCard title="Collections" value={`₦${total.toLocaleString()}`} icon="✓" /><StatCard title="Attendance Today" value={todayAttendance.length} icon="▦" />
     </div>
-    <div className="card"><h2>General Report</h2><p className="muted">Wannan report 蓷in yana amfani da saved data na duk system 蓷in.</p><div className="table-scroll"><table><tbody>
+    <div className="card"><h2>General Report</h2><p className="muted">Wannan report ɗin yana amfani da saved data na duk system ɗin.</p><div className="table-scroll"><table><tbody>
       <tr><td>Laboratory Requests</td><td>{labRequests.length}</td></tr><tr><td>Pharmacy Prescriptions</td><td>{pharmacyPrescriptions.length}</td></tr><tr><td>Ultrasound Requests</td><td>{ultrasoundRequests.length}</td></tr><tr><td>Ward Records</td><td>{wardRecords.length}</td></tr><tr><td>Roster Entries</td><td>{rosterEntries.length}</td></tr>
     </tbody></table></div><button className="button primary" onClick={exportReport}>Export General Report</button></div>
   </div>;
@@ -4065,28 +4270,28 @@ function AlertsPage({ currentUser, patients = [], alerts = [], setAlerts, recept
   };
   const visible = alerts.filter((a) => a.target === currentUser?.department || currentUser?.role === "Super Admin" || currentUser?.role === "In-Charge" || a.from === currentUser?.name);
   return <div><PageHeader title="Department Alerts" subtitle="Department-to-department alerts with restricted visibility" icon="!" />
-    <div className="card"><h2>Send Alert</h2><div className="form-grid"><FormField label="Target Department"><select value={target} onChange={(e)=>setTarget(e.target.value)}>{targets.map((x)=><option key={x}>{x}</option>)}</select></FormField><FormField label="Patient/Card Number (optional)"><select value={patientCard} onChange={(e)=>setPatientCard(e.target.value)}><option value="">Select patient</option>{patients.map(p=><option key={p.id} value={p.card}>{p.name} 鈥� {p.card}</option>)}</select></FormField><FormField label="Next Patient Name (Consultant 鈫� Nursing)"><input value={nextPatient} onChange={(e)=>setNextPatient(e.target.value)} placeholder="Patient name" /></FormField><FormField label="Alert Message"><textarea value={message} onChange={(e)=>setMessage(e.target.value)} rows="4" placeholder="Write alert..." /></FormField></div><button className="button primary" onClick={send}>Send Alert</button></div>
-    <div className="card"><h2>Visible Alerts</h2>{visible.length ? visible.map(a=><div key={a.id} style={{border:"1px solid #e4e9ef",padding:12,borderRadius:8,marginBottom:8}}><strong>{a.fromDepartment} 鈫� {a.target}</strong><div>{a.message}</div><small>{a.patientName ? `${a.patientName} 鈥� ${a.card} 鈥� ` : ""}{a.date}</small></div>) : <p className="muted">No alerts.</p>}</div>
-    {receptionQueue.length ? <div className="card"><h2>Reception / Next Patient Board</h2>{receptionQueue.slice(0,20).map(q=><div key={q.id} style={{padding:10,borderBottom:"1px solid #eee"}}><strong>{q.patientName}</strong> 鈥� {q.card || "No Card"} <span className="muted">{q.status}</span></div>)}</div> : null}
+    <div className="card"><h2>Send Alert</h2><div className="form-grid"><FormField label="Target Department"><select value={target} onChange={(e)=>setTarget(e.target.value)}>{targets.map((x)=><option key={x}>{x}</option>)}</select></FormField><FormField label="Patient/Card Number (optional)"><select value={patientCard} onChange={(e)=>setPatientCard(e.target.value)}><option value="">Select patient</option>{patients.map(p=><option key={p.id} value={p.card}>{p.name} — {p.card}</option>)}</select></FormField><FormField label="Next Patient Name (Consultant → Nursing)"><input value={nextPatient} onChange={(e)=>setNextPatient(e.target.value)} placeholder="Patient name" /></FormField><FormField label="Alert Message"><textarea value={message} onChange={(e)=>setMessage(e.target.value)} rows="4" placeholder="Write alert..." /></FormField></div><button className="button primary" onClick={send}>Send Alert</button></div>
+    <div className="card"><h2>Visible Alerts</h2>{visible.length ? visible.map(a=><div key={a.id} style={{border:"1px solid #e4e9ef",padding:12,borderRadius:8,marginBottom:8}}><strong>{a.fromDepartment} → {a.target}</strong><div>{a.message}</div><small>{a.patientName ? `${a.patientName} — ${a.card} • ` : ""}{a.date}</small></div>) : <p className="muted">No alerts.</p>}</div>
+    {receptionQueue.length ? <div className="card"><h2>Reception / Next Patient Board</h2>{receptionQueue.slice(0,20).map(q=><div key={q.id} style={{padding:10,borderBottom:"1px solid #eee"}}><strong>{q.patientName}</strong> — {q.card || "No Card"} <span className="muted">{q.status}</span></div>)}</div> : null}
   </div>;
 }
 
 function SMSNotificationsPage({ patients = [], messages = [], setMessages, currentUser, showMessage, logAudit }) {
   const templates = ["Result Ready", "Result Not Ready", "Please Return", "Follow-up Required", "Appointment/Visit Reminder", "Other"];
   const [card, setCard] = useState(""); const [template, setTemplate] = useState("Result Ready"); const [extra, setExtra] = useState("");
-  const send = () => { const patient = patients.find(p => String(p.card || p.cardNumber) === String(card)); if (!patient) return showMessage?.("Za蓳i patient daga ICT/Records."); const phone = patient.phone || patient.phoneNumber; if (!phone) return showMessage?.("Babu phone number a Patient Profile."); const item={id:`SMS-${Date.now()}`,patientName:patient.name,card:patient.card,phone,template,message:extra,date:new Date().toLocaleString(),sender:currentUser?.name || "System",status:"Prepared"}; setMessages(prev=>[item,...prev]); logAudit?.("SMS Prepared","SMS / Notifications",`${template} to ${patient.name}`); setExtra(""); showMessage?.(`SMS an shirya zuwa ${phone}.`); };
-  return <div><PageHeader title="SMS / Notifications" subtitle="Patient messages using phone number saved by ICT" icon="鉁�" /><div className="card"><h2>Send Patient SMS</h2><div className="form-grid"><FormField label="Patient"><select value={card} onChange={e=>setCard(e.target.value)}><option value="">Select patient</option>{patients.map(p=><option key={p.id} value={p.card}>{p.name} 鈥� {p.card} 鈥� {p.phone || p.phoneNumber || "No phone"}</option>)}</select></FormField><FormField label="Template"><select value={template} onChange={e=>setTemplate(e.target.value)}>{templates.map(t=><option key={t}>{t}</option>)}</select></FormField><FormField label="Additional Message"><textarea rows="4" value={extra} onChange={e=>setExtra(e.target.value)} placeholder="Additional message..." /></FormField></div><button className="button primary" onClick={send}>Prepare SMS</button></div><div className="card"><h2>SMS History</h2><div className="table-scroll"><table><thead><tr><th>Patient</th><th>Phone</th><th>Template</th><th>Message</th><th>Date</th><th>Sender</th></tr></thead><tbody>{messages.length ? messages.map(m=><tr key={m.id}><td>{m.patientName}<br/>{m.card}</td><td>{m.phone}</td><td>{m.template}</td><td>{m.message || "鈥�"}</td><td>{m.date}</td><td>{m.sender}</td></tr>) : <tr><td colSpan="6">No SMS history.</td></tr>}</tbody></table></div></div></div>;
+  const send = () => { const patient = patients.find(p => String(p.card || p.cardNumber) === String(card)); if (!patient) return showMessage?.("Zaɓi patient daga ICT/Records."); const phone = patient.phone || patient.phoneNumber; if (!phone) return showMessage?.("Babu phone number a Patient Profile."); const item={id:`SMS-${Date.now()}`,patientName:patient.name,card:patient.card,phone,template,message:extra,date:new Date().toLocaleString(),sender:currentUser?.name || "System",status:"Prepared"}; setMessages(prev=>[item,...prev]); logAudit?.("SMS Prepared","SMS / Notifications",`${template} to ${patient.name}`); setExtra(""); showMessage?.(`SMS an shirya zuwa ${phone}.`); };
+  return <div><PageHeader title="SMS / Notifications" subtitle="Patient messages using phone number saved by ICT" icon="✉" /><div className="card"><h2>Send Patient SMS</h2><div className="form-grid"><FormField label="Patient"><select value={card} onChange={e=>setCard(e.target.value)}><option value="">Select patient</option>{patients.map(p=><option key={p.id} value={p.card}>{p.name} — {p.card} — {p.phone || p.phoneNumber || "No phone"}</option>)}</select></FormField><FormField label="Template"><select value={template} onChange={e=>setTemplate(e.target.value)}>{templates.map(t=><option key={t}>{t}</option>)}</select></FormField><FormField label="Additional Message"><textarea rows="4" value={extra} onChange={e=>setExtra(e.target.value)} placeholder="Additional message..." /></FormField></div><button className="button primary" onClick={send}>Prepare SMS</button></div><div className="card"><h2>SMS History</h2><div className="table-scroll"><table><thead><tr><th>Patient</th><th>Phone</th><th>Template</th><th>Message</th><th>Date</th><th>Sender</th></tr></thead><tbody>{messages.length ? messages.map(m=><tr key={m.id}><td>{m.patientName}<br/>{m.card}</td><td>{m.phone}</td><td>{m.template}</td><td>{m.message || "—"}</td><td>{m.date}</td><td>{m.sender}</td></tr>) : <tr><td colSpan="6">No SMS history.</td></tr>}</tbody></table></div></div></div>;
 }
 
 function OutpatientPage({ patients = [], visits = [], setVisits, transactions = [], setTransactions, currentUser, showMessage, logAudit }) {
   const [name, setName] = useState(""); const [phone, setPhone] = useState(""); const [service, setService] = useState(""); const [department, setDepartment] = useState("Laboratory Unit"); const [amount, setAmount] = useState(0); const [paymentStatus, setPaymentStatus] = useState("Pending");
-  const save = () => { if(!name.trim() || !service.trim()) return showMessage?.("Cika sunan patient da service."); const visitNo=`OP-${Date.now()}`; const visit={id:Date.now(),visitNo,patientName:name.trim(),phone,service:service.trim(),department,amount:Number(amount||0),paymentStatus,paymentMethod:paymentStatus==="FREE"?"FREE":"Cash",date:new Date().toLocaleString(),createdBy:currentUser?.name||"System"}; setVisits(prev=>[visit,...prev]); if(Number(amount||0)>0){setTransactions(prev=>[{id:`TRX-${Date.now()}`,transactionNo:`TRX-${Date.now()}`,department,patientName:name.trim(),card:"OUTPATIENT",service:service.trim(),amount:Number(amount||0),paymentMethod:paymentStatus==="FREE"?"FREE":"Cash",paymentStatus,cashier:currentUser?.name||"Outpatient",date:new Date().toLocaleString()},...prev]);} logAudit?.("Outpatient Visit","Outpatient Services",`${visitNo} 鈥� ${service.trim()}`); showMessage?.(`Outpatient visit ${visitNo} an ajiye.`); setName(""); setPhone(""); setService(""); setAmount(0); };
-  return <div><PageHeader title="Outpatient Services" subtitle="Visits/transactions for patients who do not require a full hospital admission profile" icon="O" /><div className="card"><h2>New Outpatient Visit</h2><div className="form-grid"><FormField label="Patient Name"><input value={name} onChange={e=>setName(e.target.value)} placeholder="Patient name" /></FormField><FormField label="Phone"><input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Phone number" /></FormField><FormField label="Department"><select value={department} onChange={e=>setDepartment(e.target.value)}>{["Laboratory Unit","Pharmacy Unit","Ultrasound Room","Records Unit","Consultant Room","Other"].map(d=><option key={d}>{d}</option>)}</select></FormField><FormField label="Service"><input value={service} onChange={e=>setService(e.target.value)} placeholder="Service / test / medicine" /></FormField><FormField label="Amount"><input type="number" min="0" value={amount} onChange={e=>setAmount(e.target.value)} /></FormField><FormField label="Payment Status"><select value={paymentStatus} onChange={e=>setPaymentStatus(e.target.value)}><option>Pending</option><option>Paid</option><option>FREE</option></select></FormField></div><button className="button primary" onClick={save}>Create Outpatient Visit</button></div><div className="card"><h2>Outpatient History</h2><div className="table-scroll"><table><thead><tr><th>Visit #</th><th>Patient</th><th>Department</th><th>Service</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>{visits.length?visits.map(v=><tr key={v.id}><td>{v.visitNo}</td><td>{v.patientName}</td><td>{v.department}</td><td>{v.service}</td><td>鈧Number(v.amount||0).toLocaleString()}</td><td>{v.paymentStatus}</td><td>{v.date}</td></tr>):<tr><td colSpan="7">No outpatient visit.</td></tr>}</tbody></table></div></div></div>;
+  const save = () => { if(!name.trim() || !service.trim()) return showMessage?.("Cika sunan patient da service."); const visitNo=`OP-${Date.now()}`; const visit={id:Date.now(),visitNo,patientName:name.trim(),phone,service:service.trim(),department,amount:Number(amount||0),paymentStatus,paymentMethod:paymentStatus==="FREE"?"FREE":"Cash",date:new Date().toLocaleString(),createdBy:currentUser?.name||"System"}; setVisits(prev=>[visit,...prev]); if(Number(amount||0)>0){setTransactions(prev=>[{id:`TRX-${Date.now()}`,transactionNo:`TRX-${Date.now()}`,department,patientName:name.trim(),card:"OUTPATIENT",service:service.trim(),amount:Number(amount||0),paymentMethod:paymentStatus==="FREE"?"FREE":"Cash",paymentStatus,cashier:currentUser?.name||"Outpatient",date:new Date().toLocaleString()},...prev]);} logAudit?.("Outpatient Visit","Outpatient Services",`${visitNo} — ${service.trim()}`); showMessage?.(`Outpatient visit ${visitNo} an ajiye.`); setName(""); setPhone(""); setService(""); setAmount(0); };
+  return <div><PageHeader title="Outpatient Services" subtitle="Visits/transactions for patients who do not require a full hospital admission profile" icon="O" /><div className="card"><h2>New Outpatient Visit</h2><div className="form-grid"><FormField label="Patient Name"><input value={name} onChange={e=>setName(e.target.value)} placeholder="Patient name" /></FormField><FormField label="Phone"><input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Phone number" /></FormField><FormField label="Department"><select value={department} onChange={e=>setDepartment(e.target.value)}>{["Laboratory Unit","Pharmacy Unit","Ultrasound Room","Records Unit","Consultant Room","Other"].map(d=><option key={d}>{d}</option>)}</select></FormField><FormField label="Service"><input value={service} onChange={e=>setService(e.target.value)} placeholder="Service / test / medicine" /></FormField><FormField label="Amount"><input type="number" min="0" value={amount} onChange={e=>setAmount(e.target.value)} /></FormField><FormField label="Payment Status"><select value={paymentStatus} onChange={e=>setPaymentStatus(e.target.value)}><option>Pending</option><option>Paid</option><option>FREE</option></select></FormField></div><button className="button primary" onClick={save}>Create Outpatient Visit</button></div><div className="card"><h2>Outpatient History</h2><div className="table-scroll"><table><thead><tr><th>Visit #</th><th>Patient</th><th>Department</th><th>Service</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>{visits.length?visits.map(v=><tr key={v.id}><td>{v.visitNo}</td><td>{v.patientName}</td><td>{v.department}</td><td>{v.service}</td><td>₦{Number(v.amount||0).toLocaleString()}</td><td>{v.paymentStatus}</td><td>{v.date}</td></tr>):<tr><td colSpan="7">No outpatient visit.</td></tr>}</tbody></table></div></div></div>;
 }
 
 function ReceptionPage({ queue = [], setQueue, currentUser, showMessage }) {
   const mark = (id, status) => setQueue(prev=>prev.map(q=>q.id===id?{...q,status}:q));
-  return <div><PageHeader title="Reception / Next Patient" subtitle="Consultant-to-Nursing next-patient board" icon="R" /><div className="card"><h2>Next Patient Board</h2>{queue.length?queue.slice(0,30).map(q=><div key={q.id} style={{display:"flex",justifyContent:"space-between",gap:12,padding:14,borderBottom:"1px solid #eee"}}><div><strong>{q.patientName}</strong><div className="muted">{q.card || "No Card"} 鈥� {q.from} 鈥� {q.date}</div></div><div style={{display:"flex",gap:6}}><button className="small-button" onClick={()=>mark(q.id,"Called")}>Called</button><button className="small-button" onClick={()=>mark(q.id,"Completed")}>Completed</button></div></div>):<p className="muted">No next patient currently waiting.</p>}</div></div>;
+  return <div><PageHeader title="Reception / Next Patient" subtitle="Consultant-to-Nursing next-patient board" icon="R" /><div className="card"><h2>Next Patient Board</h2>{queue.length?queue.slice(0,30).map(q=><div key={q.id} style={{display:"flex",justifyContent:"space-between",gap:12,padding:14,borderBottom:"1px solid #eee"}}><div><strong>{q.patientName}</strong><div className="muted">{q.card || "No Card"} • {q.from} • {q.date}</div></div><div style={{display:"flex",gap:6}}><button className="small-button" onClick={()=>mark(q.id,"Called")}>Called</button><button className="small-button" onClick={()=>mark(q.id,"Completed")}>Completed</button></div></div>):<p className="muted">No next patient currently waiting.</p>}</div></div>;
 }
 
 function ModulePage({ title, subtitle, icon, stats }) {
@@ -4100,7 +4305,7 @@ function ModulePage({ title, subtitle, icon, stats }) {
             key={name}
             title={name}
             value={value}
-            icon={["鈻�", "鉁�", "!", "鈼�"][index % 4]}
+            icon={["▣", "✓", "!", "◉"][index % 4]}
           />
         ))}
       </div>
@@ -4238,7 +4443,7 @@ function ConsultantPage({
 
   const saveConsultation = () => {
     if (!selectedPatient) {
-      showMessage?.("Da farko za蓳i patient.");
+      showMessage?.("Da farko zaɓi patient.");
       return;
     }
     if (!consultationNote.trim() && !diagnosis.trim()) {
@@ -4272,11 +4477,11 @@ function ConsultantPage({
 
   const sendToLaboratory = () => {
     if (!selectedPatient) {
-      showMessage?.("Da farko za蓳i patient.");
+      showMessage?.("Da farko zaɓi patient.");
       return;
     }
     if (!selectedTests.length && !otherTest.trim()) {
-      showMessage?.("Za蓳i a茩alla Laboratory Test 蓷aya.");
+      showMessage?.("Zaɓi aƙalla Laboratory Test ɗaya.");
       return;
     }
     if (!setLabRequests) {
@@ -4313,11 +4518,11 @@ function ConsultantPage({
 
   const sendToPharmacy = () => {
     if (!selectedPatient) {
-      showMessage?.("Da farko za蓳i patient.");
+      showMessage?.("Da farko zaɓi patient.");
       return;
     }
     if (!selectedMedicines.length && !otherMedicine.trim()) {
-      showMessage?.("Za蓳i a茩alla medicine 蓷aya.");
+      showMessage?.("Zaɓi aƙalla medicine ɗaya.");
       return;
     }
     if (!setPharmacyPrescriptions) {
@@ -4358,8 +4563,8 @@ function ConsultantPage({
   };
 
   const sendToUltrasound = () => {
-    if (!selectedPatient) return showMessage?.("Da farko za蓳i patient.");
-    if (!selectedUltrasound) return showMessage?.("Za蓳i Ultrasound service.");
+    if (!selectedPatient) return showMessage?.("Da farko zaɓi patient.");
+    if (!selectedUltrasound) return showMessage?.("Zaɓi Ultrasound service.");
     if (!setUltrasoundRequests) return showMessage?.("Ultrasound connection is not available.");
 
     const request = {
@@ -4443,14 +4648,14 @@ function ConsultantPage({
       <PageHeader
         title="Consultant Room"
         subtitle="Consultation, diagnosis, laboratory requests, prescriptions and patient review"
-        icon="鉁�"
+        icon="✚"
       />
 
       <div className="stats-grid">
-        <StatCard title="Waiting" value="5" icon="鈼�" />
-        <StatCard title="In Consultation" value="1" icon="鉁�" />
-        <StatCard title="Lab Requests" value={labRequests.length} icon="鈻�" />
-        <StatCard title="Completed" value="29" icon="鉁�" />
+        <StatCard title="Waiting" value="5" icon="◉" />
+        <StatCard title="In Consultation" value="1" icon="✚" />
+        <StatCard title="Lab Requests" value={labRequests.length} icon="▣" />
+        <StatCard title="Completed" value="29" icon="✓" />
       </div>
 
       <div className="panel" style={{ marginTop: 20 }}>
@@ -4483,7 +4688,7 @@ function ConsultantPage({
               >
                 <strong>{getPatientName(patient)}</strong>
                 <div style={{ marginTop: 4, fontSize: 11, color: "#71808d" }}>
-                  Card: {getPatientCard(patient)} 鈥� Phone: {patient.phone || patient.phoneNumber || "-"}
+                  Card: {getPatientCard(patient)} • Phone: {patient.phone || patient.phoneNumber || "-"}
                 </div>
               </button>
             ))}
@@ -4547,7 +4752,7 @@ function ConsultantPage({
                   className={`button ${selectedTests.includes(name) ? "primary" : "secondary"}`}
                   onClick={() => toggleTest(name)}
                 >
-                  {name} 鈥� 鈧price.toLocaleString()}
+                  {name} — ₦{price.toLocaleString()}
                 </button>
               ))}
               <button type="button" className={`button ${otherTest ? "primary" : "secondary"}`} onClick={() => setOtherTest(otherTest ? "" : "Other Test")}>Others</button>
@@ -4648,7 +4853,7 @@ function ConsultantPage({
                   <div key={request.id} style={{ border: "1px solid #dce3e8", borderRadius: 10, padding: 15 }}>
                     <strong>{request.test}</strong>
                     <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>{request.result || "No result entered yet."}</div>
-                    <div style={{ marginTop: 8, fontSize: 11, color: "#71808d" }}>{request.status} 鈥� {request.date}</div>
+                    <div style={{ marginTop: 8, fontSize: 11, color: "#71808d" }}>{request.status} • {request.date}</div>
                   </div>
                 ))}
               </div>
@@ -4759,7 +4964,7 @@ function Modal({ title, onClose, children }) {
           <h2>{title}</h2>
 
           <button className="close-button" onClick={onClose}>
-            脳
+            ×
           </button>
         </div>
 
@@ -5931,7 +6136,7 @@ function PharmacyPage({
   ).length;
 
   const money = (value) => {
-    return `鈧�${Number(value || 0).toLocaleString()}`;
+    return `₦${Number(value || 0).toLocaleString()}`;
   };
 
   const getPatientName = (patient) => {
@@ -6376,7 +6581,7 @@ function PharmacyPage({
             {statCard(
               "Dispensed Today",
               dispensedToday,
-              "鉁�"
+              "✓"
             )}
 
             {statCard(
@@ -6388,7 +6593,7 @@ function PharmacyPage({
             {statCard(
               "Stock Alerts",
               stockAlerts,
-              "鈿�"
+              "⚠"
             )}
           </div>
 
@@ -6539,7 +6744,7 @@ function PharmacyPage({
                   fontSize: 12,
                 }}
               >
-                鉁� No medicine is currently below the
+                ✓ No medicine is currently below the
                 reorder level.
               </div>
             ) : (
@@ -6665,7 +6870,7 @@ function PharmacyPage({
                     >
                       Card: {getPatientCard(patient)}
                       {patient.phone
-                        ? ` 鈥� ${patient.phone}`
+                        ? ` • ${patient.phone}`
                         : ""}
                     </span>
                   </button>
@@ -6747,8 +6952,8 @@ function PharmacyPage({
                     key={item.id}
                     value={item.medicine}
                   >
-                    {item.medicine} 鈥攞" "}
-                    {money(item.price)} 鈥� Stock:{" "}
+                    {item.medicine} —{" "}
+                    {money(item.price)} — Stock:{" "}
                     {item.quantity}
                   </option>
                 ))}
@@ -7303,7 +7508,7 @@ function PharmacyPage({
               fontSize: 12,
             }}
           >
-            {getPatientName(selectedPatient)} 鈥� Card:{" "}
+            {getPatientName(selectedPatient)} — Card:{" "}
             {getPatientCard(selectedPatient)}
           </span>
         </div>
@@ -7452,10 +7657,10 @@ function MaleWardPage({ patients = [], records = [], setRecords, showMessage }) 
 
   const admit = () => {
     const patient = patients.find((p) => String(p.id) === String(selectedId));
-    if (!patient) return showMessage("Za蓳i mara lafiya na namiji.");
-    if (patient.sex !== "Male") return showMessage("Male Ward na kar蓳ar male patient kawai.");
-    if (!bed) return showMessage("Za蓳i bed.");
-    if (occupied.some((r) => r.bed === bed)) return showMessage("Wannan bed 蓷in yana occupied.");
+    if (!patient) return showMessage("Zaɓi mara lafiya na namiji.");
+    if (patient.sex !== "Male") return showMessage("Male Ward na karɓar male patient kawai.");
+    if (!bed) return showMessage("Zaɓi bed.");
+    if (occupied.some((r) => r.bed === bed)) return showMessage("Wannan bed ɗin yana occupied.");
     const record = { id: Date.now(), ward: "Male Ward", patientId: patient.id, patientName: patient.name, card: patient.card, bed, condition, diagnosis: diagnosis.trim() || "Not specified", notes: notes.trim(), status: "Admitted", admittedAt: new Date().toLocaleString(), dischargedAt: "" };
     setRecords((prev) => [record, ...prev]);
     showMessage(`${patient.name} an admitted zuwa Male Ward.`);
@@ -7471,10 +7676,10 @@ function MaleWardPage({ patients = [], records = [], setRecords, showMessage }) 
     <div>
       <PageHeader title="Male Ward" subtitle="Male patient admission, bed assignment, monitoring, notes and discharge" icon="M" />
       <div className="stats-grid">
-        <StatCard title="Occupied Beds" value={occupied.length} icon="鈻�" />
-        <StatCard title="Available Beds" value={availableBeds.length} icon="鉁�" />
+        <StatCard title="Occupied Beds" value={occupied.length} icon="▣" />
+        <StatCard title="Available Beds" value={availableBeds.length} icon="✓" />
         <StatCard title="New Admissions" value={wardRecords.filter((r) => r.status === "Admitted").length} icon="+" />
-        <StatCard title="Discharges" value={wardRecords.filter((r) => r.status === "Discharged").length} icon="鈫�" />
+        <StatCard title="Discharges" value={wardRecords.filter((r) => r.status === "Discharged").length} icon="↗" />
       </div>
       <div className="card">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
@@ -7487,7 +7692,7 @@ function MaleWardPage({ patients = [], records = [], setRecords, showMessage }) 
         {view === "admit" && (
           <div style={{ display: "grid", gap: 12, maxWidth: 700 }}>
             <h2>Admit Male Patient</h2>
-            <label>Patient<select value={selectedId || ""} onChange={(e) => setSelectedId(e.target.value)}><option value="">Select male patient</option>{patients.filter((p) => p.sex === "Male").map((p) => <option key={p.id} value={p.id}>{p.name} 鈥� {p.card}</option>)}</select></label>
+            <label>Patient<select value={selectedId || ""} onChange={(e) => setSelectedId(e.target.value)}><option value="">Select male patient</option>{patients.filter((p) => p.sex === "Male").map((p) => <option key={p.id} value={p.id}>{p.name} — {p.card}</option>)}</select></label>
             <label>Bed<select value={bed} onChange={(e) => setBed(e.target.value)}><option value="">Select available bed</option>{availableBeds.map((b) => <option key={b} value={b}>{b}</option>)}</select></label>
             <label>Condition<select value={condition} onChange={(e) => setCondition(e.target.value)}><option>Stable</option><option>Under Observation</option><option>Needs Attention</option><option>Critical</option></select></label>
             <label>Diagnosis<input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder="Diagnosis" /></label>
@@ -7496,7 +7701,7 @@ function MaleWardPage({ patients = [], records = [], setRecords, showMessage }) 
           </div>
         )}
         {view === "patients" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Condition</th><th>Diagnosis</th><th>Status</th><th>Action</th></tr></thead><tbody>{filtered.filter((r) => r.status === "Admitted").map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.condition}</td><td>{r.diagnosis}</td><td><StatusBadge status={r.status} /></td><td><button className="secondary" onClick={() => discharge(r.id)}>Discharge</button></td></tr>)}{filtered.filter((r) => r.status === "Admitted").length === 0 && <tr><td colSpan="7">No admitted male patient found.</td></tr>}</tbody></table></div>}
-        {view === "beds" && <div className="table-wrap"><table><thead><tr><th>Bed</th><th>Status</th><th>Patient</th><th>Card No.</th></tr></thead><tbody>{beds.map((b) => { const r = occupied.find((x) => x.bed === b); return <tr key={b}><td>{b}</td><td>{r ? "Occupied" : "Available"}</td><td>{r ? r.patientName : "鈥�"}</td><td>{r ? r.card : "鈥�"}</td></tr>; })}</tbody></table></div>}
+        {view === "beds" && <div className="table-wrap"><table><thead><tr><th>Bed</th><th>Status</th><th>Patient</th><th>Card No.</th></tr></thead><tbody>{beds.map((b) => { const r = occupied.find((x) => x.bed === b); return <tr key={b}><td>{b}</td><td>{r ? "Occupied" : "Available"}</td><td>{r ? r.patientName : "—"}</td><td>{r ? r.card : "—"}</td></tr>; })}</tbody></table></div>}
         {view === "history" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Admitted</th><th>Discharged</th></tr></thead><tbody>{wardRecords.filter((r) => r.status === "Discharged").map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.admittedAt}</td><td>{r.dischargedAt}</td></tr>)}{wardRecords.filter((r) => r.status === "Discharged").length === 0 && <tr><td colSpan="5">No discharge history found.</td></tr>}</tbody></table></div>}
       </div>
     </div>
@@ -7517,9 +7722,63 @@ function WardPageGeneric({ title, prefix, sex, patients = [], records = [], setR
   const beds = Array.from({ length: 12 }, (_, i) => `${prefix}-${String(i + 1).padStart(2, "0")}`);
   const occupied = wardRecords.filter((r) => r.status === "Admitted");
   const available = beds.filter((b) => !occupied.some((r) => r.bed === b));
-  const admit = () => { const p = patients.find((x) => String(x.id) === String(selectedId)); if (!p) return showMessage("Za蓳i patient."); if (p.sex !== sex) return showMessage(`${title} na kar蓳ar ${sex.toLowerCase()} patient kawai.`); if (!bed) return showMessage("Za蓳i bed."); if (occupied.some((r) => r.bed === bed)) return showMessage("Bed 蓷in yana occupied."); setRecords((prev) => [{ id: Date.now(), ward: title, patientId: p.id, patientName: p.name, card: p.card, bed, condition, diagnosis: diagnosis.trim() || "Not specified", status: "Admitted", admittedAt: new Date().toLocaleString(), dischargedAt: "" }, ...prev]); showMessage(`${p.name} an admitted zuwa ${title}.`); setSelectedId(""); setBed(""); setDiagnosis(""); setView("patients"); };
+  const admit = () => { const p = patients.find((x) => String(x.id) === String(selectedId)); if (!p) return showMessage("Zaɓi patient."); if (p.sex !== sex) return showMessage(`${title} na karɓar ${sex.toLowerCase()} patient kawai.`); if (!bed) return showMessage("Zaɓi bed."); if (occupied.some((r) => r.bed === bed)) return showMessage("Bed ɗin yana occupied."); setRecords((prev) => [{ id: Date.now(), ward: title, patientId: p.id, patientName: p.name, card: p.card, bed, condition, diagnosis: diagnosis.trim() || "Not specified", status: "Admitted", admittedAt: new Date().toLocaleString(), dischargedAt: "" }, ...prev]); showMessage(`${p.name} an admitted zuwa ${title}.`); setSelectedId(""); setBed(""); setDiagnosis(""); setView("patients"); };
   const discharge = (id) => { setRecords((prev) => prev.map((r) => r.id === id ? { ...r, status: "Discharged", dischargedAt: new Date().toLocaleString() } : r)); showMessage("An yi discharge."); };
-  return <div><PageHeader title={title} subtitle={`${sex} patient admission, bed assignment, monitoring, notes and discharge`} icon={prefix} /><div className="stats-grid"><StatCard title="Occupied Beds" value={occupied.length} icon="鈻�" /><StatCard title="Available Beds" value={available.length} icon="鉁�" /><StatCard title="New Admissions" value={wardRecords.filter((r) => r.status === "Admitted").length} icon="+" /><StatCard title="Discharges" value={wardRecords.filter((r) => r.status === "Discharged").length} icon="鈫�" /></div><div className="card"><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}><button className="primary" onClick={() => setView("patients")}>Ward Patients</button><button className="secondary" onClick={() => setView("beds")}>Bed Status</button><button className="secondary" onClick={() => setView("history")}>Discharge History</button><button className="primary" onClick={() => setView("admit")}>+ Admit {sex} Patient</button></div>{view === "admit" && <div style={{ display: "grid", gap: 12, maxWidth: 700 }}><h2>Admit {sex} Patient</h2><select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}><option value="">Select patient</option>{patients.filter((p) => p.sex === sex).map((p) => <option key={p.id} value={p.id}>{p.name} 鈥� {p.card}</option>)}</select><select value={bed} onChange={(e) => setBed(e.target.value)}><option value="">Select available bed</option>{available.map((b) => <option key={b}>{b}</option>)}</select><select value={condition} onChange={(e) => setCondition(e.target.value)}><option>Stable</option><option>Under Observation</option><option>Needs Attention</option><option>Critical</option></select><input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder="Diagnosis" /><button className="primary" onClick={admit}>Admit Patient</button></div>}{view === "patients" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Condition</th><th>Diagnosis</th><th>Status</th><th>Action</th></tr></thead><tbody>{occupied.map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.condition}</td><td>{r.diagnosis}</td><td><StatusBadge status={r.status} /></td><td><button className="secondary" onClick={() => discharge(r.id)}>Discharge</button></td></tr>)}{occupied.length === 0 && <tr><td colSpan="7">No admitted patient found.</td></tr>}</tbody></table></div>}{view === "beds" && <div className="table-wrap"><table><thead><tr><th>Bed</th><th>Status</th><th>Patient</th><th>Card No.</th></tr></thead><tbody>{beds.map((b) => { const r = occupied.find((x) => x.bed === b); return <tr key={b}><td>{b}</td><td>{r ? "Occupied" : "Available"}</td><td>{r ? r.patientName : "鈥�"}</td><td>{r ? r.card : "鈥�"}</td></tr>; })}</tbody></table></div>}{view === "history" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Admitted</th><th>Discharged</th></tr></thead><tbody>{wardRecords.filter((r) => r.status === "Discharged").map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.admittedAt}</td><td>{r.dischargedAt}</td></tr>)}</tbody></table></div>}</div></div>;
+  return <div><PageHeader title={title} subtitle={`${sex} patient admission, bed assignment, monitoring, notes and discharge`} icon={prefix} /><div className="stats-grid"><StatCard title="Occupied Beds" value={occupied.length} icon="▣" /><StatCard title="Available Beds" value={available.length} icon="✓" /><StatCard title="New Admissions" value={wardRecords.filter((r) => r.status === "Admitted").length} icon="+" /><StatCard title="Discharges" value={wardRecords.filter((r) => r.status === "Discharged").length} icon="↗" /></div><div className="card"><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}><button className="primary" onClick={() => setView("patients")}>Ward Patients</button><button className="secondary" onClick={() => setView("beds")}>Bed Status</button><button className="secondary" onClick={() => setView("history")}>Discharge History</button><button className="primary" onClick={() => setView("admit")}>+ Admit {sex} Patient</button></div>{view === "admit" && <div style={{ display: "grid", gap: 12, maxWidth: 700 }}><h2>Admit {sex} Patient</h2><select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}><option value="">Select patient</option>{patients.filter((p) => p.sex === sex).map((p) => <option key={p.id} value={p.id}>{p.name} — {p.card}</option>)}</select><select value={bed} onChange={(e) => setBed(e.target.value)}><option value="">Select available bed</option>{available.map((b) => <option key={b}>{b}</option>)}</select><select value={condition} onChange={(e) => setCondition(e.target.value)}><option>Stable</option><option>Under Observation</option><option>Needs Attention</option><option>Critical</option></select><input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder="Diagnosis" /><button className="primary" onClick={admit}>Admit Patient</button></div>}{view === "patients" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Condition</th><th>Diagnosis</th><th>Status</th><th>Action</th></tr></thead><tbody>{occupied.map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.condition}</td><td>{r.diagnosis}</td><td><StatusBadge status={r.status} /></td><td><button className="secondary" onClick={() => discharge(r.id)}>Discharge</button></td></tr>)}{occupied.length === 0 && <tr><td colSpan="7">No admitted patient found.</td></tr>}</tbody></table></div>}{view === "beds" && <div className="table-wrap"><table><thead><tr><th>Bed</th><th>Status</th><th>Patient</th><th>Card No.</th></tr></thead><tbody>{beds.map((b) => { const r = occupied.find((x) => x.bed === b); return <tr key={b}><td>{b}</td><td>{r ? "Occupied" : "Available"}</td><td>{r ? r.patientName : "—"}</td><td>{r ? r.card : "—"}</td></tr>; })}</tbody></table></div>}{view === "history" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Admitted</th><th>Discharged</th></tr></thead><tbody>{wardRecords.filter((r) => r.status === "Discharged").map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.admittedAt}</td><td>{r.dischargedAt}</td></tr>)}</tbody></table></div>}</div></div>;
+}
+
+
+function SystemAdministrationPage({ currentUser, staff, setStaff, staffPermissions, setStaffPermissions, settings, setSettings, showMessage }) {
+  const [tab, setTab] = useState("users");
+  const [selected, setSelected] = useState(staff[0]?.staffId || "");
+  const [form, setForm] = useState(settings);
+  const cashierRoles = ["Records Cashier", "Laboratory Cashier", "Pharmacy Cashier", "Ultrasound Cashier", "General Cashier"];
+  const selectedStaff = staff.find((x) => x.staffId === selected);
+  const saveSettings = () => { setSettings(form); showMessage("An ajiye hospital settings."); };
+  const toggleStaffStatus = (id) => setStaff(prev => prev.map(p => p.id === id ? {...p, status: p.status === "Active" ? "Inactive" : "Active"} : p));
+  const perms = permissions;
+  return <div>
+    <PageHeader title="System Administration" subtitle="Super Admin control, permissions, hospital settings and cashier roles" icon="⚙" />
+    {currentUser?.role !== "Super Admin" ? <div className="panel"><strong>Super Admin access kawai.</strong></div> : <>
+      <div className="toolbar">
+        {[["users","Users"],["permissions","Permissions"],["settings","Hospital Settings"]].map(([k,l]) => <button key={k} className={`button ${tab===k?"primary":"secondary"}`} onClick={()=>setTab(k)}>{l}</button>)}
+      </div>
+      {tab === "users" && <div className="panel"><h2>Users & Roles</h2><div className="table-scroll"><table><thead><tr><th>Staff</th><th>Department</th><th>Role</th><th>Status</th><th>Action</th></tr></thead><tbody>{staff.map(p=><tr key={p.id}><td>{p.name}</td><td>{(p.departments||[p.department]).join(", ")}</td><td>{p.role}{cashierRoles.includes(p.role)?" • Cashier":""}</td><td>{p.status}</td><td><button className="small-button" onClick={()=>toggleStaffStatus(p.id)}>{p.status==="Active"?"Disable":"Enable"}</button></td></tr>)}</tbody></table></div></div>}
+      {tab === "permissions" && <div className="panel"><h2>Per-Staff Permissions</h2><div className="field"><label>Staff</label><select value={selected} onChange={e=>setSelected(e.target.value)}>{staff.map(p=><option key={p.staffId} value={p.staffId}>{p.name} — {p.role}</option>)}</select></div>{selectedStaff && <div className="button-row">{perms.map(per => { const on=staffPermissions[selected]?.[per] !== false; return <button key={per} className={`small-button ${on?"primary":""}`} onClick={()=>setStaffPermissions(prev=>({...prev,[selected]:{...(prev[selected]||{}),[per]:!on}}))}>{per}: {on?"ON":"OFF"}</button>; })}</div>}</div>}
+      {tab === "settings" && <div className="panel"><h2>Hospital Settings</h2><div className="form-grid"><FormField label="Facility Name"><input value={form.facilityName} onChange={e=>setForm({...form,facilityName:e.target.value})}/></FormField><FormField label="Department"><input value={form.departmentName} onChange={e=>setForm({...form,departmentName:e.target.value})}/></FormField><FormField label="Address"><input value={form.address} onChange={e=>setForm({...form,address:e.target.value})}/></FormField><FormField label="Phone"><input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/></FormField></div><button className="button primary" onClick={saveSettings}>Save Settings</button></div>}
+    </>}
+  </div>;
+}
+
+function InventoryPage({ inventory, setInventory, movements, setMovements, showMessage }) {
+  const [form,setForm]=useState({name:"",category:"",unit:"",quantity:0,reorderLevel:5,price:0,free:false});
+  const [q,setQ]=useState("");
+  const save=()=>{ if(!form.name.trim()) return showMessage("Rubuta sunan item."); const item={id:`STK-${Date.now()}`,...form,quantity:Number(form.quantity)||0,reorderLevel:Number(form.reorderLevel)||0,price:Number(form.price)||0}; setInventory(p=>[...p,item]); setMovements(p=>[{id:Date.now(),type:"Stock In",item:item.name,quantity:item.quantity,time:new Date().toLocaleString()},...p]); setForm({name:"",category:"",unit:"",quantity:0,reorderLevel:5,price:0,free:false}); showMessage("An ƙara stock item.");};
+  const adjust=(id,delta)=>setInventory(prev=>prev.map(x=>x.id===id?{...x,quantity:Math.max(0,Number(x.quantity)+delta)}:x));
+  const filtered=inventory.filter(x=>`${x.name} ${x.category}`.toLowerCase().includes(q.toLowerCase()));
+  return <div><PageHeader title="ICT Stock / Inventory" subtitle="ICT controls stock, department issue, balances and movement history" icon="📦"/><div className="panel"><h2>Add Stock Item</h2><div className="form-grid"><FormField label="Item Name"><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Start typing..."/></FormField><FormField label="Category"><input value={form.category} onChange={e=>setForm({...form,category:e.target.value})}/></FormField><FormField label="Unit"><input value={form.unit} onChange={e=>setForm({...form,unit:e.target.value})} placeholder="Box / Pack / Bottle"/></FormField><FormField label="Quantity"><input type="number" value={form.quantity} onChange={e=>setForm({...form,quantity:e.target.value})}/></FormField><FormField label="Reorder Level"><input type="number" value={form.reorderLevel} onChange={e=>setForm({...form,reorderLevel:e.target.value})}/></FormField><FormField label="Price"><input type="number" value={form.price} onChange={e=>setForm({...form,price:e.target.value})}/></FormField></div><label><input type="checkbox" checked={form.free} onChange={e=>setForm({...form,free:e.target.checked})}/> FREE item</label><br/><button className="button primary" onClick={save}>Save Stock</button></div><div className="panel"><div className="toolbar"><input className="search-input" value={q} onChange={e=>setQ(e.target.value)} placeholder="Search item..."/></div><div className="table-scroll"><table><thead><tr><th>Item</th><th>Category</th><th>Qty</th><th>Reorder</th><th>Price</th><th>Status</th><th>Action</th></tr></thead><tbody>{filtered.map(x=><tr key={x.id}><td>{x.name}</td><td>{x.category}</td><td>{x.quantity}</td><td>{x.reorderLevel}</td><td>{x.free?"FREE":`₦${Number(x.price).toLocaleString()}`}</td><td>{Number(x.quantity)<=Number(x.reorderLevel)?"LOW STOCK":"OK"}</td><td><button className="small-button" onClick={()=>adjust(x.id,1)}>+1</button> <button className="small-button" onClick={()=>adjust(x.id,-1)}>-1</button></td></tr>)}</tbody></table></div></div><div className="panel"><h3>Stock Movement History</h3>{movements.slice(0,100).map(m=><div key={m.id} style={{padding:"8px 0",borderBottom:"1px solid #eee"}}>{m.type} — {m.item} — {m.quantity} — {m.time}</div>)}</div></div>;
+}
+
+function AppointmentsPage({ patients, appointments, setAppointments, showMessage }) {
+  const [form,setForm]=useState({patientId:"",department:"Consultant Room",date:"",time:"",reason:"",status:"Booked"});
+  const patient=patients.find(p=>String(p.id)===String(form.patientId));
+  const save=()=>{if(!patient||!form.date||!form.time)return showMessage("Zaɓi patient, date da time."); setAppointments(p=>[{id:`APT-${Date.now()}`,patientId:patient.id,patientName:patient.name,card:patient.card,phone:patient.phone,...form,createdAt:new Date().toLocaleString()},...p]); setForm({...form,patientId:"",date:"",time:"",reason:""}); showMessage("An ajiye appointment.");};
+  return <div><PageHeader title="Appointments" subtitle="Appointments, follow-up dates and reminders" icon="📅"/><div className="panel"><h2>New Appointment</h2><div className="form-grid"><FormField label="Patient"><select value={form.patientId} onChange={e=>setForm({...form,patientId:e.target.value})}><option value="">Select patient</option>{patients.map(p=><option key={p.id} value={p.id}>{p.name} — {p.card}</option>)}</select></FormField><FormField label="Department"><select value={form.department} onChange={e=>setForm({...form,department:e.target.value})}>{departments.filter(d=>!['General Cashier','In-Charge'].includes(d)).map(d=><option key={d}>{d}</option>)}</select></FormField><FormField label="Date"><input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/></FormField><FormField label="Time"><input type="time" value={form.time} onChange={e=>setForm({...form,time:e.target.value})}/></FormField></div><FormField label="Reason / Follow-up"><textarea value={form.reason} onChange={e=>setForm({...form,reason:e.target.value})}/></FormField><button className="button primary" onClick={save}>Save Appointment</button></div><div className="panel"><h2>Appointment History</h2><div className="table-scroll"><table><thead><tr><th>Patient</th><th>Department</th><th>Date</th><th>Time</th><th>Status</th><th>Reason</th></tr></thead><tbody>{appointments.map(a=><tr key={a.id}><td>{a.patientName} ({a.card})</td><td>{a.department}</td><td>{a.date}</td><td>{a.time}</td><td>{a.status}</td><td>{a.reason}</td></tr>)}</tbody></table></div></div></div>;
+}
+
+function PatientCardPage({ patients, settings }) {
+  const [id,setId]=useState(""); const p=patients.find(x=>String(x.id)===String(id));
+  const print=()=>window.print();
+  return <div><PageHeader title="Patient Card Printing" subtitle="Print ICT patient identification cards" icon="▤"/><div className="panel"><div className="field"><label>Patient</label><select value={id} onChange={e=>setId(e.target.value)}><option value="">Select patient</option>{patients.map(x=><option key={x.id} value={x.id}>{x.name} — {x.card}</option>)}</select></div>{p&&<div style={{maxWidth:520,border:"2px solid #263442",borderRadius:12,padding:22,background:"#fff"}}><h2 style={{margin:"0 0 4px"}}>{settings.facilityName}</h2><div>{settings.departmentName}</div><div style={{marginTop:14}}><strong>PATIENT CARD</strong></div><hr/><p><strong>Name:</strong> {p.name}</p><p><strong>Card Number:</strong> {p.card}</p><p><strong>Phone:</strong> {p.phone}</p><p><strong>Sex:</strong> {p.sex}</p><p><strong>Status:</strong> {p.status}</p><button className="button primary" onClick={print}>Print Patient Card</button></div>}</div></div>;
+}
+
+function BackupRestorePage({ data, setters, showMessage }) {
+  const download=()=>{const blob=new Blob([JSON.stringify({version:1,exportedAt:new Date().toISOString(),data},null,2)],{type:"application/json"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`bazza-phc-backup-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);};
+  const restore=(e)=>{const file=e.target.files?.[0]; if(!file)return; const r=new FileReader(); r.onload=()=>{try{const obj=JSON.parse(r.result); const d=obj.data||obj; Object.entries(setters).forEach(([k,setter])=>{if(Object.prototype.hasOwnProperty.call(d,k.replace(/^set/,"").replace(/^[A-Z]/,m=>m.toLowerCase()))){} });
+      const map={patients:"setPatients",staff:"setStaff",transactions:"setTransactions",pharmacyPrescriptions:"setPharmacyPrescriptions",labRequests:"setLabRequests",wardRecords:"setWardRecords",ultrasoundRequests:"setUltrasoundRequests",attendance:"setAttendance",rosterEntries:"setRosterEntries",auditLogs:"setAuditLogs",alerts:"setAlerts",smsMessages:"setSmsMessages",receptionQueue:"setReceptionQueue",outpatientVisits:"setOutpatientVisits",inventory:"setInventory",inventoryMovements:"setInventoryMovements",appointments:"setAppointments",staffPermissions:"setStaffPermissions",hospitalSettings:"setHospitalSettings"};
+      Object.entries(map).forEach(([key,setterName])=>{if(Object.prototype.hasOwnProperty.call(d,key)&&setters[setterName])setters[setterName](d[key]);}); showMessage("An restore data daga backup.");
+    }catch(err){showMessage("Backup file bai dace ba.");}}; r.readAsText(file);};
+  return <div><PageHeader title="Backup & Restore" subtitle="Export or restore the complete Bazza PHC data set" icon="↕"/><div className="panel"><h2>Backup</h2><p>Wannan zai fitar da patients, staff, transactions, Lab, Pharmacy, Ultrasound, wards, roster, attendance, alerts, SMS, inventory da appointments.</p><button className="button primary" onClick={download}>Download Full Backup</button></div><div className="panel"><h2>Restore</h2><input type="file" accept="application/json,.json" onChange={restore}/></div></div>;
 }
 
 export default App;
