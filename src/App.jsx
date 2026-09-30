@@ -106,6 +106,31 @@ function userCanAction(user, action) {
   return ["View"].includes(action);
 }
 
+const DEPARTMENT_LOGIN_ROLES = {
+  "ICT Centre": "ICT Staff",
+  "Records Unit": "Records Staff",
+  "Nursing Unit": "Nurse",
+  "Consultant Room": "Consultant",
+  "Laboratory Unit": "Laboratory Staff",
+  "Pharmacy Unit": "Pharmacy Staff",
+  "Ultrasound Room": "Ultrasound Staff",
+  "In-Charge": "In-Charge",
+  "General Cashier": "General Cashier",
+  "Male Ward": "Ward Staff",
+  "Female Ward": "Ward Staff",
+  "Maternity Ward": "Ward Staff",
+  "Child Ward": "Ward Staff",
+  "Labour Room": "Ward Staff",
+  "Immunization Unit": "Immunization Staff",
+  "Family Planning Unit": "Family Planning Staff",
+  "Adolescent Unit": "Adolescent Staff",
+};
+
+const DEFAULT_DEPARTMENT_CREDENTIALS = departments.reduce((acc, department) => {
+  acc[department] = { username: "bazza", password: "1234", status: "Active" };
+  return acc;
+}, {});
+
 const initialStaff = [
   {
     id: 1,
@@ -270,6 +295,10 @@ function App() {
   const [inventoryMovements, setInventoryMovements] = usePersistentState("bazza_inventory_movements", []);
   const [appointments, setAppointments] = usePersistentState("bazza_appointments", []);
   const [staffPermissions, setStaffPermissions] = usePersistentState("bazza_staff_permissions", {});
+  const [departmentCredentials, setDepartmentCredentials] = usePersistentState(
+    "bazza_department_credentials",
+    DEFAULT_DEPARTMENT_CREDENTIALS
+  );
   const [hospitalSettings, setHospitalSettings] = usePersistentState("bazza_hospital_settings", {
     facilityName: "COMPREHENSIVE HEALTH CLINIC BAZZAH",
     departmentName: "PRIMARY HEALTH CARE DEPARTMENT",
@@ -293,8 +322,9 @@ function App() {
   [staff]);
   const [search, setSearch] = useState("");
   const [loginForm, setLoginForm] = useState({
-    username: "",
-    password: "",
+    department: "ICT Centre",
+    username: "bazza",
+    password: "1234",
   });
 
   const [showStaffModal, setShowStaffModal] = useState(false);
@@ -378,26 +408,62 @@ function App() {
   const handleLogin = (e) => {
     e.preventDefault();
 
-    const user = staff.find(
-      (person) =>
-        person.username === loginForm.username &&
-        person.password === loginForm.password &&
-        person.status === "Active"
-    );
+    const department = loginForm.department;
 
-    if (!user) {
-      logAudit("Failed Login", "Security", `Username: ${loginForm.username}`);
-      showMessage("Username ko Password ba daidai ba.");
+    // Super Admin has a separate account and is not tied to a department dashboard.
+    if (department === "Super Admin") {
+      const admin = staff.find(
+        (person) =>
+          person.role === "Super Admin" &&
+          person.username === loginForm.username &&
+          person.password === loginForm.password &&
+          person.status === "Active"
+      );
+
+      if (!admin) {
+        logAudit("Failed Login", "Security", `Super Admin username: ${loginForm.username}`);
+        showMessage("Super Admin username ko password ba daidai ba.");
+        return;
+      }
+
+      logAudit("Login", "Security", "Successful Super Admin login", admin);
+      setCurrentUser(admin);
+      setPage("Dashboard");
+      setLoginForm({ department: "ICT Centre", username: "bazza", password: "1234" });
       return;
     }
 
-    logAudit("Login", "Security", `Successful login: ${user.username}`, user);
-    setCurrentUser(user);
+    const credentials = departmentCredentials[department];
+    if (!credentials || credentials.status !== "Active" ||
+        credentials.username !== loginForm.username ||
+        credentials.password !== loginForm.password) {
+      logAudit("Failed Login", "Security", `Department: ${department}; Username: ${loginForm.username}`);
+      showMessage("Username, password ko department ba daidai ba.");
+      return;
+    }
+
+    const role = DEPARTMENT_LOGIN_ROLES[department] || "Ward Staff";
+    const existingStaff = staff.find(
+      (person) => person.department === department && person.role === role && person.status === "Active"
+    );
+
+    const departmentUser = {
+      ...(existingStaff || {}),
+      id: existingStaff?.id || `DEPT-${department.replace(/\W/g, "")}`,
+      staffId: existingStaff?.staffId || `DEPT-${department.replace(/\W/g, "").slice(0, 8).toUpperCase()}`,
+      name: existingStaff?.name || `${department} User`,
+      username: credentials.username,
+      password: credentials.password,
+      department,
+      departments: [department],
+      role,
+      status: "Active",
+    };
+
+    logAudit("Login", "Security", `Successful department login: ${department}`, departmentUser);
+    setCurrentUser(departmentUser);
     setPage("Dashboard");
-    setLoginForm({
-      username: "",
-      password: "",
-    });
+    setLoginForm({ department: "ICT Centre", username: "bazza", password: "1234" });
   };
 
   const handleLogout = () => {
@@ -1024,6 +1090,8 @@ function App() {
               setStaff={setStaff}
               staffPermissions={staffPermissions}
               setStaffPermissions={setStaffPermissions}
+              departmentCredentials={departmentCredentials}
+              setDepartmentCredentials={setDepartmentCredentials}
               settings={hospitalSettings}
               setSettings={setHospitalSettings}
               showMessage={showMessage}
@@ -1044,8 +1112,8 @@ function App() {
 
           {page === "Backup & Restore" && (
             <BackupRestorePage
-              data={{ patients, staff, transactions, pharmacyPrescriptions, labRequests, wardRecords, ultrasoundRequests, attendance, rosterEntries, auditLogs, alerts, smsMessages, receptionQueue, outpatientVisits, inventory, inventoryMovements, appointments, staffPermissions, hospitalSettings }}
-              setters={{ setPatients, setStaff, setTransactions, setPharmacyPrescriptions, setLabRequests, setWardRecords, setUltrasoundRequests, setAttendance, setRosterEntries, setAuditLogs, setAlerts, setSmsMessages, setReceptionQueue, setOutpatientVisits, setInventory, setInventoryMovements, setAppointments, setStaffPermissions, setHospitalSettings }}
+              data={{ patients, staff, transactions, pharmacyPrescriptions, labRequests, wardRecords, ultrasoundRequests, attendance, rosterEntries, auditLogs, alerts, smsMessages, receptionQueue, outpatientVisits, inventory, inventoryMovements, appointments, staffPermissions, departmentCredentials, hospitalSettings }}
+              setters={{ setPatients, setStaff, setTransactions, setPharmacyPrescriptions, setLabRequests, setWardRecords, setUltrasoundRequests, setAttendance, setRosterEntries, setAuditLogs, setAlerts, setSmsMessages, setReceptionQueue, setOutpatientVisits, setInventory, setInventoryMovements, setAppointments, setStaffPermissions, setDepartmentCredentials, setHospitalSettings }}
               showMessage={showMessage}
             />
           )}
@@ -1234,6 +1302,24 @@ function LoginScreen({
         {notification && <div className="login-error">{notification}</div>}
 
         <form onSubmit={handleLogin}>
+          <label>Department / Dashboard</label>
+          <select
+            value={loginForm.department}
+            onChange={(e) =>
+              setLoginForm({
+                ...loginForm,
+                department: e.target.value,
+              })
+            }
+          >
+            <option value="Super Admin">Super Admin</option>
+            {departments.map((department) => (
+              <option key={department} value={department}>
+                {department}
+              </option>
+            ))}
+          </select>
+
           <label>Username</label>
           <input
             value={loginForm.username}
@@ -1265,12 +1351,10 @@ function LoginScreen({
         </form>
 
         <div className="demo-box">
-          <strong>Demo Login</strong>
+          <strong>Default Department Login</strong>
+          <span>All Departments: bazza / 1234</span>
           <span>Super Admin: admin / 1234</span>
-          <span>In-Charge: altini / 1234</span>
-          <span>Pharmacy: hadiza / 1234</span>
-          <span>Ultrasound: abbayaro / 1234</span>
-          <span>Laboratory: kabiru / 1234</span>
+          <small>Super Admin ne kawai zai iya canza password na department accounts.</small>
         </div>
 
         <footer>
@@ -7983,8 +8067,11 @@ function WardPageGeneric({ title, prefix, sex, patients = [], records = [], setR
 }
 
 
-function SystemAdministrationPage({ currentUser, staff, setStaff, staffPermissions, setStaffPermissions, settings, setSettings, showMessage }) {
+function SystemAdministrationPage({ currentUser, staff, setStaff, staffPermissions, setStaffPermissions, departmentCredentials, setDepartmentCredentials, settings, setSettings, showMessage }) {
   const [tab, setTab] = useState("users");
+  const [credentialPasswords, setCredentialPasswords] = useState(() =>
+    Object.fromEntries(Object.entries(departmentCredentials || {}).map(([department, value]) => [department, value?.password || ""]))
+  );
   const [selected, setSelected] = useState(staff[0]?.staffId || "");
   const [form, setForm] = useState(settings);
   const cashierRoles = ["Records Cashier", "Laboratory Cashier", "Pharmacy Cashier", "Ultrasound Cashier", "General Cashier"];
@@ -8000,6 +8087,7 @@ function SystemAdministrationPage({ currentUser, staff, setStaff, staffPermissio
       </div>
       {tab === "users" && <div className="panel"><h2>Users & Roles</h2><div className="table-scroll"><table><thead><tr><th>Staff</th><th>Department</th><th>Role</th><th>Status</th><th>Action</th></tr></thead><tbody>{staff.map(p=><tr key={p.id}><td>{p.name}</td><td>{(p.departments||[p.department]).join(", ")}</td><td>{p.role}{cashierRoles.includes(p.role)?" • Cashier":""}</td><td>{p.status}</td><td><button className="small-button" onClick={()=>toggleStaffStatus(p.id)}>{p.status==="Active"?"Disable":"Enable"}</button></td></tr>)}</tbody></table></div></div>}
       {tab === "permissions" && <div className="panel"><h2>Per-Staff Permissions</h2><div className="field"><label>Staff</label><select value={selected} onChange={e=>setSelected(e.target.value)}>{staff.map(p=><option key={p.staffId} value={p.staffId}>{p.name} — {p.role}</option>)}</select></div>{selectedStaff && <div className="button-row">{perms.map(per => { const on=staffPermissions[selected]?.[per] !== false; return <button key={per} className={`small-button ${on?"primary":""}`} onClick={()=>setStaffPermissions(prev=>({...prev,[selected]:{...(prev[selected]||{}),[per]:!on}}))}>{per}: {on?"ON":"OFF"}</button>; })}</div>}</div>}
+      {tab === "security" && <div className="panel"><h2>Department Login & Passwords</h2><p style={{marginTop:0}}>Super Admin kawai zai iya canza password na department accounts.</p><div className="table-scroll"><table><thead><tr><th>Department</th><th>Username</th><th>New Password</th><th>Status</th><th>Action</th></tr></thead><tbody>{departments.map(department=>{const account=departmentCredentials?.[department] || {username:"bazza",password:"1234",status:"Active"}; return <tr key={department}><td>{department}</td><td><strong>{account.username}</strong></td><td><input type="password" value={credentialPasswords[department] ?? account.password} onChange={e=>setCredentialPasswords(prev=>({...prev,[department]:e.target.value}))} style={{maxWidth:180}}/></td><td>{account.status}</td><td><button className="small-button primary" onClick={()=>{const password=(credentialPasswords[department] ?? account.password).trim(); if(!password)return showMessage("Password ba zai zama blank ba."); setDepartmentCredentials(prev=>({...prev,[department]:{...(prev?.[department]||account),username:account.username,password,status:"Active"}})); showMessage(`An canza password na ${department}.`);}}>Save Password</button></td></tr>;})}</tbody></table></div></div>}
       {tab === "settings" && <div className="panel"><h2>Hospital Settings</h2><div className="form-grid"><FormField label="Facility Name"><input value={form.facilityName} onChange={e=>setForm({...form,facilityName:e.target.value})}/></FormField><FormField label="Department"><input value={form.departmentName} onChange={e=>setForm({...form,departmentName:e.target.value})}/></FormField><FormField label="Address"><input value={form.address} onChange={e=>setForm({...form,address:e.target.value})}/></FormField><FormField label="Phone"><input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/></FormField></div><button className="button primary" onClick={saveSettings}>Save Settings</button></div>}
     </>}
   </div>;
