@@ -1468,6 +1468,10 @@ function ICTPage({ patients, setPatients, showMessage }) {
     otherNames: "",
     phone: "",
     sex: "Female",
+    age: "",
+    address: "",
+    broughtByName: "",
+    broughtByRelationship: "",
     spouse: "",
   });
 
@@ -1485,6 +1489,10 @@ function ICTPage({ patients, setPatients, showMessage }) {
       name: `${form.surname} ${form.otherNames}`,
       phone: form.phone || "N/A",
       sex: form.sex,
+      age: form.age === "" ? "" : Number(form.age),
+      address: form.address.trim(),
+      broughtByName: form.broughtByName.trim(),
+      broughtByRelationship: form.broughtByRelationship,
       status: "Active",
     };
 
@@ -1495,6 +1503,10 @@ function ICTPage({ patients, setPatients, showMessage }) {
       otherNames: "",
       phone: "",
       sex: "Female",
+      age: "",
+      address: "",
+      broughtByName: "",
+      broughtByRelationship: "",
       spouse: "",
     });
 
@@ -1563,6 +1575,75 @@ function ICTPage({ patients, setPatients, showMessage }) {
                 }
                 placeholder="Phone number"
               />
+            </FormField>
+
+            <FormField label="Age">
+              <input
+                type="number"
+                min="0"
+                max="130"
+                value={form.age}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    age: e.target.value,
+                  })
+                }
+                placeholder="Age"
+              />
+            </FormField>
+
+            <FormField label="Address">
+              <input
+                value={form.address}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    address: e.target.value,
+                  })
+                }
+                placeholder="Residential address"
+              />
+            </FormField>
+
+            <FormField label="Name of Person Who Brought Patient">
+              <input
+                value={form.broughtByName}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    broughtByName: e.target.value,
+                  })
+                }
+                placeholder="Full name"
+              />
+            </FormField>
+
+            <FormField label="Relationship to Patient">
+              <select
+                value={form.broughtByRelationship}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    broughtByRelationship: e.target.value,
+                  })
+                }
+              >
+                <option value="">Select relationship</option>
+                <option>Father</option>
+                <option>Mother</option>
+                <option>Brother</option>
+                <option>Sister</option>
+                <option>Husband</option>
+                <option>Wife</option>
+                <option>Son</option>
+                <option>Daughter</option>
+                <option>Uncle</option>
+                <option>Aunt</option>
+                <option>Guardian</option>
+                <option>Friend</option>
+                <option>Other</option>
+              </select>
             </FormField>
 
             <FormField label="Sex / Gender">
@@ -1836,8 +1917,28 @@ function RecordsPage({ patients, showMessage, setTransactions, transactions = []
             </div>
 
             <div className="access-box">
+              <strong>Age</strong>
+              <span>{selectedPatient.age !== "" && selectedPatient.age != null ? `${selectedPatient.age} years` : "Not provided"}</span>
+            </div>
+
+            <div className="access-box">
+              <strong>Address</strong>
+              <span>{selectedPatient.address || "Not provided"}</span>
+            </div>
+
+            <div className="access-box">
               <strong>Sex</strong>
               <span>{selectedPatient.sex}</span>
+            </div>
+
+            <div className="access-box">
+              <strong>Person Who Brought Patient</strong>
+              <span>{selectedPatient.broughtByName || "Not provided"}</span>
+            </div>
+
+            <div className="access-box">
+              <strong>Relationship to Patient</strong>
+              <span>{selectedPatient.broughtByRelationship || "Not provided"}</span>
             </div>
           </div>
 
@@ -3121,6 +3222,7 @@ function ChildWardPage({ patients = [], records = [], setRecords, showMessage })
           <button className={view === "patients" ? "primary" : "secondary"} onClick={() => setView("patients")}>Ward Patients</button>
           <button className={view === "beds" ? "primary" : "secondary"} onClick={() => setView("beds")}>Bed Status</button>
           <button className={view === "history" ? "primary" : "secondary"} onClick={() => setView("history")}>Discharge History</button>
+          <button className="secondary" onClick={() => setView("nursing")}>Nursing Care / Reports</button>
           <button className="primary" onClick={() => setView("admit")}>+ Admit Child Patient</button>
         </div>
 
@@ -3249,6 +3351,8 @@ function ChildWardPage({ patients = [], records = [], setRecords, showMessage })
             </table>
           </div>
         )}
+
+        {view === "nursing" && <WardNursingCarePanel wardName="Child Ward" />}
       </div>
     </div>
   );
@@ -3361,6 +3465,7 @@ function MaternityWardPage({ patients = [], records = [], setRecords, showMessag
           <button className={view === "patients" ? "primary" : "secondary"} onClick={() => setView("patients")}>Ward Patients</button>
           <button className={view === "beds" ? "primary" : "secondary"} onClick={() => setView("beds")}>Bed Status</button>
           <button className={view === "history" ? "primary" : "secondary"} onClick={() => setView("history")}>Discharge History</button>
+          <button className="secondary" onClick={() => setView("nursing")}>Nursing Care / Reports</button>
           <button className="primary" onClick={() => setView("admit")}>+ Admit Maternity Patient</button>
         </div>
 
@@ -3522,6 +3627,8 @@ function MaternityWardPage({ patients = [], records = [], setRecords, showMessag
             </table>
           </div>
         )}
+
+        {view === "nursing" && <WardNursingCarePanel wardName="Maternity Ward" />}
       </div>
     </div>
   );
@@ -3558,23 +3665,45 @@ function NursingUnitPage({ patients = [], setPatients, showMessage }) {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
   const [tasks, setTasks] = useState([]);
+  const [measurements, setMeasurements] = useState([]);
+  const [measurementValues, setMeasurementValues] = useState({});
   const [result, setResult] = useState("");
+  const [condition, setCondition] = useState("");
   const [ward, setWard] = useState("");
   const [bed, setBed] = useState("");
   const [notes, setNotes] = useState("");
   const [savedRecords, setSavedRecords] = usePersistentState("bazza_nursing_records", []);
 
   const routineTasks = [
-    "Vital Signs Checked",
-    "Patient Assessed",
+    "Patient Assessment",
+    "Vital Signs Assessment",
     "Medication Given",
+    "Injection Given",
+    "IV Fluid Started",
     "Wound Care",
+    "Dressing Changed",
     "Admission Assessment",
     "Patient Education",
+    "Discharge Preparation",
     "Other",
   ];
 
+  const measurementOptions = [
+    "Blood Pressure (BP)",
+    "Pulse Rate",
+    "Temperature",
+    "Respiratory Rate",
+    "Weight",
+    "Height",
+    "Oxygen Saturation (SpO₂)",
+    "Blood Glucose",
+    "Pain Score",
+    "MUAC",
+    "Other Measurement",
+  ];
+
   const resultOptions = ["Stable", "Improving", "Needs Consultant Review", "Urgent Review", "Completed"];
+  const conditionOptions = ["Good", "Fair", "Serious", "Critical", "Needs Further Assessment"];
   const wards = ["Male Ward", "Female Ward", "Maternity Ward", "Child Ward", "Labour Room", "Other"];
   const beds = ward === "Male Ward" ? Array.from({length:12},(_,i)=>`M-${String(i+1).padStart(2,"0")}`)
     : ward === "Female Ward" ? Array.from({length:12},(_,i)=>`F-${String(i+1).padStart(2,"0")}`)
@@ -3588,22 +3717,43 @@ function NursingUnitPage({ patients = [], setPatients, showMessage }) {
     return [p.name, p.card, p.phone].some(v => String(v || "").toLowerCase().includes(q));
   });
 
-  const toggleTask = (task) => {
-    setTasks(prev => prev.includes(task) ? prev.filter(x => x !== task) : [...prev, task]);
+  const toggleItem = (item, setter) => {
+    setter(prev => prev.includes(item) ? prev.filter(x => x !== item) : [...prev, item]);
+  };
+
+  const updateMeasurement = (name, value) => {
+    setMeasurementValues(prev => ({ ...prev, [name]: value }));
   };
 
   const save = () => {
     if (!selected) return showMessage("Zaɓi patient da farko.");
     if (tasks.length < 2) return showMessage("Zaɓi aƙalla nursing tasks guda 2.");
+    if (measurements.length < 2) return showMessage("Zaɓi aƙalla measurements guda 2 kafin consultation.");
+    const missing = measurements.filter(m => !String(measurementValues[m] || "").trim());
+    if (missing.length) return showMessage(`Cika sakamakon: ${missing.join(", ")}.`);
     if (!result) return showMessage("Zaɓi nursing result.");
+    if (!condition) return showMessage("Zaɓi patient condition.");
+
+    const preConsultation = {
+      selected: measurements,
+      values: measurementValues,
+      completed: true,
+      date: new Date().toLocaleString(),
+    };
 
     const record = {
       id: Date.now(),
       patientId: selected.id,
       patientName: selected.name,
       card: selected.card,
+      age: selected.age ?? "",
+      sex: selected.sex || "",
       tasks,
+      preConsultation,
+      measurements,
+      measurementValues,
       result,
+      condition,
       ward: ward || "Not Assigned",
       bed: bed || "Not Assigned",
       notes: notes.trim(),
@@ -3619,15 +3769,15 @@ function NursingUnitPage({ patients = [], setPatients, showMessage }) {
       ));
     }
 
-    showMessage(`${selected.name} nursing record an ajiye.`);
-    setTasks([]); setResult(""); setWard(""); setBed(""); setNotes(""); setSelected(null); setSearch(""); setView("queue");
+    showMessage(`${selected.name} nursing assessment an ajiye, an shirya bayanan kafin Consultant.`);
+    setTasks([]); setMeasurements([]); setMeasurementValues({}); setResult(""); setCondition(""); setWard(""); setBed(""); setNotes(""); setSelected(null); setSearch(""); setView("queue");
   };
 
   const ready = savedRecords.filter(r => r.status === "Ready for Consultant");
 
   return (
     <div>
-      <PageHeader title="Nursing Unit" subtitle="Nursing assessment, patient flow and ward assignment" icon="♙" />
+      <PageHeader title="Nursing Unit" subtitle="Modern nursing assessment, measurements, patient flow and pre-consultation preparation" icon="♙" />
       <div className="stats-grid">
         <StatCard title="Patients" value={patients.length} icon="◉" />
         <StatCard title="Nursing Records" value={savedRecords.length} icon="✓" />
@@ -3639,7 +3789,7 @@ function NursingUnitPage({ patients = [], setPatients, showMessage }) {
         <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
           <button className="button primary" onClick={() => setView("queue")}>Patient Queue</button>
           <button className="button secondary" onClick={() => setView("records")}>Nursing Records</button>
-          <button className="button secondary" onClick={() => setView("ready")}>Ready for Consultant</button>
+          <button className="button secondary" onClick={() => setView("ready")}>Before Consultation / Ready</button>
         </div>
 
         {view === "queue" && (
@@ -3647,7 +3797,7 @@ function NursingUnitPage({ patients = [], setPatients, showMessage }) {
             <h2>Select Patient</h2>
             <input className="search-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search card number, name or phone" />
             <div className="search-results">
-              {filtered.map(p => (
+              {filtered.slice(0, 15).map(p => (
                 <button key={p.id} className="result-item" onClick={() => { setSelected(p); setSearch(p.name); }}>
                   {p.name} — {p.card} — {p.phone || "No phone"}
                 </button>
@@ -3656,18 +3806,57 @@ function NursingUnitPage({ patients = [], setPatients, showMessage }) {
 
             {selected && (
               <div style={{marginTop:16}}>
-                <h2>{selected.name}</h2>
-                <p><strong>Card Number:</strong> {selected.card}</p>
+                <div className="card" style={{marginBottom:16}}>
+                  <h2>Patient Information</h2>
+                  <div className="form-grid">
+                    <div className="access-box"><strong>Name</strong><span>{selected.name}</span></div>
+                    <div className="access-box"><strong>Card Number</strong><span>{selected.card}</span></div>
+                    <div className="access-box"><strong>Age</strong><span>{selected.age !== "" && selected.age != null ? `${selected.age} years` : "Not provided"}</span></div>
+                    <div className="access-box"><strong>Sex</strong><span>{selected.sex || "Not provided"}</span></div>
+                  </div>
+                </div>
 
                 <SearchableMultiSelectButtons
-                  label="Routine Nursing Tasks — Select 2 or more"
+                  label="Nursing Tasks — Select 2 or more"
                   options={routineTasks}
                   value={tasks}
                   onChange={setTasks}
                   placeholder="Search nursing task..."
                 />
 
-                <div className="form-grid">
+                <SearchableMultiSelectButtons
+                  label="Pre-Consultation Measurements — Select 2 or more"
+                  options={measurementOptions}
+                  value={measurements}
+                  onChange={setMeasurements}
+                  placeholder="Search BP, weight, temperature, pulse..."
+                />
+
+                {measurements.length > 0 && (
+                  <div className="card" style={{marginTop:16}}>
+                    <h3>Enter Measurement Results</h3>
+                    <p className="muted">Kowane measurement da ka zaɓa sai ka saka value dinsa.</p>
+                    <div className="form-grid">
+                      {measurements.map(m => (
+                        <FormField key={m} label={m}>
+                          <input
+                            value={measurementValues[m] || ""}
+                            onChange={e => updateMeasurement(m, e.target.value)}
+                            placeholder={`Enter ${m}`}
+                          />
+                        </FormField>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="form-grid" style={{marginTop:16}}>
+                  <FormField label="Patient Condition">
+                    <select value={condition} onChange={e => setCondition(e.target.value)}>
+                      <option value="">Select condition</option>
+                      {conditionOptions.map(x => <option key={x}>{x}</option>)}
+                    </select>
+                  </FormField>
                   <FormField label="Nursing Result">
                     <select value={result} onChange={e => setResult(e.target.value)}>
                       <option value="">Select result</option>
@@ -3688,30 +3877,96 @@ function NursingUnitPage({ patients = [], setPatients, showMessage }) {
                       </select>
                     </FormField>
                   )}
-                  <FormField label="Report / Additional Notes">
-                    <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional nursing notes..." />
+                  <FormField label="Report / Additional Clinical Notes">
+                    <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Rubuta ƙarin bayanin nursing da ba standardized ba..." />
                   </FormField>
                 </div>
-                <button className="button primary" onClick={save}>Save Nursing Record</button>
+
+                <div className="access-box" style={{marginTop:16}}>
+                  <strong>Workflow</strong>
+                  <span>ICT/Records → Nursing Assessment → Pre-Consultation Measurements → Ready for Consultant → Consultant Room</span>
+                </div>
+
+                <button className="button primary" onClick={save} style={{marginTop:16}}>Save Nursing & Before Consultation</button>
               </div>
             )}
           </>
         )}
 
         {view === "records" && (
-          <div className="table-wrapper"><table><thead><tr><th>Patient</th><th>Card</th><th>Tasks</th><th>Result</th><th>Ward/Bed</th><th>Status</th><th>Date</th></tr></thead><tbody>
-            {savedRecords.map(r => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.tasks.join(", ")}</td><td>{r.result}</td><td>{r.ward} / {r.bed}</td><td>{r.status}</td><td>{r.date}</td></tr>)}
-            {!savedRecords.length && <tr><td colSpan="7">No nursing record found.</td></tr>}
+          <div className="table-wrapper"><table><thead><tr><th>Patient</th><th>Card</th><th>Tasks</th><th>Measurements</th><th>Condition</th><th>Result</th><th>Status</th><th>Date</th></tr></thead><tbody>
+            {savedRecords.map(r => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.tasks.join(", ")}</td><td>{(r.measurements || []).map(m => `${m}: ${r.measurementValues?.[m] || "—"}`).join(" | ")}</td><td>{r.condition || "—"}</td><td>{r.result}</td><td>{r.status}</td><td>{r.date}</td></tr>)}
+            {!savedRecords.length && <tr><td colSpan="8">No nursing record found.</td></tr>}
           </tbody></table></div>
         )}
 
         {view === "ready" && (
-          <div className="table-wrapper"><table><thead><tr><th>Patient</th><th>Card</th><th>Result</th><th>Notes</th><th>Date</th></tr></thead><tbody>
-            {ready.map(r => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.result}</td><td>{r.notes || "—"}</td><td>{r.date}</td></tr>)}
-            {!ready.length && <tr><td colSpan="5">No patient is ready for Consultant.</td></tr>}
+          <div className="table-wrapper"><table><thead><tr><th>Patient</th><th>Card</th><th>Measurements</th><th>Condition</th><th>Result</th><th>Notes</th><th>Date</th></tr></thead><tbody>
+            {ready.map(r => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{(r.measurements || []).map(m => `${m}: ${r.measurementValues?.[m] || "—"}`).join(" | ")}</td><td>{r.condition}</td><td>{r.result}</td><td>{r.notes || "—"}</td><td>{r.date}</td></tr>)}
+            {!ready.length && <tr><td colSpan="7">No patient is ready for Consultant.</td></tr>}
           </tbody></table></div>
         )}
       </div>
+    </div>
+  );
+}
+
+
+function WardNursingCarePanel({ wardName }) {
+  const [nursingRecords] = usePersistentState("bazza_nursing_records", []);
+  const wardRecords = nursingRecords.filter((r) => r.ward === wardName);
+  const activeRecords = wardRecords.filter((r) => r.status !== "Discharged");
+
+  return (
+    <div className="panel" style={{ marginTop: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <div>
+          <h2 style={{ marginBottom: 4 }}>Nursing Care / Patient Care Report</h2>
+          <p className="muted" style={{ margin: 0 }}>
+            Abubuwan da Nursing ya yi wa patients na {wardName}, tare da sakamakon measurements da pre-consultation.
+          </p>
+        </div>
+        <div className="access-box"><strong>Records</strong><span>{activeRecords.length}</span></div>
+      </div>
+      {wardRecords.length === 0 ? (
+        <div className="empty-state" style={{ marginTop: 16 }}>
+          Babu Nursing care record da aka ajiye wa wannan ward tukuna.
+        </div>
+      ) : (
+        <div className="table-wrapper" style={{ marginTop: 16 }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Patient</th><th>Card</th><th>Nursing Tasks</th><th>Measurements & Results</th>
+                <th>Condition</th><th>Nursing Result</th><th>Notes</th><th>Status</th><th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {wardRecords.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.patientName}</td>
+                  <td>{r.card}</td>
+                  <td>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                      {(r.tasks || []).map((task) => <span key={task} className="badge">{task}</span>)}
+                    </div>
+                  </td>
+                  <td>
+                    <div style={{ display: "grid", gap: 4, minWidth: 220 }}>
+                      {(r.measurements || []).map((m) => <div key={m}><strong>{m}:</strong> {r.measurementValues?.[m] || "—"}</div>)}
+                    </div>
+                  </td>
+                  <td>{r.condition || "—"}</td>
+                  <td>{r.result || "—"}</td>
+                  <td>{r.notes || "—"}</td>
+                  <td><StatusBadge status={r.status || "Completed"} /></td>
+                  <td>{r.date || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -4035,7 +4290,7 @@ function LabourRoomPage({ patients = [], records = [], setRecords, showMessage }
  const beds=Array.from({length:12},(_,i)=>`LR-${String(i+1).padStart(2,"0")}`); const ward=records.filter(r=>r.ward==="Labour Room"); const occupied=ward.filter(r=>r.status==="Admitted"); const available=beds.filter(b=>!occupied.some(r=>r.bed===b));
  const admit=()=>{const p=patients.find(x=>String(x.id)===String(selectedId));if(!p)return showMessage("Zaɓi patient.");if(p.sex!=="Female")return showMessage("Labour Room na karɓar female patient kawai.");if(!bed)return showMessage("Zaɓi bed.");if(occupied.some(r=>r.bed===bed))return showMessage("Bed yana occupied.");const rec={id:Date.now(),ward:"Labour Room",patientId:p.id,patientName:p.name,card:p.card,bed,stage,condition,notes,status:"Admitted",admittedAt:new Date().toLocaleString(),dischargedAt:""};setRecords(prev=>[rec,...prev]);showMessage(`${p.name} an admitted Labour Room.`);setSelectedId("");setBed("");setNotes("");};
  const discharge=id=>{setRecords(prev=>prev.map(r=>r.id===id?{...r,status:"Discharged",dischargedAt:new Date().toLocaleString()}:r));showMessage("An yi discharge.")};
- return <div><PageHeader title="Labour Room" subtitle="Labour room patient management and monitoring" icon="▣"/><div className="stats-grid"><StatCard title="Occupied Beds" value={occupied.length} icon="▣"/><StatCard title="Available Beds" value={available.length} icon="✓"/><StatCard title="New Admissions" value={occupied.length} icon="!"/><StatCard title="Discharges" value={ward.filter(r=>r.status==="Discharged").length} icon="◉"/></div><div className="panel"><h2>Admit Patient</h2><div className="form-grid"><FormField label="Patient"><select value={selectedId} onChange={e=>setSelectedId(e.target.value)}><option value="">Select patient</option>{patients.filter(p=>p.sex==="Female").map(p=><option key={p.id} value={p.id}>{p.name} — {p.card}</option>)}</select></FormField><FormField label="Bed"><select value={bed} onChange={e=>setBed(e.target.value)}><option value="">Select bed</option>{available.map(b=><option key={b}>{b}</option>)}</select></FormField><FormField label="Labour Stage"><select value={stage} onChange={e=>setStage(e.target.value)}><option>Early Labour</option><option>Active Labour</option><option>Second Stage</option><option>Post Delivery</option></select></FormField><FormField label="Condition"><select value={condition} onChange={e=>setCondition(e.target.value)}><option>Stable</option><option>Under Observation</option><option>Critical</option></select></FormField><FormField label="Notes"><textarea value={notes} onChange={e=>setNotes(e.target.value)}/></FormField></div><button className="button primary" onClick={admit}>Admit to Labour Room</button></div><div className="panel"><h2>Current Patients</h2><div className="table-wrapper"><table><thead><tr><th>Patient</th><th>Card</th><th>Bed</th><th>Stage</th><th>Condition</th><th>Action</th></tr></thead><tbody>{occupied.map(r=><tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.stage}</td><td>{r.condition}</td><td><button className="small-button" onClick={()=>discharge(r.id)}>Discharge</button></td></tr>)}</tbody></table></div></div></div>;
+ return <div><PageHeader title="Labour Room" subtitle="Labour room patient management and monitoring" icon="▣"/><div className="stats-grid"><StatCard title="Occupied Beds" value={occupied.length} icon="▣"/><StatCard title="Available Beds" value={available.length} icon="✓"/><StatCard title="New Admissions" value={occupied.length} icon="!"/><StatCard title="Discharges" value={ward.filter(r=>r.status==="Discharged").length} icon="◉"/></div><div className="panel"><h2>Admit Patient</h2><div className="form-grid"><FormField label="Patient"><select value={selectedId} onChange={e=>setSelectedId(e.target.value)}><option value="">Select patient</option>{patients.filter(p=>p.sex==="Female").map(p=><option key={p.id} value={p.id}>{p.name} — {p.card}</option>)}</select></FormField><FormField label="Bed"><select value={bed} onChange={e=>setBed(e.target.value)}><option value="">Select bed</option>{available.map(b=><option key={b}>{b}</option>)}</select></FormField><FormField label="Labour Stage"><select value={stage} onChange={e=>setStage(e.target.value)}><option>Early Labour</option><option>Active Labour</option><option>Second Stage</option><option>Post Delivery</option></select></FormField><FormField label="Condition"><select value={condition} onChange={e=>setCondition(e.target.value)}><option>Stable</option><option>Under Observation</option><option>Critical</option></select></FormField><FormField label="Notes"><textarea value={notes} onChange={e=>setNotes(e.target.value)}/></FormField></div><button className="button primary" onClick={admit}>Admit to Labour Room</button></div><div className="panel"><h2>Current Patients</h2><div className="table-wrapper"><table><thead><tr><th>Patient</th><th>Card</th><th>Bed</th><th>Stage</th><th>Condition</th><th>Action</th></tr></thead><tbody>{occupied.map(r=><tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.stage}</td><td>{r.condition}</td><td><button className="small-button" onClick={()=>discharge(r.id)}>Discharge</button></td></tr>)}</tbody></table></div></div><WardNursingCarePanel wardName="Labour Room" /></div>;
 }
 function ProgramUnitPage({ title, patients = [], setPatients, showMessage, logAudit }) {
   const [search, setSearch] = useState("");
@@ -7702,7 +7957,7 @@ function MaleWardPage({ patients = [], records = [], setRecords, showMessage }) 
         )}
         {view === "patients" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Condition</th><th>Diagnosis</th><th>Status</th><th>Action</th></tr></thead><tbody>{filtered.filter((r) => r.status === "Admitted").map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.condition}</td><td>{r.diagnosis}</td><td><StatusBadge status={r.status} /></td><td><button className="secondary" onClick={() => discharge(r.id)}>Discharge</button></td></tr>)}{filtered.filter((r) => r.status === "Admitted").length === 0 && <tr><td colSpan="7">No admitted male patient found.</td></tr>}</tbody></table></div>}
         {view === "beds" && <div className="table-wrap"><table><thead><tr><th>Bed</th><th>Status</th><th>Patient</th><th>Card No.</th></tr></thead><tbody>{beds.map((b) => { const r = occupied.find((x) => x.bed === b); return <tr key={b}><td>{b}</td><td>{r ? "Occupied" : "Available"}</td><td>{r ? r.patientName : "—"}</td><td>{r ? r.card : "—"}</td></tr>; })}</tbody></table></div>}
-        {view === "history" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Admitted</th><th>Discharged</th></tr></thead><tbody>{wardRecords.filter((r) => r.status === "Discharged").map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.admittedAt}</td><td>{r.dischargedAt}</td></tr>)}{wardRecords.filter((r) => r.status === "Discharged").length === 0 && <tr><td colSpan="5">No discharge history found.</td></tr>}</tbody></table></div>}
+        {view === "history" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Admitted</th><th>Discharged</th></tr></thead><tbody>{wardRecords.filter((r) => r.status === "Discharged").map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.admittedAt}</td><td>{r.dischargedAt}</td></tr>)}{wardRecords.filter((r) => r.status === "Discharged").length === 0 && <tr><td colSpan="5">No discharge history found.</td></tr>}</tbody></table></div>}{view === "nursing" && <WardNursingCarePanel wardName="Male Ward" />}
       </div>
     </div>
   );
@@ -7724,7 +7979,7 @@ function WardPageGeneric({ title, prefix, sex, patients = [], records = [], setR
   const available = beds.filter((b) => !occupied.some((r) => r.bed === b));
   const admit = () => { const p = patients.find((x) => String(x.id) === String(selectedId)); if (!p) return showMessage("Zaɓi patient."); if (p.sex !== sex) return showMessage(`${title} na karɓar ${sex.toLowerCase()} patient kawai.`); if (!bed) return showMessage("Zaɓi bed."); if (occupied.some((r) => r.bed === bed)) return showMessage("Bed ɗin yana occupied."); setRecords((prev) => [{ id: Date.now(), ward: title, patientId: p.id, patientName: p.name, card: p.card, bed, condition, diagnosis: diagnosis.trim() || "Not specified", status: "Admitted", admittedAt: new Date().toLocaleString(), dischargedAt: "" }, ...prev]); showMessage(`${p.name} an admitted zuwa ${title}.`); setSelectedId(""); setBed(""); setDiagnosis(""); setView("patients"); };
   const discharge = (id) => { setRecords((prev) => prev.map((r) => r.id === id ? { ...r, status: "Discharged", dischargedAt: new Date().toLocaleString() } : r)); showMessage("An yi discharge."); };
-  return <div><PageHeader title={title} subtitle={`${sex} patient admission, bed assignment, monitoring, notes and discharge`} icon={prefix} /><div className="stats-grid"><StatCard title="Occupied Beds" value={occupied.length} icon="▣" /><StatCard title="Available Beds" value={available.length} icon="✓" /><StatCard title="New Admissions" value={wardRecords.filter((r) => r.status === "Admitted").length} icon="+" /><StatCard title="Discharges" value={wardRecords.filter((r) => r.status === "Discharged").length} icon="↗" /></div><div className="card"><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}><button className="primary" onClick={() => setView("patients")}>Ward Patients</button><button className="secondary" onClick={() => setView("beds")}>Bed Status</button><button className="secondary" onClick={() => setView("history")}>Discharge History</button><button className="primary" onClick={() => setView("admit")}>+ Admit {sex} Patient</button></div>{view === "admit" && <div style={{ display: "grid", gap: 12, maxWidth: 700 }}><h2>Admit {sex} Patient</h2><select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}><option value="">Select patient</option>{patients.filter((p) => p.sex === sex).map((p) => <option key={p.id} value={p.id}>{p.name} — {p.card}</option>)}</select><select value={bed} onChange={(e) => setBed(e.target.value)}><option value="">Select available bed</option>{available.map((b) => <option key={b}>{b}</option>)}</select><select value={condition} onChange={(e) => setCondition(e.target.value)}><option>Stable</option><option>Under Observation</option><option>Needs Attention</option><option>Critical</option></select><input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder="Diagnosis" /><button className="primary" onClick={admit}>Admit Patient</button></div>}{view === "patients" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Condition</th><th>Diagnosis</th><th>Status</th><th>Action</th></tr></thead><tbody>{occupied.map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.condition}</td><td>{r.diagnosis}</td><td><StatusBadge status={r.status} /></td><td><button className="secondary" onClick={() => discharge(r.id)}>Discharge</button></td></tr>)}{occupied.length === 0 && <tr><td colSpan="7">No admitted patient found.</td></tr>}</tbody></table></div>}{view === "beds" && <div className="table-wrap"><table><thead><tr><th>Bed</th><th>Status</th><th>Patient</th><th>Card No.</th></tr></thead><tbody>{beds.map((b) => { const r = occupied.find((x) => x.bed === b); return <tr key={b}><td>{b}</td><td>{r ? "Occupied" : "Available"}</td><td>{r ? r.patientName : "—"}</td><td>{r ? r.card : "—"}</td></tr>; })}</tbody></table></div>}{view === "history" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Admitted</th><th>Discharged</th></tr></thead><tbody>{wardRecords.filter((r) => r.status === "Discharged").map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.admittedAt}</td><td>{r.dischargedAt}</td></tr>)}</tbody></table></div>}</div></div>;
+  return <div><PageHeader title={title} subtitle={`${sex} patient admission, bed assignment, monitoring, notes and discharge`} icon={prefix} /><div className="stats-grid"><StatCard title="Occupied Beds" value={occupied.length} icon="▣" /><StatCard title="Available Beds" value={available.length} icon="✓" /><StatCard title="New Admissions" value={wardRecords.filter((r) => r.status === "Admitted").length} icon="+" /><StatCard title="Discharges" value={wardRecords.filter((r) => r.status === "Discharged").length} icon="↗" /></div><div className="card"><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}><button className="primary" onClick={() => setView("patients")}>Ward Patients</button><button className="secondary" onClick={() => setView("beds")}>Bed Status</button><button className="secondary" onClick={() => setView("history")}>Discharge History</button><button className="secondary" onClick={() => setView("nursing")}>Nursing Care / Reports</button><button className="primary" onClick={() => setView("admit")}>+ Admit {sex} Patient</button></div>{view === "admit" && <div style={{ display: "grid", gap: 12, maxWidth: 700 }}><h2>Admit {sex} Patient</h2><select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}><option value="">Select patient</option>{patients.filter((p) => p.sex === sex).map((p) => <option key={p.id} value={p.id}>{p.name} — {p.card}</option>)}</select><select value={bed} onChange={(e) => setBed(e.target.value)}><option value="">Select available bed</option>{available.map((b) => <option key={b}>{b}</option>)}</select><select value={condition} onChange={(e) => setCondition(e.target.value)}><option>Stable</option><option>Under Observation</option><option>Needs Attention</option><option>Critical</option></select><input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder="Diagnosis" /><button className="primary" onClick={admit}>Admit Patient</button></div>}{view === "patients" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Condition</th><th>Diagnosis</th><th>Status</th><th>Action</th></tr></thead><tbody>{occupied.map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.condition}</td><td>{r.diagnosis}</td><td><StatusBadge status={r.status} /></td><td><button className="secondary" onClick={() => discharge(r.id)}>Discharge</button></td></tr>)}{occupied.length === 0 && <tr><td colSpan="7">No admitted patient found.</td></tr>}</tbody></table></div>}{view === "beds" && <div className="table-wrap"><table><thead><tr><th>Bed</th><th>Status</th><th>Patient</th><th>Card No.</th></tr></thead><tbody>{beds.map((b) => { const r = occupied.find((x) => x.bed === b); return <tr key={b}><td>{b}</td><td>{r ? "Occupied" : "Available"}</td><td>{r ? r.patientName : "—"}</td><td>{r ? r.card : "—"}</td></tr>; })}</tbody></table></div>}{view === "history" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Admitted</th><th>Discharged</th></tr></thead><tbody>{wardRecords.filter((r) => r.status === "Discharged").map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.admittedAt}</td><td>{r.dischargedAt}</td></tr>)}</tbody></table></div>}{view === "nursing" && <WardNursingCarePanel wardName={title} />}</div></div>;
 }
 
 
