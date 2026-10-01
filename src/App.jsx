@@ -1,4 +1,61 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { supabase } from "./lib/supabaseClient";
+
+
+
+const UserContext = createContext(null);
+
+const PAGE_ACCESS = {
+  "Dashboard": ["ALL"],
+  "ICT Centre": ["Super Admin", "ICT Staff"],
+  "Records Unit": ["Super Admin", "Records Staff", "Records Cashier"],
+  "Nursing Unit": ["Super Admin", "Nurse"],
+  "Consultant Room": ["Super Admin", "Consultant"],
+  "Laboratory Unit": ["Super Admin", "Laboratory Staff", "Laboratory Cashier"],
+  "Pharmacy Unit": ["Super Admin", "Pharmacy Staff", "Pharmacy Cashier"],
+  "Ultrasound Room": ["Super Admin", "Ultrasound Staff", "Ultrasound Cashier"],
+  "Male Ward": ["Super Admin", "Ward Staff"],
+  "Female Ward": ["Super Admin", "Ward Staff"],
+  "Maternity Ward": ["Super Admin", "Ward Staff"],
+  "Child Ward": ["Super Admin", "Ward Staff"],
+  "Labour Room": ["Super Admin", "Ward Staff"],
+  "Immunization Unit": ["Super Admin", "Immunization Staff"],
+  "Family Planning Unit": ["Super Admin", "Family Planning Staff"],
+  "Adolescent Unit": ["Super Admin", "Adolescent Staff"],
+  "Outpatient Services": ["Super Admin", "General Cashier", "Records Staff", "Laboratory Staff", "Pharmacy Staff", "Ultrasound Staff"],
+  "Reception / Next Patient": ["Super Admin", "Consultant", "Nurse"],
+  "In-Charge": ["Super Admin", "In-Charge"],
+  "Staff & Permissions": ["Super Admin"],
+  "General Cashier": ["Super Admin", "General Cashier"],
+  "Roster & Attendance": ["Super Admin", "In-Charge"],
+  "Reports": ["Super Admin", "In-Charge", "General Cashier", "Records Staff", "Records Cashier", "Laboratory Staff", "Laboratory Cashier", "Pharmacy Staff", "Pharmacy Cashier", "Ultrasound Staff", "Ultrasound Cashier", "Nurse", "Consultant", "Ward Staff", "Immunization Staff", "Family Planning Staff", "Adolescent Staff"],
+  "Alerts": ["Super Admin", "In-Charge", "Consultant", "Nurse", "Laboratory Staff", "Pharmacy Staff", "Ultrasound Staff"],
+  "SMS / Notifications": ["Super Admin", "ICT Staff", "Records Staff", "Nurse", "Consultant", "Laboratory Staff", "Pharmacy Staff", "Ultrasound Staff", "Immunization Staff", "Family Planning Staff", "Adolescent Staff"],
+  "Audit Logs": ["Super Admin", "In-Charge"],
+  "Settings": ["Super Admin"],
+  "ICT Stock / Inventory": ["Super Admin", "ICT Staff", "In-Charge"],
+  "Appointments": ["Super Admin", "ICT Staff", "Records Staff", "Consultant", "Nurse"],
+  "Patient Card Printing": ["Super Admin", "ICT Staff", "Records Staff", "Records Cashier"],
+  "Backup & Restore": ["Super Admin"],
+};
+
+function canAccessPage(user, page) {
+  if (!user) return false;
+  if (user.role === "Super Admin") return true;
+  if (user.role === "In-Charge") return page === "Dashboard" || page === "In-Charge" || page === "Roster & Attendance" || page === "Reports" || page === "Alerts" || page === "Audit Logs" || page === "ICT Stock / Inventory";
+  const allowed = PAGE_ACCESS[page];
+  return !!allowed && (allowed.includes("ALL") || allowed.includes(user.role));
+}
+
+function canMutate(user) { return !!user && user.role === "Super Admin"; }
+
+function canPerform(user, action, department) {
+  if (!user) return false;
+  if (user.role === "Super Admin") return true;
+  if (user.role === "In-Charge") return action === "View" || action === "Reports";
+  if (user.department === department) return ["View", "Create", "Edit", "Print", "Cashier", "Reports", "SMS", "Alerts"].includes(action);
+  return false;
+}
 
 const departments = [
   "ICT Centre",
@@ -53,58 +110,6 @@ const roles = [
   "Pharmacy Cashier",
   "Ultrasound Cashier",
 ];
-
-const ROLE_PAGE_RULES = {
-  "Super Admin": "ALL",
-  "In-Charge": ["Dashboard", "In-Charge", "Reports", "Audit Logs", "Roster & Attendance"],
-  "General Cashier": ["Dashboard", "General Cashier", "Reports"],
-  "ICT Staff": ["Dashboard", "ICT Centre", "ICT Stock / Inventory", "Patient Card Printing", "Appointments"],
-  "Records Staff": ["Dashboard", "Records Unit", "Patient Card Printing", "Alerts"],
-  "Records Cashier": ["Dashboard", "Records Unit"],
-  "Nurse": ["Dashboard", "Nursing Unit", "Alerts", "Reception / Next Patient"],
-  "Consultant": ["Dashboard", "Consultant Room", "Reception / Next Patient", "Alerts"],
-  "Laboratory Staff": ["Dashboard", "Laboratory Unit", "Alerts"],
-  "Laboratory Cashier": ["Dashboard", "Laboratory Unit"],
-  "Pharmacy Staff": ["Dashboard", "Pharmacy Unit", "Alerts"],
-  "Pharmacy Cashier": ["Dashboard", "Pharmacy Unit"],
-  "Ultrasound Staff": ["Dashboard", "Ultrasound Room", "Alerts"],
-  "Ultrasound Cashier": ["Dashboard", "Ultrasound Room"],
-  "Ward Staff": ["Dashboard", "Male Ward", "Female Ward", "Maternity Ward", "Child Ward", "Labour Room", "Alerts"],
-  "Immunization Staff": ["Dashboard", "Immunization Unit", "Alerts"],
-  "Family Planning Staff": ["Dashboard", "Family Planning Unit", "Alerts"],
-  "Adolescent Staff": ["Dashboard", "Adolescent Unit", "Alerts"],
-};
-
-const ROLE_ACTIONS = {
-  "Super Admin": ["View", "Create", "Edit", "Delete", "Print", "Cashier", "Reports", "Stock", "SMS", "Alerts"],
-  "In-Charge": ["View", "Reports", "Alerts"],
-};
-
-function getUserDepartments(user) {
-  if (!user) return [];
-  const list = Array.isArray(user.departments) && user.departments.length ? user.departments : [user.department];
-  return [...new Set(list.filter(Boolean))];
-}
-
-function userCanAccessPage(user, targetPage) {
-  if (!user) return false;
-  if (user.role === "Super Admin") return true;
-  const explicit = ROLE_PAGE_RULES[user.role];
-  if (Array.isArray(explicit) && explicit.includes(targetPage)) return true;
-  const depts = getUserDepartments(user);
-  if (depts.includes(targetPage)) return true;
-  if (targetPage === "Reports" && (user.permissions || []).includes("Reports")) return true;
-  if (targetPage === "Alerts" && (user.permissions || []).includes("Alerts")) return true;
-  return false;
-}
-
-function userCanAction(user, action) {
-  if (!user) return false;
-  if (user.role === "Super Admin") return true;
-  if (user.role === "In-Charge") return ["View", "Reports", "Alerts"].includes(action);
-  if (Array.isArray(user.permissions) && user.permissions.length) return user.permissions.includes(action);
-  return ["View"].includes(action);
-}
 
 const initialStaff = [
   {
@@ -213,6 +218,14 @@ const demoPatients = [
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
+  const [supabaseReady, setSupabaseReady] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    supabase.auth.getSession().then(({ error }) => {
+      if (mounted) setSupabaseReady(!error);
+    }).catch(() => { if (mounted) setSupabaseReady(false); });
+    return () => { mounted = false; };
+  }, []);
   const [page, setPage] = useState("Dashboard"); 
   const [recordsView, setRecordsView] = useState("dashboard");
   const [staff, setStaff] = usePersistentState("bazza_staff", initialStaff);
@@ -328,16 +341,6 @@ function App() {
 
   const [notification, setNotification] = useState("");
 
-  const canAccessPage = (targetPage) => userCanAccessPage(currentUser, targetPage);
-  const canAction = (action) => userCanAction(currentUser, action);
-  const goToPage = (targetPage) => {
-    if (!canAccessPage(targetPage)) {
-      showMessage("Ba ka da izinin shiga wannan department/module.");
-      return;
-    }
-    setPage(targetPage);
-  };
-
   const filteredStaff = useMemo(() => {
     const q = search.toLowerCase().trim();
 
@@ -407,23 +410,18 @@ function App() {
   };
 
   useEffect(() => {
-    if (!currentUser) return;
-    if (!userCanAccessPage(currentUser, page)) {
-      setPage("Dashboard");
-      return;
-    }
-    logAudit("Open Module", page, "Module viewed", currentUser);
-  }, [page, currentUser]);
+    if (currentUser && page) logAudit("Open Module", page, "Module viewed", currentUser);
+  }, [page]);
 
   const openAddStaff = () => {
-    if (currentUser?.role !== "Super Admin") return showMessage("Only Super Admin zai iya kara ma'aikaci.");
+    if (!canMutate(currentUser)) return showMessage("Super Admin kawai zai iya ƙara ma'aikaci.");
     setEditingStaff(null);
     setStaffForm(emptyStaffForm);
     setShowStaffModal(true);
   };
 
   const openEditStaff = (person) => {
-    if (currentUser?.role !== "Super Admin") return showMessage("Only Super Admin zai iya gyara ma'aikaci.");
+    if (!canMutate(currentUser)) return showMessage("Super Admin kawai zai iya gyara ma'aikaci.");
     setEditingStaff(person);
 
     setStaffForm({
@@ -443,8 +441,8 @@ function App() {
   };
 
   const saveStaff = (e) => {
-    if (currentUser?.role !== "Super Admin") return showMessage("Only Super Admin zai iya canza staff.");
     e.preventDefault();
+    if (!canMutate(currentUser)) return showMessage("Super Admin kawai zai iya canza staff.");
 
     if (
       !staffForm.name.trim() ||
@@ -485,7 +483,7 @@ function App() {
   };
 
   const deleteStaff = (id) => {
-    if (currentUser?.role !== "Super Admin") return showMessage("Only Super Admin zai iya goge staff.");
+    if (!canMutate(currentUser)) return showMessage("Super Admin kawai zai iya goge ma'aikaci.");
     const person = staff.find((item) => item.id === id);
 
     if (!person) return;
@@ -500,11 +498,19 @@ function App() {
   };
 
   const togglePermission = (permission) => {
+    if (!canMutate(currentUser)) return showMessage("Super Admin kawai zai iya canza permissions.");
     setEnabledPermissions((prev) => ({
       ...prev,
       [permission]: !prev[permission],
     }));
   };
+
+  useEffect(() => {
+    if (currentUser && !canAccessPage(currentUser, page)) {
+      setPage("Dashboard");
+      showMessage("Ba ka da izinin shiga wannan department.");
+    }
+  }, [currentUser, page]);
 
   if (!currentUser) {
     return (
@@ -518,6 +524,7 @@ function App() {
   }
 
   return (
+    <UserContext.Provider value={currentUser}>
     <div className="app">
       <style>{styles}</style>
 
@@ -536,232 +543,205 @@ function App() {
         </div>
 
         <nav className="menu">
-          <SecureMenuItem
+          <MenuItem
             label="Dashboard"
             icon="⌂"
-            currentUser={currentUser}
             active={page === "Dashboard"}
-            onClick={() => goToPage("Dashboard")}
+            onClick={() => setPage("Dashboard")}
           />
 
           <div className="menu-section">PATIENT SERVICES</div>
 
-          <SecureMenuItem
+          <MenuItem
             label="ICT Centre"
             icon="▣"
-            currentUser={currentUser}
             active={page === "ICT Centre"}
-            onClick={() => goToPage("ICT Centre")}
+            onClick={() => setPage("ICT Centre")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Records Unit"
             icon="▤"
-            currentUser={currentUser}
             active={page === "Records Unit"}
-            onClick={() => goToPage("Records Unit")}
+            onClick={() => setPage("Records Unit")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Nursing Unit"
             icon="♙"
-            currentUser={currentUser}
             active={page === "Nursing Unit"}
-            onClick={() => goToPage("Nursing Unit")}
+            onClick={() => setPage("Nursing Unit")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Consultant Room"
             icon="✚"
-            currentUser={currentUser}
             active={page === "Consultant Room"}
-            onClick={() => goToPage("Consultant Room")}
+            onClick={() => setPage("Consultant Room")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Laboratory"
             icon="⚗"
-            currentUser={currentUser}
             active={page === "Laboratory Unit"}
-            onClick={() => goToPage("Laboratory Unit")}
+            onClick={() => setPage("Laboratory Unit")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Pharmacy"
             icon="⚕"
-            currentUser={currentUser}
             active={page === "Pharmacy Unit"}
-            onClick={() => goToPage("Pharmacy Unit")}
+            onClick={() => setPage("Pharmacy Unit")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Ultrasound"
             icon="◉"
-            currentUser={currentUser}
             active={page === "Ultrasound Room"}
-            onClick={() => goToPage("Ultrasound Room")}
+            onClick={() => setPage("Ultrasound Room")}
           />
 
           <div className="menu-section">WARDS & PROGRAMS</div>
 
-          <SecureMenuItem
+          <MenuItem
             label="Male Ward"
             icon="M"
-            currentUser={currentUser}
             active={page === "Male Ward"}
-            onClick={() => goToPage("Male Ward")}
+            onClick={() => setPage("Male Ward")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Female Ward"
             icon="F"
-            currentUser={currentUser}
             active={page === "Female Ward"}
-            onClick={() => goToPage("Female Ward")}
+            onClick={() => setPage("Female Ward")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Maternity Ward"
             icon="♥"
-            currentUser={currentUser}
             active={page === "Maternity Ward"}
-            onClick={() => goToPage("Maternity Ward")}
+            onClick={() => setPage("Maternity Ward")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Child Ward"
             icon="C"
-            currentUser={currentUser}
             active={page === "Child Ward"}
-            onClick={() => goToPage("Child Ward")}
+            onClick={() => setPage("Child Ward")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Labour Room"
             icon="L"
-            currentUser={currentUser}
             active={page === "Labour Room"}
-            onClick={() => goToPage("Labour Room")}
+            onClick={() => setPage("Labour Room")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Immunization"
             icon="I"
-            currentUser={currentUser}
             active={page === "Immunization Unit"}
-            onClick={() => goToPage("Immunization Unit")}
+            onClick={() => setPage("Immunization Unit")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Family Planning"
             icon="P"
-            currentUser={currentUser}
             active={page === "Family Planning Unit"}
-            onClick={() => goToPage("Family Planning Unit")}
+            onClick={() => setPage("Family Planning Unit")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Adolescent Unit"
             icon="A"
-            currentUser={currentUser}
             active={page === "Adolescent Unit"}
-            onClick={() => goToPage("Adolescent Unit")}
+            onClick={() => setPage("Adolescent Unit")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Outpatient Services"
             icon="O"
-            currentUser={currentUser}
             active={page === "Outpatient Services"}
-            onClick={() => goToPage("Outpatient Services")}
+            onClick={() => setPage("Outpatient Services")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Reception / Next Patient"
             icon="R"
-            currentUser={currentUser}
             active={page === "Reception / Next Patient"}
-            onClick={() => goToPage("Reception / Next Patient")}
+            onClick={() => setPage("Reception / Next Patient")}
           />
 
           <div className="menu-section">ADMINISTRATION</div>
 
-          <SecureMenuItem
+          <MenuItem
             label="In-Charge"
             icon="◈"
-            currentUser={currentUser}
             active={page === "In-Charge"}
-            onClick={() => goToPage("In-Charge")}
+            onClick={() => setPage("In-Charge")}
           />
 
-          {currentUser.role === "Super Admin" && <SecureMenuItem
+          <MenuItem
             label="Staff & Permissions"
             icon="♟"
-            currentUser={currentUser}
             active={page === "Staff & Permissions"}
-            onClick={() => goToPage("Staff & Permissions")}
-          />}
+            onClick={() => setPage("Staff & Permissions")}
+          />
 
-          <SecureMenuItem
+          <MenuItem
             label="General Cashier"
             icon="₦"
-            currentUser={currentUser}
             active={page === "General Cashier"}
-            onClick={() => goToPage("General Cashier")}
+            onClick={() => setPage("General Cashier")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Roster & Attendance"
             icon="▦"
-            currentUser={currentUser}
             active={page === "Roster & Attendance"}
-            onClick={() => goToPage("Roster & Attendance")}
+            onClick={() => setPage("Roster & Attendance")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Reports"
             icon="▥"
-            currentUser={currentUser}
             active={page === "Reports"}
-            onClick={() => goToPage("Reports")}
+            onClick={() => setPage("Reports")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Alerts"
             icon="!"
-            currentUser={currentUser}
             active={page === "Alerts"}
-            onClick={() => goToPage("Alerts")}
+            onClick={() => setPage("Alerts")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="SMS / Notifications"
             icon="✉"
-            currentUser={currentUser}
             active={page === "SMS / Notifications"}
-            onClick={() => goToPage("SMS / Notifications")}
+            onClick={() => setPage("SMS / Notifications")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Audit Logs"
             icon="◌"
-            currentUser={currentUser}
             active={page === "Audit Logs"}
-            onClick={() => goToPage("Audit Logs")}
+            onClick={() => setPage("Audit Logs")}
           />
 
-          {currentUser.role === "Super Admin" && <SecureMenuItem
+          <MenuItem
             label="Settings"
             icon="⚙"
-            currentUser={currentUser}
             active={page === "Settings"}
-            onClick={() => goToPage("Settings")}
-          />}
+            onClick={() => setPage("Settings")}
+          />
 
-          <SecureMenuItem label="ICT Stock / Inventory" icon="📦" currentUser={currentUser} active={page === "ICT Stock / Inventory"} onClick={() => goToPage("ICT Stock / Inventory")} />
-          <SecureMenuItem label="Appointments" icon="📅" currentUser={currentUser} active={page === "Appointments"} onClick={() => goToPage("Appointments")} />
-          <SecureMenuItem label="Patient Card Printing" icon="▤" currentUser={currentUser} active={page === "Patient Card Printing"} onClick={() => goToPage("Patient Card Printing")} />
-          {currentUser.role === "Super Admin" && <SecureMenuItem label="Backup & Restore" icon="↕" currentUser={currentUser} active={page === "Backup & Restore"} onClick={() => goToPage("Backup & Restore")} />}
+          <MenuItem label="ICT Stock / Inventory" icon="📦" active={page === "ICT Stock / Inventory"} onClick={() => setPage("ICT Stock / Inventory")} />
+          <MenuItem label="Appointments" icon="📅" active={page === "Appointments"} onClick={() => setPage("Appointments")} />
+          <MenuItem label="Patient Card Printing" icon="▤" active={page === "Patient Card Printing"} onClick={() => setPage("Patient Card Printing")} />
+          <MenuItem label="Backup & Restore" icon="↕" active={page === "Backup & Restore"} onClick={() => setPage("Backup & Restore")} />
         </nav>
 
         <div className="sidebar-footer">
@@ -776,11 +756,12 @@ function App() {
             <div className="top-title">{page}</div>
             <div className="top-location">
               Waziri Maccido Road, Bazza Area, Sokoto
+              <span style={{marginLeft:10,fontSize:11,color:supabaseReady?"#18a56b":"#d97706"}}>● Supabase {supabaseReady ? "Connected" : "Not Connected"}</span>
             </div>
           </div>
 
           <div className="top-actions">
-            <button className="icon-button" onClick={() => goToPage("Alerts")}>
+            <button className="icon-button" onClick={() => setPage("Alerts")}>
               🔔
             </button>
 
@@ -811,8 +792,7 @@ function App() {
               staff={staff}
               attendance={attendance}
               setAttendance={setAttendance}
-              setPage={goToPage}
-              canAccessPage={canAccessPage}
+              setPage={setPage}
             />
           )}
 
@@ -1207,6 +1187,8 @@ function App() {
       )}
     </div>
   );
+    </UserContext.Provider>
+  )
 }
 
 function LoginScreen({
@@ -1282,33 +1264,20 @@ function LoginScreen({
 }
 
 function MenuItem({ label, icon, active, onClick }) {
+  const user = useContext(UserContext);
+  if (user && !canAccessPage(user, label)) return null;
   return (
-    <button className={`menu-item ${active ? "active" : ""}`} onClick={onClick}>
+    <button
+      className={`menu-item ${active ? "active" : ""}`}
+      onClick={onClick}
+    >
       <span className="menu-icon">{icon}</span>
       <span>{label}</span>
     </button>
   );
 }
 
-function SecureMenuItem({ label, icon, active, onClick, currentUser }) {
-  const labelMap = {
-    Laboratory: "Laboratory Unit",
-    Pharmacy: "Pharmacy Unit",
-    Ultrasound: "Ultrasound Room",
-    Immunization: "Immunization Unit",
-    "Family Planning": "Family Planning Unit",
-    "Adolescent Unit": "Adolescent Unit",
-    "Patient Card Printing": "Patient Card Printing",
-    "ICT Stock / Inventory": "ICT Stock / Inventory",
-    Appointments: "Appointments",
-    "Backup & Restore": "Backup & Restore",
-  };
-  const target = labelMap[label] || label;
-  if (!userCanAccessPage(currentUser, target)) return null;
-  return <MenuItem label={label} icon={icon} active={active} onClick={onClick} />;
-}
-
-function DashboardPage({ currentUser, patients, staff, attendance = [], setAttendance, setPage, canAccessPage }) {
+function DashboardPage({ currentUser, patients, staff, attendance = [], setAttendance, setPage }) {
   return (
     <div>
       <div className="welcome">
@@ -1401,35 +1370,32 @@ function DashboardPage({ currentUser, patients, staff, attendance = [], setAtten
         <div className="panel">
           <div className="panel-header">
             <div>
-              <h2>{currentUser?.role === "Super Admin" || currentUser?.role === "In-Charge" ? "Department Overview" : "My Department"}</h2>
-              <p>{currentUser?.role === "Super Admin" || currentUser?.role === "In-Charge" ? "System-wide monitoring" : "Only your assigned department workspace is shown here"}</p>
+              <h2>Department Overview</h2>
+              <p>Current activity by department</p>
             </div>
           </div>
 
-          {(currentUser?.role === "Super Admin" || currentUser?.role === "In-Charge") ? (
-            <div className="department-list">
-              {[
-                ["Records Unit", "12 patients waiting"],
-                ["Nursing Unit", "8 patients waiting"],
-                ["Consultant Room", "5 consultations"],
-                ["Laboratory Unit", "7 new requests"],
-                ["Pharmacy Unit", "9 prescriptions"],
-                ["Ultrasound Room", "4 new requests"],
-              ].map(([name, info]) => (
-                <div className="department-row" key={name}>
-                  <div className="dept-icon">+</div>
-                  <div><strong>{name}</strong><span>{info}</span></div>
-                  <span className="status-dot"></span>
+          <div className="department-list">
+            {[
+              ["Records Unit", "12 patients waiting"],
+              ["Nursing Unit", "8 patients waiting"],
+              ["Consultant Room", "5 consultations"],
+              ["Laboratory Unit", "7 new requests"],
+              ["Pharmacy Unit", "9 prescriptions"],
+              ["Ultrasound Room", "4 new requests"],
+            ].map(([name, info]) => (
+              <div className="department-row" key={name}>
+                <div className="dept-icon">+</div>
+
+                <div>
+                  <strong>{name}</strong>
+                  <span>{info}</span>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="card" style={{margin:0}}>
-              <h3>{currentUser?.department || "Assigned Department"}</h3>
-              <p className="muted">You can only access work assigned to your department and approved workflows.</p>
-              <p><strong>Role:</strong> {currentUser?.role}</p>
-            </div>
-          )}
+
+                <span className="status-dot"></span>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="panel">
@@ -1441,23 +1407,46 @@ function DashboardPage({ currentUser, patients, staff, attendance = [], setAtten
           </div>
 
           <div className="quick-actions">
-            {canAccessPage?.("ICT Centre") && <button onClick={() => setPage("ICT Centre")}><span>▣</span>Register Patient</button>}
-            {canAccessPage?.("Records Unit") && <button onClick={() => setPage("Records Unit")}><span>▤</span>Patient Records</button>}
-            {canAccessPage?.("General Cashier") && <button onClick={() => setPage("General Cashier")}><span>₦</span>Cashier</button>}
-            {canAccessPage?.("Roster & Attendance") && <button onClick={() => setPage("Roster & Attendance")}><span>▦</span>Attendance</button>}
+            <button onClick={() => setPage("ICT Centre")}>
+              <span>▣</span>
+              Register Patient
+            </button>
+
+            <button onClick={() => setPage("Records Unit")}>
+              <span>▤</span>
+              Patient Records
+            </button>
+
+            <button onClick={() => setPage("General Cashier")}>
+              <span>₦</span>
+              Cashier
+            </button>
+
+            <button onClick={() => setPage("Roster & Attendance")}>
+              <span>▦</span>
+              Attendance
+            </button>
           </div>
         </div>
       </div>
 
-      {(currentUser?.role === "Super Admin" || currentUser?.role === "In-Charge") && (
-        <div className="panel recent-panel">
-          <div className="panel-header">
-            <div><h2>Recent Patients</h2><p>Latest patient registrations</p></div>
-            <button className="text-button" onClick={() => setPage("ICT Centre")}>View All</button>
+      <div className="panel recent-panel">
+        <div className="panel-header">
+          <div>
+            <h2>Recent Patients</h2>
+            <p>Latest patient registrations</p>
           </div>
-          <PatientTable patients={patients} />
+
+          <button
+            className="text-button"
+            onClick={() => setPage("ICT Centre")}
+          >
+            View All
+          </button>
         </div>
-      )}
+
+        <PatientTable patients={patients} />
+      </div>
     </div>
   );
 }
@@ -1468,10 +1457,6 @@ function ICTPage({ patients, setPatients, showMessage }) {
     otherNames: "",
     phone: "",
     sex: "Female",
-    age: "",
-    address: "",
-    broughtByName: "",
-    broughtByRelationship: "",
     spouse: "",
   });
 
@@ -1489,10 +1474,6 @@ function ICTPage({ patients, setPatients, showMessage }) {
       name: `${form.surname} ${form.otherNames}`,
       phone: form.phone || "N/A",
       sex: form.sex,
-      age: form.age === "" ? "" : Number(form.age),
-      address: form.address.trim(),
-      broughtByName: form.broughtByName.trim(),
-      broughtByRelationship: form.broughtByRelationship,
       status: "Active",
     };
 
@@ -1503,10 +1484,6 @@ function ICTPage({ patients, setPatients, showMessage }) {
       otherNames: "",
       phone: "",
       sex: "Female",
-      age: "",
-      address: "",
-      broughtByName: "",
-      broughtByRelationship: "",
       spouse: "",
     });
 
@@ -1575,75 +1552,6 @@ function ICTPage({ patients, setPatients, showMessage }) {
                 }
                 placeholder="Phone number"
               />
-            </FormField>
-
-            <FormField label="Age">
-              <input
-                type="number"
-                min="0"
-                max="130"
-                value={form.age}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    age: e.target.value,
-                  })
-                }
-                placeholder="Age"
-              />
-            </FormField>
-
-            <FormField label="Address">
-              <input
-                value={form.address}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    address: e.target.value,
-                  })
-                }
-                placeholder="Residential address"
-              />
-            </FormField>
-
-            <FormField label="Name of Person Who Brought Patient">
-              <input
-                value={form.broughtByName}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    broughtByName: e.target.value,
-                  })
-                }
-                placeholder="Full name"
-              />
-            </FormField>
-
-            <FormField label="Relationship to Patient">
-              <select
-                value={form.broughtByRelationship}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    broughtByRelationship: e.target.value,
-                  })
-                }
-              >
-                <option value="">Select relationship</option>
-                <option>Father</option>
-                <option>Mother</option>
-                <option>Brother</option>
-                <option>Sister</option>
-                <option>Husband</option>
-                <option>Wife</option>
-                <option>Son</option>
-                <option>Daughter</option>
-                <option>Uncle</option>
-                <option>Aunt</option>
-                <option>Guardian</option>
-                <option>Friend</option>
-                <option>Other</option>
-              </select>
             </FormField>
 
             <FormField label="Sex / Gender">
@@ -1917,28 +1825,8 @@ function RecordsPage({ patients, showMessage, setTransactions, transactions = []
             </div>
 
             <div className="access-box">
-              <strong>Age</strong>
-              <span>{selectedPatient.age !== "" && selectedPatient.age != null ? `${selectedPatient.age} years` : "Not provided"}</span>
-            </div>
-
-            <div className="access-box">
-              <strong>Address</strong>
-              <span>{selectedPatient.address || "Not provided"}</span>
-            </div>
-
-            <div className="access-box">
               <strong>Sex</strong>
               <span>{selectedPatient.sex}</span>
-            </div>
-
-            <div className="access-box">
-              <strong>Person Who Brought Patient</strong>
-              <span>{selectedPatient.broughtByName || "Not provided"}</span>
-            </div>
-
-            <div className="access-box">
-              <strong>Relationship to Patient</strong>
-              <span>{selectedPatient.broughtByRelationship || "Not provided"}</span>
             </div>
           </div>
 
@@ -3222,7 +3110,6 @@ function ChildWardPage({ patients = [], records = [], setRecords, showMessage })
           <button className={view === "patients" ? "primary" : "secondary"} onClick={() => setView("patients")}>Ward Patients</button>
           <button className={view === "beds" ? "primary" : "secondary"} onClick={() => setView("beds")}>Bed Status</button>
           <button className={view === "history" ? "primary" : "secondary"} onClick={() => setView("history")}>Discharge History</button>
-          <button className="secondary" onClick={() => setView("nursing")}>Nursing Care / Reports</button>
           <button className="primary" onClick={() => setView("admit")}>+ Admit Child Patient</button>
         </div>
 
@@ -3351,8 +3238,6 @@ function ChildWardPage({ patients = [], records = [], setRecords, showMessage })
             </table>
           </div>
         )}
-
-        {view === "nursing" && <WardNursingCarePanel wardName="Child Ward" />}
       </div>
     </div>
   );
@@ -3465,7 +3350,6 @@ function MaternityWardPage({ patients = [], records = [], setRecords, showMessag
           <button className={view === "patients" ? "primary" : "secondary"} onClick={() => setView("patients")}>Ward Patients</button>
           <button className={view === "beds" ? "primary" : "secondary"} onClick={() => setView("beds")}>Bed Status</button>
           <button className={view === "history" ? "primary" : "secondary"} onClick={() => setView("history")}>Discharge History</button>
-          <button className="secondary" onClick={() => setView("nursing")}>Nursing Care / Reports</button>
           <button className="primary" onClick={() => setView("admit")}>+ Admit Maternity Patient</button>
         </div>
 
@@ -3627,8 +3511,6 @@ function MaternityWardPage({ patients = [], records = [], setRecords, showMessag
             </table>
           </div>
         )}
-
-        {view === "nursing" && <WardNursingCarePanel wardName="Maternity Ward" />}
       </div>
     </div>
   );
@@ -3636,26 +3518,22 @@ function MaternityWardPage({ patients = [], records = [], setRecords, showMessag
 
 
 
-function SearchableMultiSelectButtons({ label, options = [], value = [], onChange, placeholder = "Search..." }) {
+function SearchableMultiSelectButtons({ label, options, selected, setSelected, placeholder = "Search options..." }) {
   const [query, setQuery] = useState("");
-  const filtered = options.filter((option) => String(option).toLowerCase().includes(query.trim().toLowerCase()));
-  const toggle = (option) => {
-    const next = value.includes(option) ? value.filter((item) => item !== option) : [...value, option];
-    onChange?.(next);
-  };
+  const filtered = options.filter((option) => option.toLowerCase().includes(query.toLowerCase().trim()));
+  const toggle = (option) => setSelected((prev) => prev.includes(option) ? prev.filter((x) => x !== option) : [...prev, option]);
   return (
     <div className="form-field">
       <span>{label}</span>
-      <input className="search-input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={placeholder} style={{marginTop:8}} />
+      <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={placeholder} />
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
         {filtered.map((option) => (
-          <button key={option} type="button" className={value.includes(option) ? "button primary" : "button secondary"} onClick={() => toggle(option)}>
-            {value.includes(option) ? "✓ " : "＋ "}{option}
+          <button key={option} type="button" className={selected.includes(option) ? "button primary" : "button secondary"} onClick={() => toggle(option)}>
+            {selected.includes(option) ? "✓ " : ""}{option}
           </button>
         ))}
-        {!filtered.length && <span className="muted">No matching option.</span>}
       </div>
-      {value.length > 0 && <div style={{marginTop:10}}><strong>Selected:</strong> {value.join(", ")}</div>}
+      {!!selected.length && <div className="selected-patient" style={{marginTop:10}}><strong>Selected:</strong> {selected.join(", ")}</div>}
     </div>
   );
 }
@@ -3665,45 +3543,19 @@ function NursingUnitPage({ patients = [], setPatients, showMessage }) {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
   const [tasks, setTasks] = useState([]);
-  const [measurements, setMeasurements] = useState([]);
-  const [measurementValues, setMeasurementValues] = useState({});
   const [result, setResult] = useState("");
-  const [condition, setCondition] = useState("");
   const [ward, setWard] = useState("");
   const [bed, setBed] = useState("");
   const [notes, setNotes] = useState("");
   const [savedRecords, setSavedRecords] = usePersistentState("bazza_nursing_records", []);
 
   const routineTasks = [
-    "Patient Assessment",
-    "Vital Signs Assessment",
-    "Medication Given",
-    "Injection Given",
-    "IV Fluid Started",
-    "Wound Care",
-    "Dressing Changed",
-    "Admission Assessment",
-    "Patient Education",
-    "Discharge Preparation",
-    "Other",
+    "Vital Signs Checked", "Blood Pressure Checked", "Pulse Checked", "Temperature Checked",
+    "Respiratory Rate Checked", "Patient Assessed", "Medication Administered", "Wound Care",
+    "IV Fluid Started", "Injection Given", "Dressing Changed", "Patient Education",
+    "Admission Assessment", "Discharge Preparation", "Other"
   ];
-
-  const measurementOptions = [
-    "Blood Pressure (BP)",
-    "Pulse Rate",
-    "Temperature",
-    "Respiratory Rate",
-    "Weight",
-    "Height",
-    "Oxygen Saturation (SpO₂)",
-    "Blood Glucose",
-    "Pain Score",
-    "MUAC",
-    "Other Measurement",
-  ];
-
   const resultOptions = ["Stable", "Improving", "Needs Consultant Review", "Urgent Review", "Completed"];
-  const conditionOptions = ["Good", "Fair", "Serious", "Critical", "Needs Further Assessment"];
   const wards = ["Male Ward", "Female Ward", "Maternity Ward", "Child Ward", "Labour Room", "Other"];
   const beds = ward === "Male Ward" ? Array.from({length:12},(_,i)=>`M-${String(i+1).padStart(2,"0")}`)
     : ward === "Female Ward" ? Array.from({length:12},(_,i)=>`F-${String(i+1).padStart(2,"0")}`)
@@ -3714,259 +3566,59 @@ function NursingUnitPage({ patients = [], setPatients, showMessage }) {
   const filtered = patients.filter((p) => {
     const q = search.trim().toLowerCase();
     if (!q) return true;
-    return [p.name, p.card, p.phone].some(v => String(v || "").toLowerCase().includes(q));
-  });
-
-  const toggleItem = (item, setter) => {
-    setter(prev => prev.includes(item) ? prev.filter(x => x !== item) : [...prev, item]);
-  };
-
-  const updateMeasurement = (name, value) => {
-    setMeasurementValues(prev => ({ ...prev, [name]: value }));
-  };
+    return [p.name, p.card, p.phone, p.phoneNumber].some(v => String(v || "").toLowerCase().includes(q));
+  }).slice(0, 15);
 
   const save = () => {
     if (!selected) return showMessage("Zaɓi patient da farko.");
-    if (tasks.length < 2) return showMessage("Zaɓi aƙalla nursing tasks guda 2.");
-    if (measurements.length < 2) return showMessage("Zaɓi aƙalla measurements guda 2 kafin consultation.");
-    const missing = measurements.filter(m => !String(measurementValues[m] || "").trim());
-    if (missing.length) return showMessage(`Cika sakamakon: ${missing.join(", ")}.`);
+    if (!tasks.length) return showMessage("Zaɓi aƙalla nursing task ɗaya.");
     if (!result) return showMessage("Zaɓi nursing result.");
-    if (!condition) return showMessage("Zaɓi patient condition.");
-
-    const preConsultation = {
-      selected: measurements,
-      values: measurementValues,
-      completed: true,
-      date: new Date().toLocaleString(),
-    };
-
     const record = {
-      id: Date.now(),
-      patientId: selected.id,
-      patientName: selected.name,
-      card: selected.card,
-      age: selected.age ?? "",
-      sex: selected.sex || "",
-      tasks,
-      preConsultation,
-      measurements,
-      measurementValues,
-      result,
-      condition,
-      ward: ward || "Not Assigned",
-      bed: bed || "Not Assigned",
-      notes: notes.trim(),
-      status: result === "Needs Consultant Review" || result === "Urgent Review" ? "Ready for Consultant" : "Completed",
-      date: new Date().toLocaleString(),
+      id: `NUR-${Date.now()}`, patientId: selected.id, patientName: selected.name, card: selected.card,
+      tasks, result, ward: ward || "Not Assigned", bed: bed || "Not Assigned", notes: notes.trim(),
+      status: ["Needs Consultant Review", "Urgent Review"].includes(result) ? "Ready for Consultant" : "Completed",
+      date: new Date().toLocaleString()
     };
-
     setSavedRecords(prev => [record, ...prev]);
-    if (typeof setPatients === "function") {
-      setPatients(prev => prev.map(p => String(p.id) === String(selected.id)
-        ? { ...p, nursing: { ...(p.nursing || {}), ...record } }
-        : p
-      ));
-    }
-
-    showMessage(`${selected.name} nursing assessment an ajiye, an shirya bayanan kafin Consultant.`);
-    setTasks([]); setMeasurements([]); setMeasurementValues({}); setResult(""); setCondition(""); setWard(""); setBed(""); setNotes(""); setSelected(null); setSearch(""); setView("queue");
+    setPatients?.(prev => prev.map(p => String(p.id) === String(selected.id) ? {...p, nursing:{...(p.nursing||{}), ...record}} : p));
+    showMessage(`${selected.name} nursing record an ajiye.`);
+    setTasks([]); setResult(""); setWard(""); setBed(""); setNotes(""); setSelected(null); setSearch(""); setView("records");
   };
-
   const ready = savedRecords.filter(r => r.status === "Ready for Consultant");
-
   return (
     <div>
-      <PageHeader title="Nursing Unit" subtitle="Modern nursing assessment, measurements, patient flow and pre-consultation preparation" icon="♙" />
+      <PageHeader title="Nursing Unit" subtitle="Modern nursing assessment, standardized tasks and patient flow" icon="♙" />
       <div className="stats-grid">
         <StatCard title="Patients" value={patients.length} icon="◉" />
         <StatCard title="Nursing Records" value={savedRecords.length} icon="✓" />
         <StatCard title="Ready for Consultant" value={ready.length} icon="→" />
-        <StatCard title="Completed" value={savedRecords.filter(r => r.status === "Completed").length} icon="▣" />
+        <StatCard title="Completed" value={savedRecords.filter(r=>r.status === "Completed").length} icon="▣" />
       </div>
-
       <div className="panel">
-        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
-          <button className="button primary" onClick={() => setView("queue")}>Patient Queue</button>
-          <button className="button secondary" onClick={() => setView("records")}>Nursing Records</button>
-          <button className="button secondary" onClick={() => setView("ready")}>Before Consultation / Ready</button>
+        <div className="toolbar">
+          <button className={`button ${view === "queue" ? "primary" : "secondary"}`} onClick={()=>setView("queue")}>Patient Queue</button>
+          <button className={`button ${view === "records" ? "primary" : "secondary"}`} onClick={()=>setView("records")}>Nursing Records</button>
+          <button className={`button ${view === "ready" ? "primary" : "secondary"}`} onClick={()=>setView("ready")}>Ready for Consultant</button>
         </div>
-
-        {view === "queue" && (
-          <>
-            <h2>Select Patient</h2>
-            <input className="search-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search card number, name or phone" />
-            <div className="search-results">
-              {filtered.slice(0, 15).map(p => (
-                <button key={p.id} className="result-item" onClick={() => { setSelected(p); setSearch(p.name); }}>
-                  {p.name} — {p.card} — {p.phone || "No phone"}
-                </button>
-              ))}
+        {view === "queue" && <>
+          <h2>Select Patient</h2>
+          <input className="search-input" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search card number, name or phone" />
+          {!selected && <div className="search-results">{filtered.map(p=><button key={p.id} className="result-item" onClick={()=>{setSelected(p);setSearch(p.name);}}>{p.name} — {p.card} — {p.phone||p.phoneNumber||"No phone"}</button>)}</div>}
+          {selected && <div style={{marginTop:16}}>
+            <div className="selected-patient"><strong>{selected.name}</strong> — {selected.card} — {selected.phone||selected.phoneNumber||"No phone"} <button className="small-button" onClick={()=>{setSelected(null);setSearch("");}}>Change</button></div>
+            <SearchableMultiSelectButtons label="Routine Nursing Tasks — click two or more items as needed" options={routineTasks} selected={tasks} setSelected={setTasks} placeholder="Search nursing task..." />
+            <div className="form-grid">
+              <FormField label="Nursing Result"><select value={result} onChange={e=>setResult(e.target.value)}><option value="">Select result</option>{resultOptions.map(x=><option key={x}>{x}</option>)}</select></FormField>
+              <FormField label="Ward Assignment"><select value={ward} onChange={e=>{setWard(e.target.value);setBed("")}}><option value="">Select ward</option>{wards.map(x=><option key={x}>{x}</option>)}</select></FormField>
+              {beds.length > 0 && <FormField label="Bed"><select value={bed} onChange={e=>setBed(e.target.value)}><option value="">Select bed</option>{beds.map(x=><option key={x}>{x}</option>)}</select></FormField>}
             </div>
-
-            {selected && (
-              <div style={{marginTop:16}}>
-                <div className="card" style={{marginBottom:16}}>
-                  <h2>Patient Information</h2>
-                  <div className="form-grid">
-                    <div className="access-box"><strong>Name</strong><span>{selected.name}</span></div>
-                    <div className="access-box"><strong>Card Number</strong><span>{selected.card}</span></div>
-                    <div className="access-box"><strong>Age</strong><span>{selected.age !== "" && selected.age != null ? `${selected.age} years` : "Not provided"}</span></div>
-                    <div className="access-box"><strong>Sex</strong><span>{selected.sex || "Not provided"}</span></div>
-                  </div>
-                </div>
-
-                <SearchableMultiSelectButtons
-                  label="Nursing Tasks — Select 2 or more"
-                  options={routineTasks}
-                  value={tasks}
-                  onChange={setTasks}
-                  placeholder="Search nursing task..."
-                />
-
-                <SearchableMultiSelectButtons
-                  label="Pre-Consultation Measurements — Select 2 or more"
-                  options={measurementOptions}
-                  value={measurements}
-                  onChange={setMeasurements}
-                  placeholder="Search BP, weight, temperature, pulse..."
-                />
-
-                {measurements.length > 0 && (
-                  <div className="card" style={{marginTop:16}}>
-                    <h3>Enter Measurement Results</h3>
-                    <p className="muted">Kowane measurement da ka zaɓa sai ka saka value dinsa.</p>
-                    <div className="form-grid">
-                      {measurements.map(m => (
-                        <FormField key={m} label={m}>
-                          <input
-                            value={measurementValues[m] || ""}
-                            onChange={e => updateMeasurement(m, e.target.value)}
-                            placeholder={`Enter ${m}`}
-                          />
-                        </FormField>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="form-grid" style={{marginTop:16}}>
-                  <FormField label="Patient Condition">
-                    <select value={condition} onChange={e => setCondition(e.target.value)}>
-                      <option value="">Select condition</option>
-                      {conditionOptions.map(x => <option key={x}>{x}</option>)}
-                    </select>
-                  </FormField>
-                  <FormField label="Nursing Result">
-                    <select value={result} onChange={e => setResult(e.target.value)}>
-                      <option value="">Select result</option>
-                      {resultOptions.map(x => <option key={x}>{x}</option>)}
-                    </select>
-                  </FormField>
-                  <FormField label="Ward Assignment">
-                    <select value={ward} onChange={e => {setWard(e.target.value);setBed("")}}>
-                      <option value="">Select ward</option>
-                      {wards.map(x => <option key={x}>{x}</option>)}
-                    </select>
-                  </FormField>
-                  {beds.length > 0 && (
-                    <FormField label="Bed">
-                      <select value={bed} onChange={e => setBed(e.target.value)}>
-                        <option value="">Select bed</option>
-                        {beds.map(x => <option key={x}>{x}</option>)}
-                      </select>
-                    </FormField>
-                  )}
-                  <FormField label="Report / Additional Clinical Notes">
-                    <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Rubuta ƙarin bayanin nursing da ba standardized ba..." />
-                  </FormField>
-                </div>
-
-                <div className="access-box" style={{marginTop:16}}>
-                  <strong>Workflow</strong>
-                  <span>ICT/Records → Nursing Assessment → Pre-Consultation Measurements → Ready for Consultant → Consultant Room</span>
-                </div>
-
-                <button className="button primary" onClick={save} style={{marginTop:16}}>Save Nursing & Before Consultation</button>
-              </div>
-            )}
-          </>
-        )}
-
-        {view === "records" && (
-          <div className="table-wrapper"><table><thead><tr><th>Patient</th><th>Card</th><th>Tasks</th><th>Measurements</th><th>Condition</th><th>Result</th><th>Status</th><th>Date</th></tr></thead><tbody>
-            {savedRecords.map(r => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.tasks.join(", ")}</td><td>{(r.measurements || []).map(m => `${m}: ${r.measurementValues?.[m] || "—"}`).join(" | ")}</td><td>{r.condition || "—"}</td><td>{r.result}</td><td>{r.status}</td><td>{r.date}</td></tr>)}
-            {!savedRecords.length && <tr><td colSpan="8">No nursing record found.</td></tr>}
-          </tbody></table></div>
-        )}
-
-        {view === "ready" && (
-          <div className="table-wrapper"><table><thead><tr><th>Patient</th><th>Card</th><th>Measurements</th><th>Condition</th><th>Result</th><th>Notes</th><th>Date</th></tr></thead><tbody>
-            {ready.map(r => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{(r.measurements || []).map(m => `${m}: ${r.measurementValues?.[m] || "—"}`).join(" | ")}</td><td>{r.condition}</td><td>{r.result}</td><td>{r.notes || "—"}</td><td>{r.date}</td></tr>)}
-            {!ready.length && <tr><td colSpan="7">No patient is ready for Consultant.</td></tr>}
-          </tbody></table></div>
-        )}
+            <FormField label="Report / Additional Clinical Notes"><textarea rows="5" value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Write clinical notes only. Standardized nursing tasks should be selected above." /></FormField>
+            <button className="button primary" onClick={save}>Save Nursing Record</button>
+          </div>}
+        </>}
+        {view === "records" && <div className="table-scroll"><table><thead><tr><th>Patient</th><th>Card</th><th>Tasks</th><th>Result</th><th>Ward/Bed</th><th>Status</th><th>Date</th></tr></thead><tbody>{savedRecords.map(r=><tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.tasks.join(", ")}</td><td>{r.result}</td><td>{r.ward} / {r.bed}</td><td>{r.status}</td><td>{r.date}</td></tr>)}{!savedRecords.length&&<tr><td colSpan="7">No nursing record found.</td></tr>}</tbody></table></div>}
+        {view === "ready" && <div className="table-scroll"><table><thead><tr><th>Patient</th><th>Card</th><th>Result</th><th>Notes</th><th>Date</th></tr></thead><tbody>{ready.map(r=><tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.result}</td><td>{r.notes||"—"}</td><td>{r.date}</td></tr>)}{!ready.length&&<tr><td colSpan="5">No patient is ready for Consultant.</td></tr>}</tbody></table></div>}
       </div>
-    </div>
-  );
-}
-
-
-function WardNursingCarePanel({ wardName }) {
-  const [nursingRecords] = usePersistentState("bazza_nursing_records", []);
-  const wardRecords = nursingRecords.filter((r) => r.ward === wardName);
-  const activeRecords = wardRecords.filter((r) => r.status !== "Discharged");
-
-  return (
-    <div className="panel" style={{ marginTop: 12 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-        <div>
-          <h2 style={{ marginBottom: 4 }}>Nursing Care / Patient Care Report</h2>
-          <p className="muted" style={{ margin: 0 }}>
-            Abubuwan da Nursing ya yi wa patients na {wardName}, tare da sakamakon measurements da pre-consultation.
-          </p>
-        </div>
-        <div className="access-box"><strong>Records</strong><span>{activeRecords.length}</span></div>
-      </div>
-      {wardRecords.length === 0 ? (
-        <div className="empty-state" style={{ marginTop: 16 }}>
-          Babu Nursing care record da aka ajiye wa wannan ward tukuna.
-        </div>
-      ) : (
-        <div className="table-wrapper" style={{ marginTop: 16 }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Patient</th><th>Card</th><th>Nursing Tasks</th><th>Measurements & Results</th>
-                <th>Condition</th><th>Nursing Result</th><th>Notes</th><th>Status</th><th>Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {wardRecords.map((r) => (
-                <tr key={r.id}>
-                  <td>{r.patientName}</td>
-                  <td>{r.card}</td>
-                  <td>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                      {(r.tasks || []).map((task) => <span key={task} className="badge">{task}</span>)}
-                    </div>
-                  </td>
-                  <td>
-                    <div style={{ display: "grid", gap: 4, minWidth: 220 }}>
-                      {(r.measurements || []).map((m) => <div key={m}><strong>{m}:</strong> {r.measurementValues?.[m] || "—"}</div>)}
-                    </div>
-                  </td>
-                  <td>{r.condition || "—"}</td>
-                  <td>{r.result || "—"}</td>
-                  <td>{r.notes || "—"}</td>
-                  <td><StatusBadge status={r.status || "Completed"} /></td>
-                  <td>{r.date || "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   );
 }
@@ -4290,7 +3942,7 @@ function LabourRoomPage({ patients = [], records = [], setRecords, showMessage }
  const beds=Array.from({length:12},(_,i)=>`LR-${String(i+1).padStart(2,"0")}`); const ward=records.filter(r=>r.ward==="Labour Room"); const occupied=ward.filter(r=>r.status==="Admitted"); const available=beds.filter(b=>!occupied.some(r=>r.bed===b));
  const admit=()=>{const p=patients.find(x=>String(x.id)===String(selectedId));if(!p)return showMessage("Zaɓi patient.");if(p.sex!=="Female")return showMessage("Labour Room na karɓar female patient kawai.");if(!bed)return showMessage("Zaɓi bed.");if(occupied.some(r=>r.bed===bed))return showMessage("Bed yana occupied.");const rec={id:Date.now(),ward:"Labour Room",patientId:p.id,patientName:p.name,card:p.card,bed,stage,condition,notes,status:"Admitted",admittedAt:new Date().toLocaleString(),dischargedAt:""};setRecords(prev=>[rec,...prev]);showMessage(`${p.name} an admitted Labour Room.`);setSelectedId("");setBed("");setNotes("");};
  const discharge=id=>{setRecords(prev=>prev.map(r=>r.id===id?{...r,status:"Discharged",dischargedAt:new Date().toLocaleString()}:r));showMessage("An yi discharge.")};
- return <div><PageHeader title="Labour Room" subtitle="Labour room patient management and monitoring" icon="▣"/><div className="stats-grid"><StatCard title="Occupied Beds" value={occupied.length} icon="▣"/><StatCard title="Available Beds" value={available.length} icon="✓"/><StatCard title="New Admissions" value={occupied.length} icon="!"/><StatCard title="Discharges" value={ward.filter(r=>r.status==="Discharged").length} icon="◉"/></div><div className="panel"><h2>Admit Patient</h2><div className="form-grid"><FormField label="Patient"><select value={selectedId} onChange={e=>setSelectedId(e.target.value)}><option value="">Select patient</option>{patients.filter(p=>p.sex==="Female").map(p=><option key={p.id} value={p.id}>{p.name} — {p.card}</option>)}</select></FormField><FormField label="Bed"><select value={bed} onChange={e=>setBed(e.target.value)}><option value="">Select bed</option>{available.map(b=><option key={b}>{b}</option>)}</select></FormField><FormField label="Labour Stage"><select value={stage} onChange={e=>setStage(e.target.value)}><option>Early Labour</option><option>Active Labour</option><option>Second Stage</option><option>Post Delivery</option></select></FormField><FormField label="Condition"><select value={condition} onChange={e=>setCondition(e.target.value)}><option>Stable</option><option>Under Observation</option><option>Critical</option></select></FormField><FormField label="Notes"><textarea value={notes} onChange={e=>setNotes(e.target.value)}/></FormField></div><button className="button primary" onClick={admit}>Admit to Labour Room</button></div><div className="panel"><h2>Current Patients</h2><div className="table-wrapper"><table><thead><tr><th>Patient</th><th>Card</th><th>Bed</th><th>Stage</th><th>Condition</th><th>Action</th></tr></thead><tbody>{occupied.map(r=><tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.stage}</td><td>{r.condition}</td><td><button className="small-button" onClick={()=>discharge(r.id)}>Discharge</button></td></tr>)}</tbody></table></div></div><WardNursingCarePanel wardName="Labour Room" /></div>;
+ return <div><PageHeader title="Labour Room" subtitle="Labour room patient management and monitoring" icon="▣"/><div className="stats-grid"><StatCard title="Occupied Beds" value={occupied.length} icon="▣"/><StatCard title="Available Beds" value={available.length} icon="✓"/><StatCard title="New Admissions" value={occupied.length} icon="!"/><StatCard title="Discharges" value={ward.filter(r=>r.status==="Discharged").length} icon="◉"/></div><div className="panel"><h2>Admit Patient</h2><div className="form-grid"><FormField label="Patient"><select value={selectedId} onChange={e=>setSelectedId(e.target.value)}><option value="">Select patient</option>{patients.filter(p=>p.sex==="Female").map(p=><option key={p.id} value={p.id}>{p.name} — {p.card}</option>)}</select></FormField><FormField label="Bed"><select value={bed} onChange={e=>setBed(e.target.value)}><option value="">Select bed</option>{available.map(b=><option key={b}>{b}</option>)}</select></FormField><FormField label="Labour Stage"><select value={stage} onChange={e=>setStage(e.target.value)}><option>Early Labour</option><option>Active Labour</option><option>Second Stage</option><option>Post Delivery</option></select></FormField><FormField label="Condition"><select value={condition} onChange={e=>setCondition(e.target.value)}><option>Stable</option><option>Under Observation</option><option>Critical</option></select></FormField><FormField label="Notes"><textarea value={notes} onChange={e=>setNotes(e.target.value)}/></FormField></div><button className="button primary" onClick={admit}>Admit to Labour Room</button></div><div className="panel"><h2>Current Patients</h2><div className="table-wrapper"><table><thead><tr><th>Patient</th><th>Card</th><th>Bed</th><th>Stage</th><th>Condition</th><th>Action</th></tr></thead><tbody>{occupied.map(r=><tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.stage}</td><td>{r.condition}</td><td><button className="small-button" onClick={()=>discharge(r.id)}>Discharge</button></td></tr>)}</tbody></table></div></div></div>;
 }
 function ProgramUnitPage({ title, patients = [], setPatients, showMessage, logAudit }) {
   const [search, setSearch] = useState("");
@@ -7957,7 +7609,7 @@ function MaleWardPage({ patients = [], records = [], setRecords, showMessage }) 
         )}
         {view === "patients" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Condition</th><th>Diagnosis</th><th>Status</th><th>Action</th></tr></thead><tbody>{filtered.filter((r) => r.status === "Admitted").map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.condition}</td><td>{r.diagnosis}</td><td><StatusBadge status={r.status} /></td><td><button className="secondary" onClick={() => discharge(r.id)}>Discharge</button></td></tr>)}{filtered.filter((r) => r.status === "Admitted").length === 0 && <tr><td colSpan="7">No admitted male patient found.</td></tr>}</tbody></table></div>}
         {view === "beds" && <div className="table-wrap"><table><thead><tr><th>Bed</th><th>Status</th><th>Patient</th><th>Card No.</th></tr></thead><tbody>{beds.map((b) => { const r = occupied.find((x) => x.bed === b); return <tr key={b}><td>{b}</td><td>{r ? "Occupied" : "Available"}</td><td>{r ? r.patientName : "—"}</td><td>{r ? r.card : "—"}</td></tr>; })}</tbody></table></div>}
-        {view === "history" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Admitted</th><th>Discharged</th></tr></thead><tbody>{wardRecords.filter((r) => r.status === "Discharged").map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.admittedAt}</td><td>{r.dischargedAt}</td></tr>)}{wardRecords.filter((r) => r.status === "Discharged").length === 0 && <tr><td colSpan="5">No discharge history found.</td></tr>}</tbody></table></div>}{view === "nursing" && <WardNursingCarePanel wardName="Male Ward" />}
+        {view === "history" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Admitted</th><th>Discharged</th></tr></thead><tbody>{wardRecords.filter((r) => r.status === "Discharged").map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.admittedAt}</td><td>{r.dischargedAt}</td></tr>)}{wardRecords.filter((r) => r.status === "Discharged").length === 0 && <tr><td colSpan="5">No discharge history found.</td></tr>}</tbody></table></div>}
       </div>
     </div>
   );
@@ -7979,7 +7631,7 @@ function WardPageGeneric({ title, prefix, sex, patients = [], records = [], setR
   const available = beds.filter((b) => !occupied.some((r) => r.bed === b));
   const admit = () => { const p = patients.find((x) => String(x.id) === String(selectedId)); if (!p) return showMessage("Zaɓi patient."); if (p.sex !== sex) return showMessage(`${title} na karɓar ${sex.toLowerCase()} patient kawai.`); if (!bed) return showMessage("Zaɓi bed."); if (occupied.some((r) => r.bed === bed)) return showMessage("Bed ɗin yana occupied."); setRecords((prev) => [{ id: Date.now(), ward: title, patientId: p.id, patientName: p.name, card: p.card, bed, condition, diagnosis: diagnosis.trim() || "Not specified", status: "Admitted", admittedAt: new Date().toLocaleString(), dischargedAt: "" }, ...prev]); showMessage(`${p.name} an admitted zuwa ${title}.`); setSelectedId(""); setBed(""); setDiagnosis(""); setView("patients"); };
   const discharge = (id) => { setRecords((prev) => prev.map((r) => r.id === id ? { ...r, status: "Discharged", dischargedAt: new Date().toLocaleString() } : r)); showMessage("An yi discharge."); };
-  return <div><PageHeader title={title} subtitle={`${sex} patient admission, bed assignment, monitoring, notes and discharge`} icon={prefix} /><div className="stats-grid"><StatCard title="Occupied Beds" value={occupied.length} icon="▣" /><StatCard title="Available Beds" value={available.length} icon="✓" /><StatCard title="New Admissions" value={wardRecords.filter((r) => r.status === "Admitted").length} icon="+" /><StatCard title="Discharges" value={wardRecords.filter((r) => r.status === "Discharged").length} icon="↗" /></div><div className="card"><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}><button className="primary" onClick={() => setView("patients")}>Ward Patients</button><button className="secondary" onClick={() => setView("beds")}>Bed Status</button><button className="secondary" onClick={() => setView("history")}>Discharge History</button><button className="secondary" onClick={() => setView("nursing")}>Nursing Care / Reports</button><button className="primary" onClick={() => setView("admit")}>+ Admit {sex} Patient</button></div>{view === "admit" && <div style={{ display: "grid", gap: 12, maxWidth: 700 }}><h2>Admit {sex} Patient</h2><select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}><option value="">Select patient</option>{patients.filter((p) => p.sex === sex).map((p) => <option key={p.id} value={p.id}>{p.name} — {p.card}</option>)}</select><select value={bed} onChange={(e) => setBed(e.target.value)}><option value="">Select available bed</option>{available.map((b) => <option key={b}>{b}</option>)}</select><select value={condition} onChange={(e) => setCondition(e.target.value)}><option>Stable</option><option>Under Observation</option><option>Needs Attention</option><option>Critical</option></select><input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder="Diagnosis" /><button className="primary" onClick={admit}>Admit Patient</button></div>}{view === "patients" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Condition</th><th>Diagnosis</th><th>Status</th><th>Action</th></tr></thead><tbody>{occupied.map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.condition}</td><td>{r.diagnosis}</td><td><StatusBadge status={r.status} /></td><td><button className="secondary" onClick={() => discharge(r.id)}>Discharge</button></td></tr>)}{occupied.length === 0 && <tr><td colSpan="7">No admitted patient found.</td></tr>}</tbody></table></div>}{view === "beds" && <div className="table-wrap"><table><thead><tr><th>Bed</th><th>Status</th><th>Patient</th><th>Card No.</th></tr></thead><tbody>{beds.map((b) => { const r = occupied.find((x) => x.bed === b); return <tr key={b}><td>{b}</td><td>{r ? "Occupied" : "Available"}</td><td>{r ? r.patientName : "—"}</td><td>{r ? r.card : "—"}</td></tr>; })}</tbody></table></div>}{view === "history" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Admitted</th><th>Discharged</th></tr></thead><tbody>{wardRecords.filter((r) => r.status === "Discharged").map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.admittedAt}</td><td>{r.dischargedAt}</td></tr>)}</tbody></table></div>}{view === "nursing" && <WardNursingCarePanel wardName={title} />}</div></div>;
+  return <div><PageHeader title={title} subtitle={`${sex} patient admission, bed assignment, monitoring, notes and discharge`} icon={prefix} /><div className="stats-grid"><StatCard title="Occupied Beds" value={occupied.length} icon="▣" /><StatCard title="Available Beds" value={available.length} icon="✓" /><StatCard title="New Admissions" value={wardRecords.filter((r) => r.status === "Admitted").length} icon="+" /><StatCard title="Discharges" value={wardRecords.filter((r) => r.status === "Discharged").length} icon="↗" /></div><div className="card"><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}><button className="primary" onClick={() => setView("patients")}>Ward Patients</button><button className="secondary" onClick={() => setView("beds")}>Bed Status</button><button className="secondary" onClick={() => setView("history")}>Discharge History</button><button className="primary" onClick={() => setView("admit")}>+ Admit {sex} Patient</button></div>{view === "admit" && <div style={{ display: "grid", gap: 12, maxWidth: 700 }}><h2>Admit {sex} Patient</h2><select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}><option value="">Select patient</option>{patients.filter((p) => p.sex === sex).map((p) => <option key={p.id} value={p.id}>{p.name} — {p.card}</option>)}</select><select value={bed} onChange={(e) => setBed(e.target.value)}><option value="">Select available bed</option>{available.map((b) => <option key={b}>{b}</option>)}</select><select value={condition} onChange={(e) => setCondition(e.target.value)}><option>Stable</option><option>Under Observation</option><option>Needs Attention</option><option>Critical</option></select><input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder="Diagnosis" /><button className="primary" onClick={admit}>Admit Patient</button></div>}{view === "patients" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Condition</th><th>Diagnosis</th><th>Status</th><th>Action</th></tr></thead><tbody>{occupied.map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.condition}</td><td>{r.diagnosis}</td><td><StatusBadge status={r.status} /></td><td><button className="secondary" onClick={() => discharge(r.id)}>Discharge</button></td></tr>)}{occupied.length === 0 && <tr><td colSpan="7">No admitted patient found.</td></tr>}</tbody></table></div>}{view === "beds" && <div className="table-wrap"><table><thead><tr><th>Bed</th><th>Status</th><th>Patient</th><th>Card No.</th></tr></thead><tbody>{beds.map((b) => { const r = occupied.find((x) => x.bed === b); return <tr key={b}><td>{b}</td><td>{r ? "Occupied" : "Available"}</td><td>{r ? r.patientName : "—"}</td><td>{r ? r.card : "—"}</td></tr>; })}</tbody></table></div>}{view === "history" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Admitted</th><th>Discharged</th></tr></thead><tbody>{wardRecords.filter((r) => r.status === "Discharged").map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.admittedAt}</td><td>{r.dischargedAt}</td></tr>)}</tbody></table></div>}</div></div>;
 }
 
 
