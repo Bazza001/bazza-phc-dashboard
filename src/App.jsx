@@ -1,4 +1,63 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { supabase } from "./lib/supabaseClient";
+
+
+
+const UserContext = createContext(null);
+
+const PAGE_ACCESS = {
+  "Dashboard": ["ALL"],
+  "ICT Centre": ["Super Admin", "ICT Staff"],
+  "Records Unit": ["Super Admin", "Records Staff", "Records Cashier"],
+  "Nursing Unit": ["Super Admin", "Nurse"],
+  "Consultant Room": ["Super Admin", "Consultant"],
+  "Laboratory Unit": ["Super Admin", "Laboratory Staff", "Laboratory Cashier"],
+  "Pharmacy Unit": ["Super Admin", "Pharmacy Staff", "Pharmacy Cashier"],
+  "Ultrasound Room": ["Super Admin", "Ultrasound Staff", "Ultrasound Cashier"],
+  "Male Ward": ["Super Admin", "Ward Staff"],
+  "Female Ward": ["Super Admin", "Ward Staff"],
+  "Maternity Ward": ["Super Admin", "Ward Staff"],
+  "Child Ward": ["Super Admin", "Ward Staff"],
+  "Labour Room": ["Super Admin", "Ward Staff"],
+  "Immunization Unit": ["Super Admin", "Immunization Staff"],
+  "Family Planning Unit": ["Super Admin", "Family Planning Staff"],
+  "Adolescent Unit": ["Super Admin", "Adolescent Staff"],
+  "Outpatient Services": ["Super Admin", "General Cashier", "Records Staff", "Laboratory Staff", "Pharmacy Staff", "Ultrasound Staff"],
+  "Reception / Next Patient": ["Super Admin", "Consultant", "Nurse"],
+  "In-Charge": ["Super Admin", "In-Charge"],
+  "Staff & Permissions": ["Super Admin"],
+  "General Cashier": ["Super Admin", "General Cashier"],
+  "Roster & Attendance": ["ALL"],
+  "My Staff Dashboard": ["ALL"],
+  "Reports": ["Super Admin", "In-Charge", "General Cashier", "Records Staff", "Records Cashier", "Laboratory Staff", "Laboratory Cashier", "Pharmacy Staff", "Pharmacy Cashier", "Ultrasound Staff", "Ultrasound Cashier", "Nurse", "Consultant", "Ward Staff", "Immunization Staff", "Family Planning Staff", "Adolescent Staff"],
+  "Alerts": ["Super Admin", "In-Charge", "Consultant", "Nurse", "Laboratory Staff", "Pharmacy Staff", "Ultrasound Staff"],
+  "SMS / Notifications": ["Super Admin", "ICT Staff", "Records Staff", "Nurse", "Consultant", "Laboratory Staff", "Pharmacy Staff", "Ultrasound Staff", "Immunization Staff", "Family Planning Staff", "Adolescent Staff"],
+  "Audit Logs": ["Super Admin", "In-Charge"],
+  "Settings": ["Super Admin"],
+  "ICT Stock / Inventory": ["Super Admin", "ICT Staff", "In-Charge"],
+  "Appointments": ["Super Admin", "ICT Staff", "Records Staff", "Consultant", "Nurse"],
+  "Patient Card Printing": ["Super Admin", "ICT Staff", "Records Staff", "Records Cashier"],
+  "Backup & Restore": ["Super Admin"],
+};
+
+function canAccessPage(user, page) {
+  if (!user) return false;
+  if (user.role === "Super Admin") return true;
+  if (page === "My Staff Dashboard" || page === "Roster & Attendance") return true;
+  if (user.role === "In-Charge") return page === "Dashboard" || page === "In-Charge" || page === "Reports" || page === "Alerts" || page === "Audit Logs" || page === "ICT Stock / Inventory";
+  const allowed = PAGE_ACCESS[page];
+  return !!allowed && (allowed.includes("ALL") || allowed.includes(user.role));
+}
+
+function canMutate(user) { return !!user && user.role === "Super Admin"; }
+
+function canPerform(user, action, department) {
+  if (!user) return false;
+  if (user.role === "Super Admin") return true;
+  if (user.role === "In-Charge") return action === "View" || action === "Reports";
+  if (user.department === department) return ["View", "Create", "Edit", "Print", "Cashier", "Reports", "SMS", "Alerts"].includes(action);
+  return false;
+}
 
 const departments = [
   "ICT Centre",
@@ -19,6 +78,8 @@ const departments = [
   "Family Planning Unit",
   "Adolescent Unit",
 ];
+
+const rosterOnlyDepartments = ["Injection", "Accident & Emergency"];
 
 const permissions = [
   "View",
@@ -54,112 +115,24 @@ const roles = [
   "Ultrasound Cashier",
 ];
 
-const ROLE_PAGE_RULES = {
-  "Super Admin": "ALL",
-  "In-Charge": ["Dashboard", "In-Charge", "Reports", "Audit Logs", "Roster & Attendance"],
-  "General Cashier": ["Dashboard", "General Cashier", "Reports"],
-  "ICT Staff": ["Dashboard", "ICT Centre", "ICT Stock / Inventory", "Patient Card Printing", "Appointments"],
-  "Records Staff": ["Dashboard", "Records Unit", "Patient Card Printing", "Alerts"],
-  "Records Cashier": ["Dashboard", "Records Unit"],
-  "Nurse": ["Dashboard", "Nursing Unit", "Alerts", "Reception / Next Patient"],
-  "Consultant": ["Dashboard", "Consultant Room", "Reception / Next Patient", "Alerts"],
-  "Laboratory Staff": ["Dashboard", "Laboratory Unit", "Alerts"],
-  "Laboratory Cashier": ["Dashboard", "Laboratory Unit"],
-  "Pharmacy Staff": ["Dashboard", "Pharmacy Unit", "Alerts"],
-  "Pharmacy Cashier": ["Dashboard", "Pharmacy Unit"],
-  "Ultrasound Staff": ["Dashboard", "Ultrasound Room", "Alerts"],
-  "Ultrasound Cashier": ["Dashboard", "Ultrasound Room"],
-  "Ward Staff": ["Dashboard", "Male Ward", "Female Ward", "Maternity Ward", "Child Ward", "Labour Room", "Alerts"],
-  "Immunization Staff": ["Dashboard", "Immunization Unit", "Alerts"],
-  "Family Planning Staff": ["Dashboard", "Family Planning Unit", "Alerts"],
-  "Adolescent Staff": ["Dashboard", "Adolescent Unit", "Alerts"],
-};
-
-const ROLE_ACTIONS = {
-  "Super Admin": ["View", "Create", "Edit", "Delete", "Print", "Cashier", "Reports", "Stock", "SMS", "Alerts"],
-  "In-Charge": ["View", "Reports", "Alerts"],
-};
-
-function getUserDepartments(user) {
-  if (!user) return [];
-  const list = Array.isArray(user.departments) && user.departments.length ? user.departments : [user.department];
-  return [...new Set(list.filter(Boolean))];
-}
-
-function userCanAccessPage(user, targetPage) {
-  if (!user) return false;
-  if (user.role === "Super Admin") return true;
-  const explicit = ROLE_PAGE_RULES[user.role];
-  if (Array.isArray(explicit) && explicit.includes(targetPage)) return true;
-  const depts = getUserDepartments(user);
-  if (depts.includes(targetPage)) return true;
-  if (targetPage === "Reports" && (user.permissions || []).includes("Reports")) return true;
-  if (targetPage === "Alerts" && (user.permissions || []).includes("Alerts")) return true;
-  return false;
-}
-
-function userCanAction(user, action) {
-  if (!user) return false;
-  if (user.role === "Super Admin") return true;
-  if (user.role === "In-Charge") return ["View", "Reports", "Alerts"].includes(action);
-  if (Array.isArray(user.permissions) && user.permissions.length) return user.permissions.includes(action);
-  return ["View"].includes(action);
-}
-
 const initialStaff = [
-  {
-    id: 1,
-    staffId: "BZ000",
-    name: "Super Administrator",
-    username: "admin",
-    password: "1234",
-    department: "ICT Centre",
-    role: "Super Admin",
-    status: "Active",
-  },
-  {
-    id: 2,
-    staffId: "BZ001",
-    name: "Altini Garba Bazza",
-    username: "altini",
-    password: "1234",
-    department: "In-Charge",
-    role: "In-Charge",
-    status: "Active",
-  },
-  {
-    id: 3,
-    staffId: "BZ002",
-    name: "Hadiza Umar",
-    username: "hadiza",
-    password: "1234",
-    department: "Pharmacy Unit",
-    role: "Pharmacy Staff",
-    status: "Active",
-    isHOD: true,
-  },
-  {
-    id: 4,
-    staffId: "BZ003",
-    name: "Abba Yaro",
-    username: "abbayaro",
-    password: "1234",
-    department: "Ultrasound Room",
-    role: "Ultrasound Staff",
-    status: "Active",
-    isHOD: true,
-  },
-  {
-    id: 5,
-    staffId: "BZ004",
-    name: "Kabiru Lawal",
-    username: "kabiru",
-    password: "1234",
-    department: "Laboratory Unit",
-    role: "Laboratory Staff",
-    status: "Active",
-    isHOD: true,
-  },
+  { id: 1, staffId: "HA-PHC/2026/001", name: "Usman", username: "Usman", password: "1234", department: "ICT Centre", departments: ["ICT Centre"], role: "Super Admin", status: "Active", category: "Staff", isHOD: true },
+  { id: 2, staffId: "HA-PHC/2026/002", name: "Altine", username: "Altine", password: "1234", department: "In-Charge", departments: ["In-Charge"], role: "In-Charge", status: "Active", category: "Staff", isHOD: true },
+  { id: 3, staffId: "HA-PHC/2026/003", name: "Bazza", username: "Bazza", password: "1234", department: "ICT Centre", departments: ["ICT Centre"], role: "ICT Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 4, staffId: "HA-PHC/2026/004", name: "Yusuf", username: "Yusuf", password: "1234", department: "Records Unit", departments: ["Records Unit"], role: "Records Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 5, staffId: "HA-PHC/2026/005", name: "Abdul", username: "Abdul", password: "1234", department: "Nursing Unit", departments: ["Nursing Unit"], role: "Nurse", status: "Active", category: "Staff", isHOD: true },
+  { id: 6, staffId: "HA-PHC/2026/006", name: "Kasimu", username: "Kasimu", password: "1234", department: "Consultant Room", departments: ["Consultant Room"], role: "Consultant", status: "Active", category: "Staff", isHOD: true },
+  { id: 7, staffId: "HA-PHC/2026/007", name: "Kabiru", username: "Kabiru", password: "1234", department: "Laboratory Unit", departments: ["Laboratory Unit"], role: "Laboratory Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 8, staffId: "HA-PHC/2026/008", name: "Hadiza", username: "Hadiza", password: "1234", department: "Pharmacy Unit", departments: ["Pharmacy Unit"], role: "Pharmacy Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 9, staffId: "HA-PHC/2026/009", name: "Abba", username: "Abba", password: "1234", department: "Ultrasound Room", departments: ["Ultrasound Room"], role: "Ultrasound Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 10, staffId: "HA-PHC/2026/010", name: "Dadi", username: "Dadi", password: "1234", department: "Male Ward", departments: ["Male Ward"], role: "Ward Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 11, staffId: "HA-PHC/2026/011", name: "Maryam", username: "Maryam", password: "1234", department: "Female Ward", departments: ["Female Ward"], role: "Ward Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 12, staffId: "HA-PHC/2026/012", name: "Zainab", username: "Zainab", password: "1234", department: "Maternity Ward", departments: ["Maternity Ward"], role: "Ward Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 13, staffId: "HA-PHC/2026/013", name: "Hafsa", username: "Hafsa", password: "1234", department: "Child Ward", departments: ["Child Ward"], role: "Ward Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 14, staffId: "HA-PHC/2026/014", name: "Shafa", username: "Shafa", password: "1234", department: "Labour Room", departments: ["Labour Room", "Family Planning Unit"], role: "Ward Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 15, staffId: "HA-PHC/2026/015", name: "Jidda", username: "Jidda", password: "1234", department: "Immunization Unit", departments: ["Immunization Unit"], role: "Immunization Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 16, staffId: "HA-PHC/2026/016", name: "Shafa", username: "Shafa-FP", password: "1234", department: "Family Planning Unit", departments: ["Family Planning Unit"], role: "Family Planning Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 17, staffId: "HA-PHC/2026/017", name: "Hajiya", username: "Hajiya", password: "1234", department: "Adolescent Unit", departments: ["Adolescent Unit"], role: "Adolescent Staff", status: "Active", category: "Staff", isHOD: true },
 ];
 
 function usePersistentState(key, initialValue) {
@@ -189,6 +162,8 @@ const demoPatients = [
     id: 1,
     card: "BZ-P001",
     name: "Aisha Musa",
+    age: "28",
+    address: "Bazza Area, Sokoto",
     phone: "08000000001",
     sex: "Female",
     status: "Active",
@@ -197,6 +172,8 @@ const demoPatients = [
     id: 2,
     card: "BZ-P002",
     name: "Ibrahim Bello",
+    age: "35",
+    address: "Waziri Maccido Road, Sokoto",
     phone: "08000000002",
     sex: "Male",
     status: "Active",
@@ -205,18 +182,51 @@ const demoPatients = [
     id: 3,
     card: "BZ-P003",
     name: "Fatima Umar",
+    age: "24",
+    address: "Bazza Area, Sokoto",
     phone: "08000000003",
     sex: "Female",
     status: "Active",
   },
 ];
 
+function canManageStaffDirectory(user) {
+  return !!user && (user.role === "Super Admin" || user.role === "ICT Staff");
+}
+
+function canManageAttendance(user) {
+  return !!user && (user.role === "Super Admin" || user.role === "ICT Staff");
+}
+
+function nextStaffNumber(staff, year = new Date().getFullYear()) {
+  const prefix = `HA-PHC/${year}/`;
+  const used = new Set(
+    staff
+      .map((person) => String(person.staffId || ""))
+      .filter((id) => id.startsWith(prefix))
+      .map((id) => Number(id.slice(prefix.length)))
+      .filter(Number.isFinite)
+  );
+  let n = 1;
+  while (used.has(n)) n += 1;
+  return `${prefix}${String(n).padStart(3, "0")}`;
+}
+
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
+  const [supabaseReady, setSupabaseReady] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    supabase.auth.getSession().then(({ error }) => {
+      if (mounted) setSupabaseReady(!error);
+    }).catch(() => { if (mounted) setSupabaseReady(false); });
+    return () => { mounted = false; };
+  }, []);
   const [page, setPage] = useState("Dashboard"); 
   const [recordsView, setRecordsView] = useState("dashboard");
   const [staff, setStaff] = usePersistentState("bazza_staff", initialStaff);
   const [patients, setPatients] = usePersistentState("bazza_patients", demoPatients);
+  useEffect(() => { setPatients(prev => prev.map(p => ({ ...p, age: p.age ?? "", address: p.address ?? "", phone: p.phone ?? p.phoneNumber ?? "", sex: p.sex ?? p.gender ?? "", spouseName: p.spouseName ?? p.spouse ?? "" }))); }, []);
   const [transactions, setTransactions] = usePersistentState("bazza_transactions", []);
   const [pharmacyPrescriptions, setPharmacyPrescriptions] = usePersistentState("bazza_pharmacy_prescriptions", [
   {
@@ -277,6 +287,76 @@ function App() {
     phone: "08169640287",
   });
 
+  useEffect(() => {
+    setStaff((previous) => {
+      const year = new Date().getFullYear();
+      const required = [
+        ["Super Admin", "Usman", "Usman", "ICT Centre", "Super Admin"],
+        ["In-Charge", "Altine", "Altine", "In-Charge", "In-Charge"],
+        ["ICT Staff", "Bazza", "Bazza", "ICT Centre", "ICT Staff"],
+        ["Records Staff", "Yusuf", "Yusuf", "Records Unit", "Records Staff"],
+        ["Nurse", "Abdul", "Abdul", "Nursing Unit", "Nurse"],
+        ["Consultant", "Kasimu", "Kasimu", "Consultant Room", "Consultant"],
+        ["Laboratory Staff", "Kabiru", "Kabiru", "Laboratory Unit", "Laboratory Staff"],
+        ["Pharmacy Staff", "Hadiza", "Hadiza", "Pharmacy Unit", "Pharmacy Staff"],
+        ["Ultrasound Staff", "Abba", "Abba", "Ultrasound Room", "Ultrasound Staff"],
+        ["Male Ward", "Dadi", "Dadi", "Male Ward", "Ward Staff"],
+        ["Female Ward", "Maryam", "Maryam", "Female Ward", "Ward Staff"],
+        ["Maternity Ward", "Zainab", "Zainab", "Maternity Ward", "Ward Staff"],
+        ["Child Ward", "Hafsa", "Hafsa", "Child Ward", "Ward Staff"],
+        ["Labour Room", "Shafa", "Shafa", "Labour Room", "Ward Staff"],
+        ["Immunization Staff", "Jidda", "Jidda", "Immunization Unit", "Immunization Staff"],
+        ["Adolescent Staff", "Hajiya", "Hajiya", "Adolescent Unit", "Adolescent Staff"],
+      ];
+      let changed = false;
+      const result = [...previous];
+      required.forEach(([key, name, username, department, role]) => {
+        const index = result.findIndex((p) => p.role === key || p.department === department);
+        if (index >= 0) {
+          const old = result[index];
+          const updated = { ...old, name, username, department, departments: Array.isArray(old.departments) && old.departments.length ? old.departments : [department], role, category: old.category || "Staff", status: old.status || "Active", isHOD: true };
+          if (JSON.stringify(old) !== JSON.stringify(updated)) { result[index] = updated; changed = true; }
+        } else {
+          result.push({ id: Date.now() + result.length, staffId: nextStaffNumber(result, year), name, username, password: "1234", department, departments: [department], role, status: "Active", category: "Staff", maritalStatus: "Single", allowedShifts: ["Morning", "Evening", "Night"], isHOD: true });
+          changed = true;
+        }
+      });
+      const shafaIndex = result.findIndex((p) => p.username === "Shafa" || p.name === "Shafa" || p.department === "Labour Room");
+      if (shafaIndex >= 0) {
+        const shafa = result[shafaIndex];
+        const shafaDepartments = Array.from(new Set([...(shafa.departments || [shafa.department]), "Labour Room", "Family Planning Unit"]));
+        if (JSON.stringify(shafaDepartments) !== JSON.stringify(shafa.departments || [])) {
+          result[shafaIndex] = { ...shafa, name: "Shafa", username: "Shafa", department: "Labour Room", departments: shafaDepartments, role: "Ward Staff", isHOD: true };
+          changed = true;
+        }
+      }
+      return changed ? result : previous;
+    });
+  }, []);
+
+  useEffect(() => {
+    setStaff((previous) => {
+      let changed = false;
+      const year = new Date().getFullYear();
+      const used = new Set();
+      const next = previous.map((person, index) => {
+        const departmentsForPerson = Array.from(new Set((person.departments || [person.department]).filter(Boolean)));
+        let staffId = person.staffId;
+        if (!/^HA-PHC\/\d{4}\/\d{3,}$/.test(String(staffId || ""))) {
+          let n = index + 1;
+          while (used.has(n)) n += 1;
+          staffId = `HA-PHC/${year}/${String(n).padStart(3, "0")}`;
+        }
+        used.add(Number(String(staffId).split("/").pop()));
+        const username = person.username || person.name;
+        const updated = { ...person, staffId, username, department: departmentsForPerson[0] || person.department, departments: departmentsForPerson };
+        if (JSON.stringify(updated) !== JSON.stringify(person)) changed = true;
+        return updated;
+      });
+      return changed ? next : previous;
+    });
+  }, []);
+
   const staffWithRosterMeta = useMemo(() =>
     staff.map((person) => ({
       category: person.category || "Staff",
@@ -327,16 +407,6 @@ function App() {
   );
 
   const [notification, setNotification] = useState("");
-
-  const canAccessPage = (targetPage) => userCanAccessPage(currentUser, targetPage);
-  const canAction = (action) => userCanAction(currentUser, action);
-  const goToPage = (targetPage) => {
-    if (!canAccessPage(targetPage)) {
-      showMessage("Ba ka da izinin shiga wannan department/module.");
-      return;
-    }
-    setPage(targetPage);
-  };
 
   const filteredStaff = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -407,23 +477,18 @@ function App() {
   };
 
   useEffect(() => {
-    if (!currentUser) return;
-    if (!userCanAccessPage(currentUser, page)) {
-      setPage("Dashboard");
-      return;
-    }
-    logAudit("Open Module", page, "Module viewed", currentUser);
-  }, [page, currentUser]);
+    if (currentUser && page) logAudit("Open Module", page, "Module viewed", currentUser);
+  }, [page]);
 
   const openAddStaff = () => {
-    if (currentUser?.role !== "Super Admin") return showMessage("Only Super Admin zai iya kara ma'aikaci.");
+    if (!canManageStaffDirectory(currentUser)) return showMessage("ICT ko Super Admin ne kawai za su iya ƙara ma'aikaci.");
     setEditingStaff(null);
     setStaffForm(emptyStaffForm);
     setShowStaffModal(true);
   };
 
   const openEditStaff = (person) => {
-    if (currentUser?.role !== "Super Admin") return showMessage("Only Super Admin zai iya gyara ma'aikaci.");
+    if (!canManageStaffDirectory(currentUser)) return showMessage("ICT ko Super Admin ne kawai za su iya gyara ma'aikaci.");
     setEditingStaff(person);
 
     setStaffForm({
@@ -443,8 +508,8 @@ function App() {
   };
 
   const saveStaff = (e) => {
-    if (currentUser?.role !== "Super Admin") return showMessage("Only Super Admin zai iya canza staff.");
     e.preventDefault();
+    if (!canManageStaffDirectory(currentUser)) return showMessage("ICT ko Super Admin ne kawai za su iya canza staff.");
 
     if (
       !staffForm.name.trim() ||
@@ -462,6 +527,9 @@ function App() {
             ? {
                 ...person,
                 ...staffForm,
+                username: staffForm.name.trim(),
+                department: Array.from(new Set([staffForm.department, ...(staffForm.departments || [])].filter(Boolean)))[0] || staffForm.department,
+                departments: Array.from(new Set([staffForm.department, ...(staffForm.departments || [])].filter(Boolean))),
               }
             : person
         )
@@ -469,10 +537,17 @@ function App() {
 
       showMessage("An sabunta ma'aikaci.");
     } else {
+      const selectedDepartments = Array.from(new Set([
+        staffForm.department,
+        ...(staffForm.departments || []),
+      ].filter(Boolean)));
       const newStaff = {
         id: Date.now(),
-        staffId: `BZ${String(staff.length).padStart(3, "0")}`,
+        staffId: nextStaffNumber(staff),
         ...staffForm,
+        username: staffForm.name.trim(),
+        department: selectedDepartments[0] || staffForm.department,
+        departments: selectedDepartments,
       };
 
       setStaff((prev) => [...prev, newStaff]);
@@ -485,7 +560,7 @@ function App() {
   };
 
   const deleteStaff = (id) => {
-    if (currentUser?.role !== "Super Admin") return showMessage("Only Super Admin zai iya goge staff.");
+    if (!canMutate(currentUser)) return showMessage("Super Admin kawai zai iya goge ma'aikaci.");
     const person = staff.find((item) => item.id === id);
 
     if (!person) return;
@@ -500,11 +575,19 @@ function App() {
   };
 
   const togglePermission = (permission) => {
+    if (!canMutate(currentUser)) return showMessage("Super Admin kawai zai iya canza permissions.");
     setEnabledPermissions((prev) => ({
       ...prev,
       [permission]: !prev[permission],
     }));
   };
+
+  useEffect(() => {
+    if (currentUser && !canAccessPage(currentUser, page)) {
+      setPage("Dashboard");
+      showMessage("Ba ka da izinin shiga wannan department.");
+    }
+  }, [currentUser, page]);
 
   if (!currentUser) {
     return (
@@ -518,6 +601,7 @@ function App() {
   }
 
   return (
+    <UserContext.Provider value={currentUser}>
     <div className="app">
       <style>{styles}</style>
 
@@ -536,232 +620,212 @@ function App() {
         </div>
 
         <nav className="menu">
-          <SecureMenuItem
+          <MenuItem
             label="Dashboard"
             icon="⌂"
-            currentUser={currentUser}
             active={page === "Dashboard"}
-            onClick={() => goToPage("Dashboard")}
+            onClick={() => setPage("Dashboard")}
+          />
+
+          <MenuItem
+            label="My Staff Dashboard"
+            icon="♟"
+            active={page === "My Staff Dashboard"}
+            onClick={() => setPage("My Staff Dashboard")}
           />
 
           <div className="menu-section">PATIENT SERVICES</div>
 
-          <SecureMenuItem
+          <MenuItem
             label="ICT Centre"
             icon="▣"
-            currentUser={currentUser}
             active={page === "ICT Centre"}
-            onClick={() => goToPage("ICT Centre")}
+            onClick={() => setPage("ICT Centre")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Records Unit"
             icon="▤"
-            currentUser={currentUser}
             active={page === "Records Unit"}
-            onClick={() => goToPage("Records Unit")}
+            onClick={() => setPage("Records Unit")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Nursing Unit"
             icon="♙"
-            currentUser={currentUser}
             active={page === "Nursing Unit"}
-            onClick={() => goToPage("Nursing Unit")}
+            onClick={() => setPage("Nursing Unit")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Consultant Room"
             icon="✚"
-            currentUser={currentUser}
             active={page === "Consultant Room"}
-            onClick={() => goToPage("Consultant Room")}
+            onClick={() => setPage("Consultant Room")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Laboratory"
             icon="⚗"
-            currentUser={currentUser}
             active={page === "Laboratory Unit"}
-            onClick={() => goToPage("Laboratory Unit")}
+            onClick={() => setPage("Laboratory Unit")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Pharmacy"
             icon="⚕"
-            currentUser={currentUser}
             active={page === "Pharmacy Unit"}
-            onClick={() => goToPage("Pharmacy Unit")}
+            onClick={() => setPage("Pharmacy Unit")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Ultrasound"
             icon="◉"
-            currentUser={currentUser}
             active={page === "Ultrasound Room"}
-            onClick={() => goToPage("Ultrasound Room")}
+            onClick={() => setPage("Ultrasound Room")}
           />
 
           <div className="menu-section">WARDS & PROGRAMS</div>
 
-          <SecureMenuItem
+          <MenuItem
             label="Male Ward"
             icon="M"
-            currentUser={currentUser}
             active={page === "Male Ward"}
-            onClick={() => goToPage("Male Ward")}
+            onClick={() => setPage("Male Ward")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Female Ward"
             icon="F"
-            currentUser={currentUser}
             active={page === "Female Ward"}
-            onClick={() => goToPage("Female Ward")}
+            onClick={() => setPage("Female Ward")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Maternity Ward"
             icon="♥"
-            currentUser={currentUser}
             active={page === "Maternity Ward"}
-            onClick={() => goToPage("Maternity Ward")}
+            onClick={() => setPage("Maternity Ward")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Child Ward"
             icon="C"
-            currentUser={currentUser}
             active={page === "Child Ward"}
-            onClick={() => goToPage("Child Ward")}
+            onClick={() => setPage("Child Ward")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Labour Room"
             icon="L"
-            currentUser={currentUser}
             active={page === "Labour Room"}
-            onClick={() => goToPage("Labour Room")}
+            onClick={() => setPage("Labour Room")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Immunization"
             icon="I"
-            currentUser={currentUser}
             active={page === "Immunization Unit"}
-            onClick={() => goToPage("Immunization Unit")}
+            onClick={() => setPage("Immunization Unit")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Family Planning"
             icon="P"
-            currentUser={currentUser}
             active={page === "Family Planning Unit"}
-            onClick={() => goToPage("Family Planning Unit")}
+            onClick={() => setPage("Family Planning Unit")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Adolescent Unit"
             icon="A"
-            currentUser={currentUser}
             active={page === "Adolescent Unit"}
-            onClick={() => goToPage("Adolescent Unit")}
+            onClick={() => setPage("Adolescent Unit")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Outpatient Services"
             icon="O"
-            currentUser={currentUser}
             active={page === "Outpatient Services"}
-            onClick={() => goToPage("Outpatient Services")}
+            onClick={() => setPage("Outpatient Services")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Reception / Next Patient"
             icon="R"
-            currentUser={currentUser}
             active={page === "Reception / Next Patient"}
-            onClick={() => goToPage("Reception / Next Patient")}
+            onClick={() => setPage("Reception / Next Patient")}
           />
 
           <div className="menu-section">ADMINISTRATION</div>
 
-          <SecureMenuItem
+          <MenuItem
             label="In-Charge"
             icon="◈"
-            currentUser={currentUser}
             active={page === "In-Charge"}
-            onClick={() => goToPage("In-Charge")}
+            onClick={() => setPage("In-Charge")}
           />
 
-          {currentUser.role === "Super Admin" && <SecureMenuItem
+          <MenuItem
             label="Staff & Permissions"
             icon="♟"
-            currentUser={currentUser}
             active={page === "Staff & Permissions"}
-            onClick={() => goToPage("Staff & Permissions")}
-          />}
+            onClick={() => setPage("Staff & Permissions")}
+          />
 
-          <SecureMenuItem
+          <MenuItem
             label="General Cashier"
             icon="₦"
-            currentUser={currentUser}
             active={page === "General Cashier"}
-            onClick={() => goToPage("General Cashier")}
+            onClick={() => setPage("General Cashier")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Roster & Attendance"
             icon="▦"
-            currentUser={currentUser}
             active={page === "Roster & Attendance"}
-            onClick={() => goToPage("Roster & Attendance")}
+            onClick={() => setPage("Roster & Attendance")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Reports"
             icon="▥"
-            currentUser={currentUser}
             active={page === "Reports"}
-            onClick={() => goToPage("Reports")}
+            onClick={() => setPage("Reports")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Alerts"
             icon="!"
-            currentUser={currentUser}
             active={page === "Alerts"}
-            onClick={() => goToPage("Alerts")}
+            onClick={() => setPage("Alerts")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="SMS / Notifications"
             icon="✉"
-            currentUser={currentUser}
             active={page === "SMS / Notifications"}
-            onClick={() => goToPage("SMS / Notifications")}
+            onClick={() => setPage("SMS / Notifications")}
           />
 
-          <SecureMenuItem
+          <MenuItem
             label="Audit Logs"
             icon="◌"
-            currentUser={currentUser}
             active={page === "Audit Logs"}
-            onClick={() => goToPage("Audit Logs")}
+            onClick={() => setPage("Audit Logs")}
           />
 
-          {currentUser.role === "Super Admin" && <SecureMenuItem
+          <MenuItem
             label="Settings"
             icon="⚙"
-            currentUser={currentUser}
             active={page === "Settings"}
-            onClick={() => goToPage("Settings")}
-          />}
+            onClick={() => setPage("Settings")}
+          />
 
-          <SecureMenuItem label="ICT Stock / Inventory" icon="📦" currentUser={currentUser} active={page === "ICT Stock / Inventory"} onClick={() => goToPage("ICT Stock / Inventory")} />
-          <SecureMenuItem label="Appointments" icon="📅" currentUser={currentUser} active={page === "Appointments"} onClick={() => goToPage("Appointments")} />
-          <SecureMenuItem label="Patient Card Printing" icon="▤" currentUser={currentUser} active={page === "Patient Card Printing"} onClick={() => goToPage("Patient Card Printing")} />
-          {currentUser.role === "Super Admin" && <SecureMenuItem label="Backup & Restore" icon="↕" currentUser={currentUser} active={page === "Backup & Restore"} onClick={() => goToPage("Backup & Restore")} />}
+          <MenuItem label="ICT Stock / Inventory" icon="📦" active={page === "ICT Stock / Inventory"} onClick={() => setPage("ICT Stock / Inventory")} />
+          <MenuItem label="Appointments" icon="📅" active={page === "Appointments"} onClick={() => setPage("Appointments")} />
+          <MenuItem label="Patient Card Printing" icon="▤" active={page === "Patient Card Printing"} onClick={() => setPage("Patient Card Printing")} />
+          <MenuItem label="Backup & Restore" icon="↕" active={page === "Backup & Restore"} onClick={() => setPage("Backup & Restore")} />
         </nav>
 
         <div className="sidebar-footer">
@@ -776,11 +840,12 @@ function App() {
             <div className="top-title">{page}</div>
             <div className="top-location">
               Waziri Maccido Road, Bazza Area, Sokoto
+              <span style={{marginLeft:10,fontSize:11,color:supabaseReady?"#18a56b":"#d97706"}}>● Supabase Client {supabaseReady ? "Ready" : "Not Ready"}</span>
             </div>
           </div>
 
           <div className="top-actions">
-            <button className="icon-button" onClick={() => goToPage("Alerts")}>
+            <button className="icon-button" onClick={() => setPage("Alerts")}>
               🔔
             </button>
 
@@ -811,8 +876,7 @@ function App() {
               staff={staff}
               attendance={attendance}
               setAttendance={setAttendance}
-              setPage={goToPage}
-              canAccessPage={canAccessPage}
+              setPage={setPage}
             />
           )}
 
@@ -843,11 +907,30 @@ function App() {
             />
           )}
 
+          {page === "My Staff Dashboard" && (
+            <StaffPersonalDashboard
+              currentUser={currentUser}
+              staff={staff}
+              attendance={attendance}
+              setAttendance={setAttendance}
+              rosterEntries={rosterEntries}
+              showMessage={showMessage}
+            />
+          )}
+
           {page === "ICT Centre" && (
             <ICTPage
               patients={patients}
               setPatients={setPatients}
               showMessage={showMessage}
+              currentUser={currentUser}
+              staff={staff}
+              openAddStaff={openAddStaff}
+              openEditStaff={openEditStaff}
+              deleteStaff={deleteStaff}
+              search={search}
+              setSearch={setSearch}
+              logAudit={logAudit}
             />
           )}
 
@@ -1072,17 +1155,8 @@ function App() {
                 />
               </FormField>
 
-              <FormField label="Username">
-                <input
-                  value={staffForm.username}
-                  onChange={(e) =>
-                    setStaffForm({
-                      ...staffForm,
-                      username: e.target.value,
-                    })
-                  }
-                  placeholder="Login username"
-                />
+              <FormField label="Username (automatic from staff name)">
+                <input value={staffForm.name.trim()} readOnly placeholder="Staff name becomes username" />
               </FormField>
 
               <FormField label="Password">
@@ -1112,6 +1186,19 @@ function App() {
                     <option key={department}>{department}</option>
                   ))}
                 </select>
+              </FormField>
+
+              <FormField label="Department(s) — Primary + additional departments">
+                <div className="button-row">
+                  {[...departments, ...rosterOnlyDepartments].filter((d) => !["General Cashier", "In-Charge"].includes(d)).map((department) => (
+                    <button type="button" key={department} className={`small-button ${(staffForm.departments || []).includes(department) ? "primary" : ""}`} onClick={() => {
+                      const current = Array.isArray(staffForm.departments) ? staffForm.departments : [];
+                      const next = current.includes(department) ? current.filter((d) => d !== department) : [...current, department];
+                      setStaffForm({ ...staffForm, departments: next, department: next[0] || staffForm.department });
+                    }}>{department}</button>
+                  ))}
+                </div>
+                <small className="muted">Zaɓi department ɗin primary sannan ka iya danna 2 ko fiye idan staff yana aiki a departments da yawa.</small>
               </FormField>
 
               <FormField label="Role">
@@ -1207,6 +1294,8 @@ function App() {
       )}
     </div>
   );
+    </UserContext.Provider>
+  )
 }
 
 function LoginScreen({
@@ -1282,33 +1371,20 @@ function LoginScreen({
 }
 
 function MenuItem({ label, icon, active, onClick }) {
+  const user = useContext(UserContext);
+  if (user && !canAccessPage(user, label)) return null;
   return (
-    <button className={`menu-item ${active ? "active" : ""}`} onClick={onClick}>
+    <button
+      className={`menu-item ${active ? "active" : ""}`}
+      onClick={onClick}
+    >
       <span className="menu-icon">{icon}</span>
       <span>{label}</span>
     </button>
   );
 }
 
-function SecureMenuItem({ label, icon, active, onClick, currentUser }) {
-  const labelMap = {
-    Laboratory: "Laboratory Unit",
-    Pharmacy: "Pharmacy Unit",
-    Ultrasound: "Ultrasound Room",
-    Immunization: "Immunization Unit",
-    "Family Planning": "Family Planning Unit",
-    "Adolescent Unit": "Adolescent Unit",
-    "Patient Card Printing": "Patient Card Printing",
-    "ICT Stock / Inventory": "ICT Stock / Inventory",
-    Appointments: "Appointments",
-    "Backup & Restore": "Backup & Restore",
-  };
-  const target = labelMap[label] || label;
-  if (!userCanAccessPage(currentUser, target)) return null;
-  return <MenuItem label={label} icon={icon} active={active} onClick={onClick} />;
-}
-
-function DashboardPage({ currentUser, patients, staff, attendance = [], setAttendance, setPage, canAccessPage }) {
+function DashboardPage({ currentUser, patients, staff, attendance = [], setAttendance, setPage }) {
   return (
     <div>
       <div className="welcome">
@@ -1401,35 +1477,32 @@ function DashboardPage({ currentUser, patients, staff, attendance = [], setAtten
         <div className="panel">
           <div className="panel-header">
             <div>
-              <h2>{currentUser?.role === "Super Admin" || currentUser?.role === "In-Charge" ? "Department Overview" : "My Department"}</h2>
-              <p>{currentUser?.role === "Super Admin" || currentUser?.role === "In-Charge" ? "System-wide monitoring" : "Only your assigned department workspace is shown here"}</p>
+              <h2>Department Overview</h2>
+              <p>Current activity by department</p>
             </div>
           </div>
 
-          {(currentUser?.role === "Super Admin" || currentUser?.role === "In-Charge") ? (
-            <div className="department-list">
-              {[
-                ["Records Unit", "12 patients waiting"],
-                ["Nursing Unit", "8 patients waiting"],
-                ["Consultant Room", "5 consultations"],
-                ["Laboratory Unit", "7 new requests"],
-                ["Pharmacy Unit", "9 prescriptions"],
-                ["Ultrasound Room", "4 new requests"],
-              ].map(([name, info]) => (
-                <div className="department-row" key={name}>
-                  <div className="dept-icon">+</div>
-                  <div><strong>{name}</strong><span>{info}</span></div>
-                  <span className="status-dot"></span>
+          <div className="department-list">
+            {[
+              ["Records Unit", "12 patients waiting"],
+              ["Nursing Unit", "8 patients waiting"],
+              ["Consultant Room", "5 consultations"],
+              ["Laboratory Unit", "7 new requests"],
+              ["Pharmacy Unit", "9 prescriptions"],
+              ["Ultrasound Room", "4 new requests"],
+            ].map(([name, info]) => (
+              <div className="department-row" key={name}>
+                <div className="dept-icon">+</div>
+
+                <div>
+                  <strong>{name}</strong>
+                  <span>{info}</span>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="card" style={{margin:0}}>
-              <h3>{currentUser?.department || "Assigned Department"}</h3>
-              <p className="muted">You can only access work assigned to your department and approved workflows.</p>
-              <p><strong>Role:</strong> {currentUser?.role}</p>
-            </div>
-          )}
+
+                <span className="status-dot"></span>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="panel">
@@ -1441,37 +1514,58 @@ function DashboardPage({ currentUser, patients, staff, attendance = [], setAtten
           </div>
 
           <div className="quick-actions">
-            {canAccessPage?.("ICT Centre") && <button onClick={() => setPage("ICT Centre")}><span>▣</span>Register Patient</button>}
-            {canAccessPage?.("Records Unit") && <button onClick={() => setPage("Records Unit")}><span>▤</span>Patient Records</button>}
-            {canAccessPage?.("General Cashier") && <button onClick={() => setPage("General Cashier")}><span>₦</span>Cashier</button>}
-            {canAccessPage?.("Roster & Attendance") && <button onClick={() => setPage("Roster & Attendance")}><span>▦</span>Attendance</button>}
+            <button onClick={() => setPage("ICT Centre")}>
+              <span>▣</span>
+              Register Patient
+            </button>
+
+            <button onClick={() => setPage("Records Unit")}>
+              <span>▤</span>
+              Patient Records
+            </button>
+
+            <button onClick={() => setPage("General Cashier")}>
+              <span>₦</span>
+              Cashier
+            </button>
+
+            <button onClick={() => setPage("Roster & Attendance")}>
+              <span>▦</span>
+              Attendance
+            </button>
           </div>
         </div>
       </div>
 
-      {(currentUser?.role === "Super Admin" || currentUser?.role === "In-Charge") && (
-        <div className="panel recent-panel">
-          <div className="panel-header">
-            <div><h2>Recent Patients</h2><p>Latest patient registrations</p></div>
-            <button className="text-button" onClick={() => setPage("ICT Centre")}>View All</button>
+      <div className="panel recent-panel">
+        <div className="panel-header">
+          <div>
+            <h2>Recent Patients</h2>
+            <p>Latest patient registrations</p>
           </div>
-          <PatientTable patients={patients} />
+
+          <button
+            className="text-button"
+            onClick={() => setPage("ICT Centre")}
+          >
+            View All
+          </button>
         </div>
-      )}
+
+        <PatientTable patients={patients} />
+      </div>
     </div>
   );
 }
 
-function ICTPage({ patients, setPatients, showMessage }) {
+function ICTPage({ patients, setPatients, showMessage, currentUser, staff = [], openAddStaff, openEditStaff, deleteStaff, search, setSearch }) {
   const [form, setForm] = useState({
     surname: "",
     otherNames: "",
-    phone: "",
-    sex: "Female",
     age: "",
     address: "",
-    broughtByName: "",
-    broughtByRelationship: "",
+    phone: "",
+    sex: "Female",
     spouse: "",
   });
 
@@ -1487,12 +1581,11 @@ function ICTPage({ patients, setPatients, showMessage }) {
       id: Date.now(),
       card: `BZ-P${String(patients.length + 1).padStart(3, "0")}`,
       name: `${form.surname} ${form.otherNames}`,
+      age: form.age.trim(),
+      address: form.address.trim(),
       phone: form.phone || "N/A",
       sex: form.sex,
-      age: form.age === "" ? "" : Number(form.age),
-      address: form.address.trim(),
-      broughtByName: form.broughtByName.trim(),
-      broughtByRelationship: form.broughtByRelationship,
+      spouseName: form.spouse.trim(),
       status: "Active",
     };
 
@@ -1501,12 +1594,10 @@ function ICTPage({ patients, setPatients, showMessage }) {
     setForm({
       surname: "",
       otherNames: "",
-      phone: "",
-      sex: "Female",
       age: "",
       address: "",
-      broughtByName: "",
-      broughtByRelationship: "",
+      phone: "",
+      sex: "Female",
       spouse: "",
     });
 
@@ -1564,24 +1655,8 @@ function ICTPage({ patients, setPatients, showMessage }) {
               />
             </FormField>
 
-            <FormField label="Phone Number">
-              <input
-                value={form.phone}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    phone: e.target.value,
-                  })
-                }
-                placeholder="Phone number"
-              />
-            </FormField>
-
             <FormField label="Age">
               <input
-                type="number"
-                min="0"
-                max="130"
                 value={form.age}
                 onChange={(e) =>
                   setForm({
@@ -1606,44 +1681,17 @@ function ICTPage({ patients, setPatients, showMessage }) {
               />
             </FormField>
 
-            <FormField label="Name of Person Who Brought Patient">
+            <FormField label="Phone Number">
               <input
-                value={form.broughtByName}
+                value={form.phone}
                 onChange={(e) =>
                   setForm({
                     ...form,
-                    broughtByName: e.target.value,
+                    phone: e.target.value,
                   })
                 }
-                placeholder="Full name"
+                placeholder="Phone number"
               />
-            </FormField>
-
-            <FormField label="Relationship to Patient">
-              <select
-                value={form.broughtByRelationship}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    broughtByRelationship: e.target.value,
-                  })
-                }
-              >
-                <option value="">Select relationship</option>
-                <option>Father</option>
-                <option>Mother</option>
-                <option>Brother</option>
-                <option>Sister</option>
-                <option>Husband</option>
-                <option>Wife</option>
-                <option>Son</option>
-                <option>Daughter</option>
-                <option>Uncle</option>
-                <option>Aunt</option>
-                <option>Guardian</option>
-                <option>Friend</option>
-                <option>Other</option>
-              </select>
             </FormField>
 
             <FormField label="Sex / Gender">
@@ -1682,6 +1730,49 @@ function ICTPage({ patients, setPatients, showMessage }) {
           </div>
         </form>
       </div>
+
+      {(currentUser?.role === "ICT Staff" || currentUser?.role === "Super Admin") && (
+        <div className="panel recent-panel">
+          <div className="panel-header">
+            <div>
+              <h2>Staff Management</h2>
+              <p>ICT Centre: ƙara ma'aikata, username, password, primary department da ƙarin departments.</p>
+            </div>
+            <button className="button primary" onClick={openAddStaff}>+ Add Staff</button>
+          </div>
+          <div className="toolbar">
+            <input
+              className="search-input"
+              value={search || ""}
+              onChange={(e) => setSearch?.(e.target.value)}
+              placeholder="Search staff, staff ID, username ko department..."
+            />
+          </div>
+          <div className="table-scroll">
+            <table>
+              <thead><tr><th>Staff ID</th><th>Name</th><th>Username</th><th>Primary Department</th><th>Departments</th><th>Role</th><th>Status</th><th>Action</th></tr></thead>
+              <tbody>
+                {(staff || []).filter((person) => {
+                  const q = String(search || "").toLowerCase().trim();
+                  if (!q) return true;
+                  return [person.name, person.staffId, person.username, person.department, person.role, ...(person.departments || [])].some(v => String(v || "").toLowerCase().includes(q));
+                }).map((person) => (
+                  <tr key={person.id}>
+                    <td><strong>{person.staffId}</strong></td>
+                    <td>{person.name}</td>
+                    <td>{person.username}</td>
+                    <td>{person.department}</td>
+                    <td>{(person.departments || [person.department]).join(", ")}</td>
+                    <td>{person.role}</td>
+                    <td>{person.status}</td>
+                    <td><button className="small-button" onClick={() => openEditStaff(person)}>Edit</button>{currentUser?.role === "Super Admin" && <button className="small-button danger" onClick={() => deleteStaff(person.id)}>Delete</button>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="panel recent-panel">
         <div className="panel-header">
@@ -1917,28 +2008,8 @@ function RecordsPage({ patients, showMessage, setTransactions, transactions = []
             </div>
 
             <div className="access-box">
-              <strong>Age</strong>
-              <span>{selectedPatient.age !== "" && selectedPatient.age != null ? `${selectedPatient.age} years` : "Not provided"}</span>
-            </div>
-
-            <div className="access-box">
-              <strong>Address</strong>
-              <span>{selectedPatient.address || "Not provided"}</span>
-            </div>
-
-            <div className="access-box">
               <strong>Sex</strong>
               <span>{selectedPatient.sex}</span>
-            </div>
-
-            <div className="access-box">
-              <strong>Person Who Brought Patient</strong>
-              <span>{selectedPatient.broughtByName || "Not provided"}</span>
-            </div>
-
-            <div className="access-box">
-              <strong>Relationship to Patient</strong>
-              <span>{selectedPatient.broughtByRelationship || "Not provided"}</span>
             </div>
           </div>
 
@@ -2830,6 +2901,38 @@ function GeneralCashierPage({ transactions }) {
   );
 }
 
+function StaffPersonalDashboard({ currentUser, staff = [], attendance = [], setAttendance, rosterEntries = [], showMessage }) {
+  const person = staff.find((p) => p.id === currentUser?.id || p.staffId === currentUser?.staffId) || currentUser;
+  const todayKey = new Date().toLocaleDateString();
+  const record = [...attendance].reverse().find((a) => a.staffId === person?.staffId && a.date === todayKey);
+  const assignedDepartments = Array.from(new Set((person?.departments || [person?.department]).filter(Boolean)));
+  const myRoster = rosterEntries.filter((entry) => entry.staffId === person?.staffId).slice(0, 31);
+  const signIn = () => {
+    if (!person) return;
+    if (record?.signIn && !record?.signOut) return showMessage("Ka riga ka yi Sign In yau.");
+    setAttendance((prev) => [...prev, { id: `${person.staffId}-${Date.now()}`, staffId: person.staffId, name: person.name, department: person.department, departments: assignedDepartments, date: todayKey, signIn: new Date().toLocaleTimeString(), signOut: "", dutyStatus: "On Duty", recordedBy: person.name }]);
+    showMessage("An yi Sign In.");
+  };
+  const signOut = () => {
+    const open = [...attendance].reverse().find((a) => a.staffId === person?.staffId && a.date === todayKey && !a.signOut);
+    if (!open) return showMessage("Babu Sign In na yau.");
+    setAttendance((prev) => prev.map((a) => a.id === open.id ? { ...a, signOut: new Date().toLocaleTimeString(), dutyStatus: "Completed", recordedBy: person.name } : a));
+    showMessage("An yi Sign Out.");
+  };
+  return <div>
+    <PageHeader title={`My Staff Dashboard — ${person?.name || "Staff"}`} subtitle="Your staff information, assigned departments, roster and personal attendance" icon="♟" />
+    <div className="stats-grid">
+      <StatCard title="Staff Number" value={person?.staffId || "—"} icon="#" />
+      <StatCard title="Department(s)" value={assignedDepartments.length} icon="▦" />
+      <StatCard title="Today Sign In" value={record?.signIn || "—"} icon="✓" />
+      <StatCard title="Today Sign Out" value={record?.signOut || "—"} icon="↗" />
+    </div>
+    <div className="panel"><h2>Staff Information</h2><div className="form-grid"><div><strong>Name</strong><div>{person?.name || "—"}</div></div><div><strong>Username</strong><div>{person?.username || "—"}</div></div><div><strong>Role</strong><div>{person?.role || "—"}</div></div><div><strong>Roster Type</strong><div>{person?.category === "Student" ? "Weekly" : "Monthly"}</div></div><div><strong>Primary Department</strong><div>{person?.department || "—"}</div></div><div><strong>Assigned Departments</strong><div>{assignedDepartments.join(", ") || "—"}</div></div></div></div>
+    <div className="panel"><div className="panel-header"><div><h2>My Attendance</h2><p>System login/logout is separate from duty Sign In/Sign Out.</p></div><div className="button-row"><button className="button primary" onClick={signIn}>Sign In</button><button className="button secondary" onClick={signOut}>Sign Out</button></div></div><p><strong>Status:</strong> {record?.dutyStatus || "Not Signed In"}</p></div>
+    <div className="panel"><h2>My Roster</h2><div className="table-scroll"><table><thead><tr><th>Date</th><th>Department(s)</th><th>Morning</th><th>Evening</th><th>Night</th><th>Period</th></tr></thead><tbody>{myRoster.length ? myRoster.map((entry)=><tr key={entry.id}><td>{entry.date}</td><td>{(entry.departments||[]).join(", ")}</td><td>{entry.shifts?.Morning||"—"}</td><td>{entry.shifts?.Evening||"—"}</td><td>{entry.shifts?.Night||"—"}</td><td>{entry.period}</td></tr>) : <tr><td colSpan="6">Babu roster da aka generate tukuna.</td></tr>}</tbody></table></div></div>
+  </div>;
+}
+
 function RosterPage({
   staff,
   setStaff,
@@ -2842,33 +2945,25 @@ function RosterPage({
 }) {
   const shifts = ["Morning", "Evening", "Night"];
   const categories = ["Staff", "Volunteer", "Student"];
-  const [view, setView] = useState("general");
-  const [department, setDepartment] = useState("All Departments");
-  const [period, setPeriod] = useState("current");
+  const isPrivilegedViewer = ["Super Admin", "ICT Staff", "In-Charge"].includes(currentUser?.role);
+  const lockedDepartment = currentUser?.department || "";
+  const canManageAttendanceHere = canManageAttendance(currentUser);
+  const canManageSetup = canManageStaffDirectory(currentUser);
+  const [view, setView] = useState(isPrivilegedViewer ? "general" : "department");
+  const [department, setDepartment] = useState(isPrivilegedViewer ? "All Departments" : lockedDepartment);
   const [selectedStaffId, setSelectedStaffId] = useState("");
   const [setupOpen, setSetupOpen] = useState(false);
-  const [setup, setSetup] = useState({
-    staffId: "",
-    category: "Staff",
-    departments: [],
-    maritalStatus: "Single",
-    allowedShifts: ["Morning", "Evening", "Night"],
-    isHOD: false,
-  });
+  const [setup, setSetup] = useState({ staffId: "", category: "Staff", departments: [], maritalStatus: "Single", allowedShifts: shifts, isHOD: false });
 
   const today = new Date();
   const todayKey = today.toLocaleDateString();
-  const monthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
   const weekStart = new Date(today);
   weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-  const weekKey = weekStart.toISOString().slice(0, 10);
 
   const eligibleShifts = (person) => {
     if (person.isHOD || (person.role || "").toLowerCase().includes("hod")) return shifts;
     if (person.maritalStatus === "Married") return ["Morning", "Evening"];
-    if (person.category === "Student" || person.category === "Volunteer") {
-      return person.allowedShifts?.length ? person.allowedShifts : ["Morning", "Evening"];
-    }
+    if (person.category === "Student" || person.category === "Volunteer") return person.allowedShifts?.length ? person.allowedShifts : ["Morning", "Evening"];
     return person.allowedShifts?.length ? person.allowedShifts : shifts;
   };
 
@@ -2878,24 +2973,42 @@ function RosterPage({
     return index % 7 < 4 ? "Duty" : "Off";
   };
 
+  const userDepartments = Array.from(new Set((currentUser?.departments || [currentUser?.department]).filter(Boolean)));
+  const allDepartments = ["All Departments", ...Array.from(new Set(staff.flatMap((p) => p.departments || [p.department]).filter(Boolean)))];
+  const allowedDepartmentChoices = isPrivilegedViewer ? allDepartments : userDepartments;
+  const activeDepartment = isPrivilegedViewer ? department : lockedDepartment;
+  const visibleStaff = activeDepartment === "All Departments" ? staff : staff.filter((p) => (p.departments || [p.department]).includes(activeDepartment));
+  const visibleEntries = rosterEntries.filter((entry) => activeDepartment === "All Departments" || (entry.departments || []).includes(activeDepartment));
+  const todayAttendance = attendance.filter((a) => a.date === todayKey);
+  const signedIn = todayAttendance.filter((a) => a.signIn && !a.signOut);
+  const signedOut = todayAttendance.filter((a) => a.signOut);
+  const onDuty = todayAttendance.filter((a) => a.dutyStatus === "On Duty");
+
   const generateRoster = () => {
+    if (!canManageSetup) return showMessage("ICT ko Super Admin ne kawai za su iya generate roster.");
     const generated = [];
+    const seen = new Set();
     staff.forEach((person) => {
       const isStudent = person.category === "Student";
       const days = isStudent ? 7 : new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
       const start = isStudent ? new Date(weekStart) : new Date(today.getFullYear(), today.getMonth(), 1);
+      const assignedDepartments = Array.from(new Set((person.departments || [person.department]).filter(Boolean)));
       const allowed = eligibleShifts(person);
       for (let i = 0; i < days; i++) {
         const d = new Date(start);
         d.setDate(start.getDate() + i);
+        const dateKey = d.toISOString().slice(0, 10);
+        const uniqueKey = `${person.staffId}-${dateKey}`;
+        if (seen.has(uniqueKey)) continue;
+        seen.add(uniqueKey);
         generated.push({
-          id: `${person.id}-${d.toISOString().slice(0, 10)}`,
+          id: `${person.staffId}-${dateKey}`,
           staffId: person.staffId,
           name: person.name,
           category: person.category || "Staff",
-          departments: person.departments || [person.department].filter(Boolean),
+          departments: assignedDepartments,
           date: d.toLocaleDateString(),
-          dateKey: d.toISOString().slice(0, 10),
+          dateKey,
           period: isStudent ? "Weekly" : "Monthly",
           shifts: Object.fromEntries(shifts.map((shift) => [shift, allowed.includes(shift) ? cycleDuty(shift, i) : "—"])),
           rules: "Morning 6 duty/1 off • Evening 5 duty/2 off • Night 4 duty/3 off",
@@ -2903,198 +3016,84 @@ function RosterPage({
       }
     });
     setRosterEntries(generated);
-    showMessage("An ƙirƙiri sabon roster kuma an ajiye shi.");
+    showMessage("An ƙirƙiri roster automatic kuma an cire duplicate.");
   };
 
-  const signIn = (person) => {
-    const existing = attendance.find((a) => a.staffId === person.staffId && a.date === todayKey && !a.signOut);
-    if (existing) {
-      showMessage("Wannan staff ya riga ya yi Sign In yau.");
-      return;
+  const createOrUpdateAttendance = (person, mode) => {
+    if (!canManageAttendanceHere) return showMessage("ICT ko Super Admin ne kawai za su iya yi wa staff Sign In / Sign Out.");
+    const current = [...attendance].reverse().find((a) => a.staffId === person.staffId && a.date === todayKey && !a.signOut);
+    if (mode === "in") {
+      if (current) return showMessage("Wannan staff ya riga ya yi Sign In yau.");
+      const record = { id: `${person.staffId}-${Date.now()}`, staffId: person.staffId, name: person.name, department: person.department, departments: person.departments || [person.department], date: todayKey, signIn: new Date().toLocaleTimeString(), signOut: "", dutyStatus: "On Duty", recordedBy: currentUser?.name || "System" };
+      setAttendance((prev) => [...prev, record]);
+      showMessage(`${person.name} ya yi Sign In.`);
+    } else {
+      if (!current) return showMessage("Babu Sign In na yau da za a yi Sign Out.");
+      setAttendance((prev) => prev.map((a) => a.id === current.id ? { ...a, signOut: new Date().toLocaleTimeString(), dutyStatus: "Completed", recordedBy: currentUser?.name || "System" } : a));
+      showMessage(`${person.name} ya yi Sign Out.`);
     }
-    const now = new Date().toLocaleTimeString();
-    setAttendance((prev) => [
-      ...prev.filter((a) => !(a.staffId === person.staffId && a.date === todayKey && !a.signOut)),
-      {
-        id: `${person.staffId}-${Date.now()}`,
-        staffId: person.staffId,
-        name: person.name,
-        department: person.department,
-        date: todayKey,
-        signIn: now,
-        signOut: "",
-        dutyStatus: "On Duty",
-      },
-    ]);
-    showMessage(`${person.name} ya yi Sign In.`);
   };
-
-  const signOut = (person) => {
-    const existing = [...attendance].reverse().find((a) => a.staffId === person.staffId && a.date === todayKey && !a.signOut);
-    if (!existing) {
-      showMessage("Babu Sign In na yau da za a yi Sign Out.");
-      return;
-    }
-    setAttendance((prev) => prev.map((a) => a.id === existing.id ? { ...a, signOut: new Date().toLocaleTimeString(), dutyStatus: "Completed" } : a));
-    showMessage(`${person.name} ya yi Sign Out.`);
-  };
-
-  const allDepartments = ["All Departments", ...Array.from(new Set(staff.flatMap((p) => p.departments || [p.department]).filter(Boolean)))];
-  const visibleStaff = department === "All Departments" ? staff : staff.filter((p) => (p.departments || [p.department]).includes(department));
-  const visibleEntries = rosterEntries.filter((entry) => department === "All Departments" || (entry.departments || []).includes(department));
-  const todayAttendance = attendance.filter((a) => a.date === todayKey);
-  const signedIn = todayAttendance.filter((a) => a.signIn && !a.signOut);
-  const signedOut = todayAttendance.filter((a) => a.signOut);
-  const onDuty = todayAttendance.filter((a) => a.dutyStatus === "On Duty");
 
   const openSetup = (person) => {
+    if (!canManageSetup) return showMessage("ICT ko Super Admin ne kawai za su iya gyara roster setup.");
     setSelectedStaffId(person.staffId);
-    setSetup({
-      staffId: person.staffId,
-      category: person.category || "Staff",
-      departments: person.departments || [person.department].filter(Boolean),
-      maritalStatus: person.maritalStatus || "Single",
-      allowedShifts: person.allowedShifts?.length ? person.allowedShifts : ["Morning", "Evening", "Night"],
-      isHOD: !!person.isHOD,
-    });
+    setSetup({ staffId: person.staffId, category: person.category || "Staff", departments: Array.from(new Set(person.departments || [person.department].filter(Boolean))), maritalStatus: person.maritalStatus || "Single", allowedShifts: person.allowedShifts?.length ? person.allowedShifts : shifts, isHOD: !!person.isHOD });
     setSetupOpen(true);
   };
 
   const saveSetup = () => {
+    if (!canManageSetup) return showMessage("ICT ko Super Admin ne kawai za su iya gyara roster setup.");
     const person = staff.find((p) => p.staffId === setup.staffId);
     if (!person) return;
-    // Staff data is persisted by the parent. This event stores roster setup separately,
-    // so the roster remains available even after logout/login or reopening the app.
-    const updated = {
-      category: setup.category,
-      departments: setup.departments.length ? setup.departments : [person.department].filter(Boolean),
-      maritalStatus: setup.maritalStatus,
-      isHOD: setup.isHOD,
-      allowedShifts: setup.allowedShifts.length ? setup.allowedShifts : ["Morning", "Evening"],
-      department: setup.departments[0] || person.department,
-    };
+    const selectedDepartments = Array.from(new Set(setup.departments.filter(Boolean)));
+    if (!selectedDepartments.length) return showMessage("Dole a zaɓi aƙalla department ɗaya.");
+    const updated = { category: setup.category, departments: selectedDepartments, department: selectedDepartments[0], maritalStatus: setup.maritalStatus, isHOD: setup.isHOD, allowedShifts: setup.allowedShifts.length ? setup.allowedShifts : ["Morning", "Evening"] };
     setStaff((prev) => prev.map((p) => p.staffId === person.staffId ? { ...p, ...updated } : p));
-    setRosterEntries((prev) => prev.map((entry) => entry.staffId === person.staffId ? { ...entry, ...updated } : entry));
-    showMessage("An ajiye Staff / Roster setup.");
+    setRosterEntries((prev) => prev.map((entry) => entry.staffId === person.staffId ? { ...entry, ...updated, departments: selectedDepartments } : entry));
+    showMessage("An sabunta departments da roster setup.");
     setSetupOpen(false);
   };
 
-  const printRoster = () => {
-    window.print();
-  };
+  const printRoster = () => window.print();
 
   return (
     <div>
-      <PageHeader title="Roster & Staff Attendance" subtitle="General roster, department rosters, sign in/out and attendance" icon="▦" />
-
+      <PageHeader title="Roster & Staff Attendance" subtitle="Automatic general/department roster, staff attendance and sign in/out" icon="▦" />
       <div className="stats-grid">
-        <StatCard title="Total Staff" value={staff.length} icon="♟" />
+        <StatCard title="Total Staff" value={visibleStaff.length} icon="♟" />
         <StatCard title="Signed In Today" value={signedIn.length} icon="✓" />
         <StatCard title="Signed Out Today" value={signedOut.length} icon="↗" />
         <StatCard title="On Duty" value={onDuty.length} icon="▦" />
       </div>
 
       <div className="toolbar">
-        <button className={`button ${view === "general" ? "primary" : "secondary"}`} onClick={() => setView("general")}>General Roster</button>
+        {isPrivilegedViewer && <button className={`button ${view === "general" ? "primary" : "secondary"}`} onClick={() => setView("general")}>General Roster</button>}
         <button className={`button ${view === "department" ? "primary" : "secondary"}`} onClick={() => setView("department")}>Department Roster</button>
-        <button className={`button ${view === "attendance" ? "primary" : "secondary"}`} onClick={() => setView("attendance")}>Sign In / Sign Out</button>
-        <button className={`button ${view === "setup" ? "primary" : "secondary"}`} onClick={() => setView("setup")}>Staff Roster Setup</button>
+        {canManageAttendanceHere && <button className={`button ${view === "attendance" ? "primary" : "secondary"}`} onClick={() => setView("attendance")}>Sign In / Sign Out</button>}
+        {canManageSetup && <button className={`button ${view === "setup" ? "primary" : "secondary"}`} onClick={() => setView("setup")}>Staff Roster Setup</button>}
       </div>
 
       {(view === "general" || view === "department") && (
         <div className="panel">
-          <div className="panel-header">
-            <div>
-              <h2>{view === "general" ? "General Staff Roster" : `${department} Roster`}</h2>
-              <p>Staff/Volunteers use monthly roster; Students use weekly roster.</p>
-            </div>
-            <div className="button-row">
-              <button className="button primary" onClick={generateRoster}>Generate Roster</button>
-              <button className="button secondary" onClick={printRoster}>Print Roster</button>
-            </div>
-          </div>
-
-          {view === "department" && (
-            <div className="field" style={{ maxWidth: 360 }}>
-              <label>Department</label>
-              <select value={department} onChange={(e) => setDepartment(e.target.value)}>
-                {allDepartments.map((d) => <option key={d}>{d}</option>)}
-              </select>
-            </div>
-          )}
-
-          <div className="table-scroll">
-            <table>
-              <thead><tr><th>Staff</th><th>Category</th><th>Department(s)</th><th>Period</th><th>Morning</th><th>Evening</th><th>Night</th><th>Sign In</th><th>Sign Out</th><th>Rules</th></tr></thead>
-              <tbody>
-                {(visibleEntries.length ? visibleEntries.slice(0, 120) : visibleStaff.map((person, index) => ({
-                  id: `preview-${person.id}`, name: person.name, category: person.category || "Staff", departments: person.departments || [person.department], period: person.category === "Student" ? "Weekly" : "Monthly", shifts: Object.fromEntries(shifts.map((sh) => [sh, eligibleShifts(person).includes(sh) ? cycleDuty(sh, index) : "—"])), rules: "Morning 6/1 • Evening 5/2 • Night 4/3"
-                }))).map((entry) => (
-                  <tr key={entry.id}>
-                    <td>{entry.name}</td><td>{entry.category}</td><td>{(entry.departments || []).join(", ")}</td><td>{entry.period}</td>
-                    {shifts.map((sh) => <td key={sh}><span className="shift-badge">{entry.shifts?.[sh] || "—"}</span></td>)}
-                    <td>{[...attendance].reverse().find((a) => a.staffId === entry.staffId && a.date === entry.date)?.signIn || "—"}</td>
-                    <td>{[...attendance].reverse().find((a) => a.staffId === entry.staffId && a.date === entry.date)?.signOut || "—"}</td>
-                    <td>{entry.rules}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <div className="panel-header"><div><h2>{view === "general" ? "General Staff Roster" : `${activeDepartment} Roster`}</h2><p>Staff/Volunteers = Monthly; Students = Weekly.</p></div><div className="button-row">{canManageSetup && <button className="button primary" onClick={generateRoster}>Generate Roster</button>}<button className="button secondary" onClick={printRoster}>Print Roster</button></div></div>
+          <div className="field" style={{ maxWidth: 420 }}><label>Department</label>{isPrivilegedViewer ? <select value={activeDepartment} onChange={(e) => setDepartment(e.target.value)}>{allowedDepartmentChoices.filter(Boolean).map((d) => <option key={d}>{d}</option>)}</select> : <input value={activeDepartment} readOnly />}</div>
+          <div className="table-scroll"><table><thead><tr><th>Staff</th><th>Category</th><th>Department(s)</th><th>Period</th><th>Morning</th><th>Evening</th><th>Night</th><th>Sign In</th><th>Sign Out</th><th>Rules</th></tr></thead><tbody>
+            {(visibleEntries.length ? visibleEntries.slice(0, 200) : visibleStaff.map((person, index) => ({ id: `preview-${person.id}`, staffId: person.staffId, name: person.name, category: person.category || "Staff", departments: person.departments || [person.department], period: person.category === "Student" ? "Weekly" : "Monthly", shifts: Object.fromEntries(shifts.map((sh) => [sh, eligibleShifts(person).includes(sh) ? cycleDuty(sh, index) : "—"])), rules: "Morning 6/1 • Evening 5/2 • Night 4/3" }))).map((entry) => { const record = [...attendance].reverse().find((a) => a.staffId === entry.staffId && a.date === entry.date); return <tr key={entry.id}><td>{entry.name}</td><td>{entry.category}</td><td>{(entry.departments || []).join(", ")}</td><td>{entry.period}</td>{shifts.map((sh) => <td key={sh}><span className="shift-badge">{entry.shifts?.[sh] || "—"}</span></td>)}<td>{record?.signIn || "—"}</td><td>{record?.signOut || "—"}</td><td>{entry.rules}</td></tr>;})}
+          </tbody></table></div>
         </div>
       )}
 
-      {view === "attendance" && (
-        <div className="panel">
-          <div className="panel-header"><div><h2>Staff Sign In / Sign Out</h2><p>Duty attendance is separate from system Logout.</p></div></div>
-          <div className="table-scroll"><table>
-            <thead><tr><th>Staff</th><th>Category</th><th>Department</th><th>Today</th><th>Sign In</th><th>Sign Out</th><th>Duty Status</th><th>Action</th></tr></thead>
-            <tbody>{staff.map((person) => {
-              const record = [...attendance].reverse().find((a) => a.staffId === person.staffId && a.date === todayKey);
-              return <tr key={person.id}>
-                <td>{person.name}</td><td>{person.category || "Staff"}</td><td>{person.department}</td><td>{todayKey}</td><td>{record?.signIn || "—"}</td><td>{record?.signOut || "—"}</td><td>{record?.dutyStatus || "Not Signed In"}</td>
-                <td><div className="table-actions"><button className="small-button" onClick={() => signIn(person)}>Sign In</button><button className="small-button" onClick={() => signOut(person)}>Sign Out</button></div></td>
-              </tr>;
-            })}</tbody>
-          </table></div>
-        </div>
+      {view === "attendance" && canManageAttendanceHere && (
+        <div className="panel"><div className="panel-header"><div><h2>Staff Sign In / Sign Out</h2><p>ICT and Super Admin can record attendance for any staff, even when the staff member is not physically present.</p></div></div><div className="table-scroll"><table><thead><tr><th>Staff</th><th>Staff Number</th><th>Department(s)</th><th>Today</th><th>Sign In</th><th>Sign Out</th><th>Status</th><th>Action</th></tr></thead><tbody>{staff.map((person) => { const record=[...attendance].reverse().find((a)=>a.staffId===person.staffId&&a.date===todayKey); return <tr key={person.id}><td>{person.name}</td><td>{person.staffId}</td><td>{(person.departments||[person.department]).join(", ")}</td><td>{todayKey}</td><td>{record?.signIn||"—"}</td><td>{record?.signOut||"—"}</td><td>{record?.dutyStatus||"Not Signed In"}</td><td><div className="table-actions"><button className="small-button" onClick={()=>createOrUpdateAttendance(person,"in")}>Sign In</button><button className="small-button" onClick={()=>createOrUpdateAttendance(person,"out")}>Sign Out</button></div></td></tr>;})}</tbody></table></div></div>
       )}
 
-      {view === "setup" && (
-        <div className="panel">
-          <div className="panel-header"><div><h2>Staff Roster Setup</h2><p>Assign category and department(s), then set marital status and allowed shifts.</p></div></div>
-          <div className="table-scroll"><table>
-            <thead><tr><th>Name</th><th>Category</th><th>Department(s)</th><th>Marital Status</th><th>Allowed Shifts</th><th>Action</th></tr></thead>
-            <tbody>{staff.map((person) => <tr key={person.id}><td>{person.name}</td><td>{person.category || "Staff"}</td><td>{(person.departments || [person.department]).join(", ")}</td><td>{person.maritalStatus || "Single"}</td><td>{(person.allowedShifts || shifts).join(", ")}</td><td><button className="small-button" onClick={() => openSetup(person)}>Setup</button></td></tr>)}</tbody>
-          </table></div>
-        </div>
+      {view === "setup" && canManageSetup && (
+        <div className="panel"><div className="panel-header"><div><h2>Staff Roster Setup</h2><p>Primary department is required. Select two or more departments when the staff member works in multiple departments.</p></div></div><div className="table-scroll"><table><thead><tr><th>Name</th><th>Staff Number</th><th>Category</th><th>Department(s)</th><th>Marital Status</th><th>Allowed Shifts</th><th>Action</th></tr></thead><tbody>{staff.map((person)=><tr key={person.id}><td>{person.name}</td><td>{person.staffId}</td><td>{person.category||"Staff"}</td><td>{(person.departments||[person.department]).join(", ")}</td><td>{person.maritalStatus||"Single"}</td><td>{(person.allowedShifts||shifts).join(", ")}</td><td><button className="small-button" onClick={()=>openSetup(person)}>Setup</button></td></tr>)}</tbody></table></div></div>
       )}
 
-      <div className="panel" style={{ marginTop: 18 }}>
-        <h3>Roster Rules</h3>
-        <div className="shift-rules">
-          <div><strong>Staff + Volunteers</strong><span>Monthly roster</span></div>
-          <div><strong>Students</strong><span>Weekly roster</span></div>
-          <div><strong>Morning</strong><span>6 duty days → 1 off</span></div>
-          <div><strong>Evening</strong><span>5 duty days → 2 off</span></div>
-          <div><strong>Night</strong><span>4 duty days → 3 off</span></div>
-          <div><strong>Married Staff</strong><span>Morning + Evening only</span></div>
-          <div><strong>HOD</strong><span>Morning + Evening + Night</span></div>
-        </div>
-      </div>
+      <div className="panel" style={{ marginTop: 18 }}><h3>Roster Rules</h3><div className="shift-rules"><div><strong>Staff + Volunteers</strong><span>Monthly roster</span></div><div><strong>Students</strong><span>Weekly roster</span></div><div><strong>Morning</strong><span>6 duty days → 1 off</span></div><div><strong>Evening</strong><span>5 duty days → 2 off</span></div><div><strong>Night</strong><span>4 duty days → 3 off</span></div><div><strong>Married Staff</strong><span>Morning + Evening only</span></div><div><strong>HOD</strong><span>Morning + Evening + Night</span></div></div></div>
 
-      {setupOpen && (
-        <Modal title={`Roster Setup — ${staff.find((p) => p.staffId === selectedStaffId)?.name || "Staff"}`} onClose={() => setSetupOpen(false)}>
-          <div className="form-grid">
-            <FormField label="Category"><select value={setup.category} onChange={(e) => setSetup({ ...setup, category: e.target.value })}>{categories.map((c) => <option key={c}>{c}</option>)}</select></FormField>
-            <FormField label="Marital Status"><select value={setup.maritalStatus} onChange={(e) => setSetup({ ...setup, maritalStatus: e.target.value })}><option>Single</option><option>Married</option></select></FormField>
-          </div>
-          <label className="permission-item" style={{ marginBottom: 14 }}><input type="checkbox" checked={setup.isHOD} onChange={(e) => setSetup({ ...setup, isHOD: e.target.checked })} /> <span>HOD — always Morning + Evening + Night</span></label>
-          <div className="field"><label>Department(s)</label><div className="button-row">{departments.filter((d) => !["General Cashier", "In-Charge"].includes(d)).map((d) => <button type="button" key={d} className={`small-button ${setup.departments.includes(d) ? "primary" : ""}`} onClick={() => setSetup({ ...setup, departments: setup.departments.includes(d) ? setup.departments.filter((x) => x !== d) : [...setup.departments, d] })}>{d}</button>)}</div></div>
-          <div className="field"><label>Allowed Shifts</label><div className="button-row">{shifts.map((sh) => <button type="button" key={sh} className={`small-button ${setup.allowedShifts.includes(sh) ? "primary" : ""}`} onClick={() => setSetup({ ...setup, allowedShifts: setup.allowedShifts.includes(sh) ? setup.allowedShifts.filter((x) => x !== sh) : [...setup.allowedShifts, sh] })}>{sh}</button>)}</div></div>
-          <div className="modal-actions"><button className="button secondary" onClick={() => setSetupOpen(false)}>Cancel</button><button className="button primary" onClick={saveSetup}>Save Setup</button></div>
-        </Modal>
-      )}
+      {setupOpen && <Modal title={`Roster Setup — ${staff.find((p)=>p.staffId===selectedStaffId)?.name||"Staff"}`} onClose={()=>setSetupOpen(false)}><div className="form-grid"><FormField label="Category"><select value={setup.category} onChange={(e)=>setSetup({...setup,category:e.target.value})}>{categories.map((c)=><option key={c}>{c}</option>)}</select></FormField><FormField label="Marital Status"><select value={setup.maritalStatus} onChange={(e)=>setSetup({...setup,maritalStatus:e.target.value})}><option>Single</option><option>Married</option></select></FormField></div><label className="permission-item" style={{marginBottom:14}}><input type="checkbox" checked={setup.isHOD} onChange={(e)=>setSetup({...setup,isHOD:e.target.checked})}/> <span>HOD — always Morning + Evening + Night</span></label><div className="field"><label>Department(s) — click two or more when needed</label><div className="button-row">{[...departments,...rosterOnlyDepartments].filter((d)=>!['General Cashier','In-Charge'].includes(d)).map((d)=><button type="button" key={d} className={`small-button ${setup.departments.includes(d)?'primary':''}`} onClick={()=>setSetup({...setup,departments:setup.departments.includes(d)?setup.departments.filter((x)=>x!==d):[...setup.departments,d]})}>{d}</button>)}</div></div><div className="field"><label>Allowed Shifts</label><div className="button-row">{shifts.map((sh)=><button type="button" key={sh} className={`small-button ${setup.allowedShifts.includes(sh)?'primary':''}`} onClick={()=>setSetup({...setup,allowedShifts:setup.allowedShifts.includes(sh)?setup.allowedShifts.filter((x)=>x!==sh):[...setup.allowedShifts,sh]})}>{sh}</button>)}</div></div><div className="modal-actions"><button className="button secondary" onClick={()=>setSetupOpen(false)}>Cancel</button><button className="button primary" onClick={saveSetup}>Save Setup</button></div></Modal>}
     </div>
   );
 }
@@ -3222,7 +3221,6 @@ function ChildWardPage({ patients = [], records = [], setRecords, showMessage })
           <button className={view === "patients" ? "primary" : "secondary"} onClick={() => setView("patients")}>Ward Patients</button>
           <button className={view === "beds" ? "primary" : "secondary"} onClick={() => setView("beds")}>Bed Status</button>
           <button className={view === "history" ? "primary" : "secondary"} onClick={() => setView("history")}>Discharge History</button>
-          <button className="secondary" onClick={() => setView("nursing")}>Nursing Care / Reports</button>
           <button className="primary" onClick={() => setView("admit")}>+ Admit Child Patient</button>
         </div>
 
@@ -3351,8 +3349,6 @@ function ChildWardPage({ patients = [], records = [], setRecords, showMessage })
             </table>
           </div>
         )}
-
-        {view === "nursing" && <WardNursingCarePanel wardName="Child Ward" />}
       </div>
     </div>
   );
@@ -3465,7 +3461,6 @@ function MaternityWardPage({ patients = [], records = [], setRecords, showMessag
           <button className={view === "patients" ? "primary" : "secondary"} onClick={() => setView("patients")}>Ward Patients</button>
           <button className={view === "beds" ? "primary" : "secondary"} onClick={() => setView("beds")}>Bed Status</button>
           <button className={view === "history" ? "primary" : "secondary"} onClick={() => setView("history")}>Discharge History</button>
-          <button className="secondary" onClick={() => setView("nursing")}>Nursing Care / Reports</button>
           <button className="primary" onClick={() => setView("admit")}>+ Admit Maternity Patient</button>
         </div>
 
@@ -3627,8 +3622,6 @@ function MaternityWardPage({ patients = [], records = [], setRecords, showMessag
             </table>
           </div>
         )}
-
-        {view === "nursing" && <WardNursingCarePanel wardName="Maternity Ward" />}
       </div>
     </div>
   );
@@ -3636,26 +3629,41 @@ function MaternityWardPage({ patients = [], records = [], setRecords, showMessag
 
 
 
-function SearchableMultiSelectButtons({ label, options = [], value = [], onChange, placeholder = "Search..." }) {
+function SearchableMultiSelectButtons({ label, options, selected, setSelected, placeholder = "Search options..." }) {
   const [query, setQuery] = useState("");
-  const filtered = options.filter((option) => String(option).toLowerCase().includes(query.trim().toLowerCase()));
-  const toggle = (option) => {
-    const next = value.includes(option) ? value.filter((item) => item !== option) : [...value, option];
-    onChange?.(next);
-  };
+  const filtered = options.filter((option) => option.toLowerCase().includes(query.toLowerCase().trim()));
+  const toggle = (option) => setSelected((prev) => prev.includes(option) ? prev.filter((x) => x !== option) : [...prev, option]);
   return (
     <div className="form-field">
       <span>{label}</span>
-      <input className="search-input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={placeholder} style={{marginTop:8}} />
+      <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={placeholder} />
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
         {filtered.map((option) => (
-          <button key={option} type="button" className={value.includes(option) ? "button primary" : "button secondary"} onClick={() => toggle(option)}>
-            {value.includes(option) ? "✓ " : "＋ "}{option}
+          <button key={option} type="button" className={selected.includes(option) ? "button primary" : "button secondary"} onClick={() => toggle(option)}>
+            {selected.includes(option) ? "✓ " : ""}{option}
           </button>
         ))}
-        {!filtered.length && <span className="muted">No matching option.</span>}
       </div>
-      {value.length > 0 && <div style={{marginTop:10}}><strong>Selected:</strong> {value.join(", ")}</div>}
+      {!!selected.length && <div className="selected-patient" style={{marginTop:10}}><strong>Selected:</strong> {selected.join(", ")}</div>}
+    </div>
+  );
+}
+
+
+function ModernMultiSelect({ label, options = [], selected = [], onChange, searchPlaceholder = "Search..." }) {
+  const [q, setQ] = useState("");
+  const filtered = options.filter((item) => String(item).toLowerCase().includes(q.toLowerCase()));
+  const toggle = (item) => onChange(selected.includes(item) ? selected.filter((x) => x !== item) : [...selected, item]);
+  return (
+    <div className="field">
+      <label>{label}</label>
+      <input className="search-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder={searchPlaceholder} />
+      <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:8}}>
+        {filtered.map((item) => (
+          <button type="button" key={item} className={`small-button ${selected.includes(item) ? "primary" : ""}`} onClick={() => toggle(item)}>{selected.includes(item) ? "✓ " : ""}{item}</button>
+        ))}
+      </div>
+      {selected.length > 0 && <div className="muted" style={{marginTop:8}}>Selected: {selected.join(", ")}</div>}
     </div>
   );
 }
@@ -3664,21 +3672,20 @@ function NursingUnitPage({ patients = [], setPatients, showMessage }) {
   const [view, setView] = useState("queue");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
-  const [measurements, setMeasurements] = useState([]);
-  const [measurementValues, setMeasurementValues] = useState({});
+  const [tasks, setTasks] = useState([]);
   const [result, setResult] = useState("");
-  const [condition, setCondition] = useState("");
   const [ward, setWard] = useState("");
   const [bed, setBed] = useState("");
   const [notes, setNotes] = useState("");
   const [savedRecords, setSavedRecords] = usePersistentState("bazza_nursing_records", []);
 
-  const measurementOptions = [
-    "Blood Pressure (BP)", "Pulse Rate", "Temperature", "Respiratory Rate", "Weight",
-    "Height", "Oxygen Saturation (SpO₂)", "Blood Glucose", "Pain Score", "MUAC", "Other Measurement"
+  const routineTasks = [
+    "Vital Signs Checked", "Blood Pressure Checked", "Pulse Checked", "Temperature Checked",
+    "Respiratory Rate Checked", "Patient Assessed", "Medication Administered", "Wound Care",
+    "IV Fluid Started", "Injection Given", "Dressing Changed", "Patient Education",
+    "Admission Assessment", "Discharge Preparation", "Other"
   ];
   const resultOptions = ["Stable", "Improving", "Needs Consultant Review", "Urgent Review", "Completed"];
-  const conditionOptions = ["Good", "Fair", "Serious", "Critical", "Needs Further Assessment"];
   const wards = ["Male Ward", "Female Ward", "Maternity Ward", "Child Ward", "Labour Room", "Other"];
   const beds = ward === "Male Ward" ? Array.from({length:12},(_,i)=>`M-${String(i+1).padStart(2,"0")}`)
     : ward === "Female Ward" ? Array.from({length:12},(_,i)=>`F-${String(i+1).padStart(2,"0")}`)
@@ -3689,124 +3696,4125 @@ function NursingUnitPage({ patients = [], setPatients, showMessage }) {
   const filtered = patients.filter((p) => {
     const q = search.trim().toLowerCase();
     if (!q) return true;
-    return [p.name, p.card, p.phone].some(v => String(v || "").toLowerCase().includes(q));
-  });
-
-  const updateMeasurement = (name, value) => setMeasurementValues(prev => ({ ...prev, [name]: value }));
-  const toggleMeasurement = (item) => setMeasurements(prev => prev.includes(item) ? prev.filter(x => x !== item) : [...prev, item]);
+    return [p.name, p.card, p.phone, p.phoneNumber].some(v => String(v || "").toLowerCase().includes(q));
+  }).slice(0, 15);
 
   const save = () => {
     if (!selected) return showMessage("Zaɓi patient da farko.");
-    if (measurements.length < 2) return showMessage("Zaɓi aƙalla measurements guda 2 kafin consultation.");
-    const missing = measurements.filter(m => !String(measurementValues[m] || "").trim());
-    if (missing.length) return showMessage(`Cika sakamakon: ${missing.join(", ")}.`);
+    if (!tasks.length) return showMessage("Zaɓi aƙalla nursing task ɗaya.");
     if (!result) return showMessage("Zaɓi nursing result.");
-    if (!condition) return showMessage("Zaɓi patient condition.");
-
-    const preConsultation = { selected: measurements, values: measurementValues, completed: true, date: new Date().toLocaleString() };
     const record = {
-      id: Date.now(), patientId: selected.id, patientName: selected.name, card: selected.card,
-      age: selected.age ?? "", sex: selected.sex || "", tasks: [], preConsultation,
-      measurements, measurementValues, result, condition, ward: ward || "Not Assigned", bed: bed || "Not Assigned",
-      notes: notes.trim(), status: result === "Needs Consultant Review" || result === "Urgent Review" ? "Ready for Consultant" : "Completed",
-      date: new Date().toLocaleString(), source: "Nursing Unit"
+      id: `NUR-${Date.now()}`, patientId: selected.id, patientName: selected.name, card: selected.card,
+      tasks, result, ward: ward || "Not Assigned", bed: bed || "Not Assigned", notes: notes.trim(),
+      status: ["Needs Consultant Review", "Urgent Review"].includes(result) ? "Ready for Consultant" : "Completed",
+      date: new Date().toLocaleString()
     };
     setSavedRecords(prev => [record, ...prev]);
-    if (typeof setPatients === "function") {
-      setPatients(prev => prev.map(p => String(p.id) === String(selected.id)
-        ? { ...p, nursing: { ...(p.nursing || {}), ...record } } : p));
-    }
-    showMessage(`${selected.name} pre-consultation assessment an ajiye.`);
-    setMeasurements([]); setMeasurementValues({}); setResult(""); setCondition(""); setWard(""); setBed(""); setNotes(""); setSelected(null); setSearch(""); setView("queue");
+    setPatients?.(prev => prev.map(p => String(p.id) === String(selected.id) ? {...p, nursing:{...(p.nursing||{}), ...record}} : p));
+    showMessage(`${selected.name} nursing record an ajiye.`);
+    setTasks([]); setResult(""); setWard(""); setBed(""); setNotes(""); setSelected(null); setSearch(""); setView("records");
+  };
+  const ready = savedRecords.filter(r => r.status === "Ready for Consultant");
+  return (
+    <div>
+      <PageHeader title="Nursing Unit" subtitle="Modern nursing assessment, standardized tasks and patient flow" icon="♙" />
+      <div className="stats-grid">
+        <StatCard title="Patients" value={patients.length} icon="◉" />
+        <StatCard title="Nursing Records" value={savedRecords.length} icon="✓" />
+        <StatCard title="Ready for Consultant" value={ready.length} icon="→" />
+        <StatCard title="Completed" value={savedRecords.filter(r=>r.status === "Completed").length} icon="▣" />
+      </div>
+      <div className="panel">
+        <div className="toolbar">
+          <button className={`button ${view === "queue" ? "primary" : "secondary"}`} onClick={()=>setView("queue")}>Patient Queue</button>
+          <button className={`button ${view === "records" ? "primary" : "secondary"}`} onClick={()=>setView("records")}>Nursing Records</button>
+          <button className={`button ${view === "ready" ? "primary" : "secondary"}`} onClick={()=>setView("ready")}>Ready for Consultant</button>
+        </div>
+        {view === "queue" && <>
+          <h2>Select Patient</h2>
+          <input className="search-input" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search card number, name or phone" />
+          {!selected && <div className="search-results">{filtered.map(p=><button key={p.id} className="result-item" onClick={()=>{setSelected(p);setSearch(p.name);}}>{p.name} — {p.card} — {p.phone||p.phoneNumber||"No phone"}</button>)}</div>}
+          {selected && <div style={{marginTop:16}}>
+            <div className="selected-patient"><strong>{selected.name}</strong> — {selected.card} — {selected.phone||selected.phoneNumber||"No phone"} <button className="small-button" onClick={()=>{setSelected(null);setSearch("");}}>Change</button></div>
+            <SearchableMultiSelectButtons label="Routine Nursing Tasks — click two or more items as needed" options={routineTasks} selected={tasks} setSelected={setTasks} placeholder="Search nursing task..." />
+            <div className="form-grid">
+              <FormField label="Nursing Result"><select value={result} onChange={e=>setResult(e.target.value)}><option value="">Select result</option>{resultOptions.map(x=><option key={x}>{x}</option>)}</select></FormField>
+              <FormField label="Ward Assignment"><select value={ward} onChange={e=>{setWard(e.target.value);setBed("")}}><option value="">Select ward</option>{wards.map(x=><option key={x}>{x}</option>)}</select></FormField>
+              {beds.length > 0 && <FormField label="Bed"><select value={bed} onChange={e=>setBed(e.target.value)}><option value="">Select bed</option>{beds.map(x=><option key={x}>{x}</option>)}</select></FormField>}
+            </div>
+            <FormField label="Report / Additional Clinical Notes"><textarea rows="5" value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Write clinical notes only. Standardized nursing tasks should be selected above." /></FormField>
+            <button className="button primary" onClick={save}>Save Nursing Record</button>
+          </div>}
+        </>}
+        {view === "records" && <div className="table-scroll"><table><thead><tr><th>Patient</th><th>Card</th><th>Tasks</th><th>Result</th><th>Ward/Bed</th><th>Status</th><th>Date</th></tr></thead><tbody>{savedRecords.map(r=><tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.tasks.join(", ")}</td><td>{r.result}</td><td>{r.ward} / {r.bed}</td><td>{r.status}</td><td>{r.date}</td></tr>)}{!savedRecords.length&&<tr><td colSpan="7">No nursing record found.</td></tr>}</tbody></table></div>}
+        {view === "ready" && <div className="table-scroll"><table><thead><tr><th>Patient</th><th>Card</th><th>Result</th><th>Notes</th><th>Date</th></tr></thead><tbody>{ready.map(r=><tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.result}</td><td>{r.notes||"—"}</td><td>{r.date}</td></tr>)}{!ready.length&&<tr><td colSpan="5">No patient is ready for Consultant.</td></tr>}</tbody></table></div>}
+      </div>
+    </div>
+  );
+}
+
+function UltrasoundRoomPage({ patients = [], requests = [], setRequests, setTransactions, setPatients, transactions = [], currentUser, showMessage }) {
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [type, setType] = useState("");
+  const [otherType, setOtherType] = useState("");
+  const [notes, setNotes] = useState("");
+  const [activeTab, setActiveTab] = useState("queue");
+  const [reportDrafts, setReportDrafts] = useState({});
+  const [paymentMethod, setPaymentMethod] = useState("Cash");
+  const [paymentStatus, setPaymentStatus] = useState("Pending");
+  const [selectedRequestId, setSelectedRequestId] = useState("");
+
+  const ultrasoundTypes = {
+    "Obstetric Ultrasound": 5000,
+    "Abdominal Ultrasound": 5000,
+    "Pelvic Ultrasound": 5000,
+    "Renal Ultrasound": 5000,
+    "Breast Ultrasound": 5000,
+    "Other": 0,
   };
 
-  const ready = savedRecords.filter(r => r.status === "Ready for Consultant");
+  const filtered = patients.filter((p) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return [p.name, p.card, p.phone, p.phoneNumber].some((v) => String(v || "").toLowerCase().includes(q));
+  }).slice(0, 12);
+
+  const createRequest = () => {
+    if (!selected) return showMessage?.("Zaɓi patient.");
+    if (!type) return showMessage?.("Zaɓi ultrasound type.");
+    if (type === "Other" && !otherType.trim()) return showMessage?.("Rubuta sunan ultrasound na Other.");
+    if (!setRequests) return showMessage?.("Ultrasound connection is not available.");
+
+    const finalType = type === "Other" ? otherType.trim() : type;
+    const amount = ultrasoundTypes[type] || 0;
+    const transactionNumber = `US-TRX-${Date.now()}`;
+    const request = {
+      id: `US-${Date.now()}`,
+      transactionNumber,
+      patientId: selected.id,
+      patientName: selected.name,
+      card: selected.card,
+      phone: selected.phone || selected.phoneNumber || "",
+      type: finalType,
+      service: finalType,
+      notes: notes.trim(),
+      consultant: "Consultant Room",
+      status: "New",
+      paymentStatus: amount === 0 ? "FREE" : paymentStatus,
+      paymentMethod: amount === 0 ? "FREE" : paymentMethod,
+      amount,
+      report: "",
+      requestedAt: new Date().toLocaleString(),
+      completedAt: "",
+      sentToConsultantAt: "",
+    };
+
+    setRequests((previous) => [request, ...previous]);
+
+    // Every paid ultrasound service must be visible to General Cashier.
+    // Keep the transaction Pending until payment is actually completed there.
+    if (setTransactions && amount > 0) {
+      setTransactions((previous) => [
+        {
+          id: transactionNumber,
+          transactionNo: transactionNumber,
+          transactionNumber,
+          department: "Ultrasound Room",
+          patientId: selected.id,
+          patientName: selected.name,
+          card: selected.card,
+          service: finalType,
+          amount,
+          paymentMethod,
+          paymentStatus: paymentStatus === "Paid" ? "Paid" : "Pending",
+          cashier: paymentStatus === "Paid" ? "Ultrasound Cashier" : "General Cashier",
+          date: new Date().toLocaleString(),
+        },
+        ...previous,
+      ]);
+    }
+
+    showMessage?.("Ultrasound request an tura successfully.");
+    setSelected(null);
+    setSearch("");
+    setType("");
+    setOtherType("");
+    setNotes("");
+    setPaymentMethod("Cash");
+    setPaymentStatus("Pending");
+    setActiveTab("queue");
+  };
+
+  const updateStatus = (id, nextStatus) => {
+    if (!setRequests) return;
+    setRequests((previous) => previous.map((request) =>
+      request.id === id
+        ? {
+            ...request,
+            status: nextStatus,
+            completedAt: nextStatus === "Result Ready" ? new Date().toLocaleString() : request.completedAt,
+            sentToConsultantAt: nextStatus === "Sent to Consultant" ? new Date().toLocaleString() : request.sentToConsultantAt,
+          }
+        : request
+    ));
+    showMessage?.(`Ultrasound status: ${nextStatus}`);
+  };
+
+  const saveReport = (request) => {
+    if (!setRequests) return;
+    const report = String(reportDrafts[request.id] ?? request.report ?? "").trim();
+    if (!report) return showMessage?.("Rubuta ultrasound report kafin ka kammala.");
+
+    const completedAt = new Date().toLocaleString();
+    const updatedRequest = {
+      ...request,
+      report,
+      status: "Result Ready",
+      completedAt,
+    };
+
+    setRequests((previous) => previous.map((item) =>
+      item.id === request.id ? updatedRequest : item
+    ));
+
+    // Also save the result on the shared patient profile so Consultant can
+    // see it even after selecting the patient again.
+    if (setPatients) {
+      setPatients((previous) => previous.map((patient) => {
+        const samePatient =
+          String(patient.id) === String(request.patientId) ||
+          String(patient.card || patient.cardNumber || "") === String(request.card || "");
+        if (!samePatient) return patient;
+        const existing = Array.isArray(patient.ultrasoundResults) ? patient.ultrasoundResults : [];
+        const withoutThis = existing.filter((item) => item.id !== request.id);
+        return {
+          ...patient,
+          ultrasoundResults: [
+            {
+              id: request.id,
+              card: request.card,
+              type: request.type,
+              notes: request.notes || "",
+              report,
+              status: "Result Ready",
+              consultant: request.consultant || "Consultant Room",
+              requestedAt: request.requestedAt || "",
+              completedAt,
+            },
+            ...withoutThis,
+          ],
+        };
+      }));
+    }
+
+    showMessage?.("Ultrasound report ya zama Result Ready kuma an ajiye shi a Patient Profile.");
+  };
+
+  const newRequests = requests.filter((r) => r.status === "New");
+  const inProgress = requests.filter((r) => r.status === "In Progress");
+  const ready = requests.filter((r) => r.status === "Result Ready");
+  const sent = requests.filter((r) => r.status === "Sent to Consultant");
+  const selectedRequest = requests.find((r) => r.id === selectedRequestId);
+
+  return (
+    <div>
+      <PageHeader title="Ultrasound Room" subtitle="Consultant requests, scanning, reports, payment and results" icon="◉" />
+
+      <div className="stats-grid">
+        <StatCard title="New Requests" value={newRequests.length} icon="!" />
+        <StatCard title="In Progress" value={inProgress.length} icon="◉" />
+        <StatCard title="Results Ready" value={ready.length} icon="✓" />
+        <StatCard title="Sent to Consultant" value={sent.length} icon="→" />
+      </div>
+
+      <DepartmentCashierPanel department="Ultrasound Room" transactions={transactions} setTransactions={setTransactions} currentUser={currentUser} showMessage={showMessage} />
+
+      <div className="panel" style={{ marginTop: 20 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 15 }}>
+          <button className={activeTab === "queue" ? "button primary" : "button secondary"} onClick={() => setActiveTab("queue")}>Request Queue</button>
+          <button className={activeTab === "new" ? "button primary" : "button secondary"} onClick={() => setActiveTab("new")}>New Request</button>
+          <button className={activeTab === "reports" ? "button primary" : "button secondary"} onClick={() => setActiveTab("reports")}>Reports</button>
+        </div>
+
+        {activeTab === "new" && (
+          <>
+            <h2 style={{ marginTop: 0 }}>New Ultrasound Request</h2>
+            <input className="search-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search patient by name, Card Number or phone..." />
+            {search.trim() && !selected && (
+              <div className="search-results" style={{ marginTop: 10 }}>
+                {filtered.map((patient) => (
+                  <button key={patient.id} className="result-item" onClick={() => { setSelected(patient); setSearch(patient.name); }}>
+                    {patient.name} — {patient.card} — {patient.phone || patient.phoneNumber || "No phone"}
+                  </button>
+                ))}
+              </div>
+            )}
+            {selected && <p><strong>{selected.name}</strong> — {selected.card} — {selected.phone || selected.phoneNumber || "No phone"}</p>}
+
+            <div className="form-grid">
+              <FormField label="Ultrasound Type">
+                <SearchableSelect
+                  label="Ultrasound Type"
+                  value={type}
+                  onChange={setType}
+                  showPrice
+                  placeholder="Select ultrasound type"
+                  options={Object.entries(ultrasoundTypes).map(([name, price]) => ({ value: name, label: name, price }))}
+                />
+              </FormField>
+              {type === "Other" && (
+                <FormField label="Other Ultrasound Type">
+                  <input value={otherType} onChange={(e) => setOtherType(e.target.value)} placeholder="Enter ultrasound service" />
+                </FormField>
+              )}
+              <FormField label="Clinical Notes / Request">
+                <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Enter clinical request..." />
+              </FormField>
+              <FormField label="Payment Method">
+                <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} disabled={type === "Other"}>
+                  <option>Cash</option><option>POS</option><option>Bank Transfer</option>
+                </select>
+              </FormField>
+              <FormField label="Payment Status">
+                <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)} disabled={type === "Other"}>
+                  <option>Pending</option><option>Paid</option><option>FREE</option>
+                </select>
+              </FormField>
+            </div>
+            <button className="button primary" onClick={createRequest}>Send Request to Ultrasound Room</button>
+          </>
+        )}
+
+        {activeTab === "queue" && (
+          <>
+            <h2 style={{ marginTop: 0 }}>Ultrasound Request Queue</h2>
+            <div className="table-wrapper">
+              <table>
+                <thead><tr><th>Patient</th><th>Card</th><th>Service</th><th>Payment</th><th>Status</th><th>Action</th></tr></thead>
+                <tbody>
+                  {requests.map((request) => (
+                    <tr key={request.id}>
+                      <td>{request.patientName}</td>
+                      <td>{request.card}</td>
+                      <td>{request.type}</td>
+                      <td>₦{Number(request.amount || 0).toLocaleString()} / {request.paymentStatus || "Pending"}</td>
+                      <td>{request.status}</td>
+                      <td>
+                        <button className="small-button" onClick={() => setSelectedRequestId(request.id)}>View</button>
+                        {request.status === "New" && <button className="small-button" onClick={() => updateStatus(request.id, "In Progress")}>Start Scan</button>}
+                        {request.status === "In Progress" && <button className="small-button" onClick={() => setActiveTab("reports")}>Enter Report</button>}
+                        {request.status === "Result Ready" && <button className="small-button" onClick={() => updateStatus(request.id, "Sent to Consultant")}>Send to Consultant</button>}
+                      </td>
+                    </tr>
+                  ))}
+                  {!requests.length && <tr><td colSpan="6">No ultrasound request found.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+
+            {selectedRequest && (
+              <div className="panel" style={{ marginTop: 16, background: "#f7f9fb" }}>
+                <h3 style={{ marginTop: 0 }}>Request Details</h3>
+                <p><strong>Patient:</strong> {selectedRequest.patientName}</p>
+                <p><strong>Card:</strong> {selectedRequest.card}</p>
+                <p><strong>Ultrasound:</strong> {selectedRequest.type}</p>
+                <p><strong>Consultant:</strong> {selectedRequest.consultant}</p>
+                <p><strong>Clinical Request:</strong> {selectedRequest.notes || "—"}</p>
+                <p><strong>Payment:</strong> ₦{Number(selectedRequest.amount || 0).toLocaleString()} / {selectedRequest.paymentStatus || "Pending"} / {selectedRequest.paymentMethod || "—"}</p>
+                <p><strong>Requested:</strong> {selectedRequest.requestedAt}</p>
+                {selectedRequest.report && <p style={{ whiteSpace: "pre-wrap" }}><strong>Report:</strong> {selectedRequest.report}</p>}
+                <button className="small-button" onClick={() => setSelectedRequestId("")}>Close</button>
+              </div>
+            )}
+          </>
+        )}
+
+        {activeTab === "reports" && (
+          <>
+            <h2 style={{ marginTop: 0 }}>Ultrasound Reports</h2>
+            <div style={{ display: "grid", gap: 14 }}>
+              {requests.filter((r) => ["In Progress", "Result Ready", "Sent to Consultant"].includes(r.status)).map((request) => (
+                <div key={request.id} style={{ border: "1px solid #dce3e8", borderRadius: 10, padding: 15 }}>
+                  <strong>{request.patientName}</strong> — {request.card}
+                  <div style={{ marginTop: 5, fontSize: 12, color: "#71808d" }}>{request.type} • Consultant: {request.consultant}</div>
+                  <div style={{ marginTop: 8, fontSize: 12 }}><strong>Clinical Request:</strong> {request.notes || "—"}</div>
+                  <label className="form-field" style={{ marginTop: 10 }}>
+                    <span>Ultrasound Report / Findings</span>
+                    <textarea
+                      rows={5}
+                      value={reportDrafts[request.id] ?? request.report ?? ""}
+                      onChange={(e) => setReportDrafts((prev) => ({ ...prev, [request.id]: e.target.value }))}
+                      placeholder="Enter scan findings and final report..."
+                      disabled={request.status === "Sent to Consultant"}
+                    />
+                  </label>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                    {request.status !== "Sent to Consultant" && <button className="button primary" onClick={() => saveReport(request)}>Save Result & Mark Ready</button>}
+                  </div>
+                  {request.status === "Result Ready" && <button className="button secondary" style={{ marginLeft: 8 }} onClick={() => updateStatus(request.id, "Sent to Consultant")}>Send to Consultant</button>}
+                  {request.status === "Sent to Consultant" && <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}><strong>Report:</strong> {request.report}</div>}
+                </div>
+              ))}
+              {!requests.some((r) => ["In Progress", "Result Ready", "Sent to Consultant"].includes(r.status)) && (
+                <div style={{ padding: 15, background: "#f7f9fb", borderRadius: 8, color: "#71808d" }}>No ultrasound report in progress or ready.</div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LabourRoomPage({ patients = [], records = [], setRecords, showMessage }) {
+ const [selectedId,setSelectedId]=useState(""); const [bed,setBed]=useState(""); const [stage,setStage]=useState("Early Labour"); const [condition,setCondition]=useState("Stable"); const [notes,setNotes]=useState("");
+ const beds=Array.from({length:12},(_,i)=>`LR-${String(i+1).padStart(2,"0")}`); const ward=records.filter(r=>r.ward==="Labour Room"); const occupied=ward.filter(r=>r.status==="Admitted"); const available=beds.filter(b=>!occupied.some(r=>r.bed===b));
+ const admit=()=>{const p=patients.find(x=>String(x.id)===String(selectedId));if(!p)return showMessage("Zaɓi patient.");if(p.sex!=="Female")return showMessage("Labour Room na karɓar female patient kawai.");if(!bed)return showMessage("Zaɓi bed.");if(occupied.some(r=>r.bed===bed))return showMessage("Bed yana occupied.");const rec={id:Date.now(),ward:"Labour Room",patientId:p.id,patientName:p.name,card:p.card,bed,stage,condition,notes,status:"Admitted",admittedAt:new Date().toLocaleString(),dischargedAt:""};setRecords(prev=>[rec,...prev]);showMessage(`${p.name} an admitted Labour Room.`);setSelectedId("");setBed("");setNotes("");};
+ const discharge=id=>{setRecords(prev=>prev.map(r=>r.id===id?{...r,status:"Discharged",dischargedAt:new Date().toLocaleString()}:r));showMessage("An yi discharge.")};
+ return <div><PageHeader title="Labour Room" subtitle="Labour room patient management and monitoring" icon="▣"/><div className="stats-grid"><StatCard title="Occupied Beds" value={occupied.length} icon="▣"/><StatCard title="Available Beds" value={available.length} icon="✓"/><StatCard title="New Admissions" value={occupied.length} icon="!"/><StatCard title="Discharges" value={ward.filter(r=>r.status==="Discharged").length} icon="◉"/></div><div className="panel"><h2>Admit Patient</h2><div className="form-grid"><FormField label="Patient"><select value={selectedId} onChange={e=>setSelectedId(e.target.value)}><option value="">Select patient</option>{patients.filter(p=>p.sex==="Female").map(p=><option key={p.id} value={p.id}>{p.name} — {p.card}</option>)}</select></FormField><FormField label="Bed"><select value={bed} onChange={e=>setBed(e.target.value)}><option value="">Select bed</option>{available.map(b=><option key={b}>{b}</option>)}</select></FormField><FormField label="Labour Stage"><select value={stage} onChange={e=>setStage(e.target.value)}><option>Early Labour</option><option>Active Labour</option><option>Second Stage</option><option>Post Delivery</option></select></FormField><FormField label="Condition"><select value={condition} onChange={e=>setCondition(e.target.value)}><option>Stable</option><option>Under Observation</option><option>Critical</option></select></FormField><FormField label="Notes"><textarea value={notes} onChange={e=>setNotes(e.target.value)}/></FormField></div><button className="button primary" onClick={admit}>Admit to Labour Room</button></div><div className="panel"><h2>Current Patients</h2><div className="table-wrapper"><table><thead><tr><th>Patient</th><th>Card</th><th>Bed</th><th>Stage</th><th>Condition</th><th>Action</th></tr></thead><tbody>{occupied.map(r=><tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.stage}</td><td>{r.condition}</td><td><button className="small-button" onClick={()=>discharge(r.id)}>Discharge</button></td></tr>)}</tbody></table></div></div></div>;
+}
+function ProgramUnitPage({ title, patients = [], setPatients, showMessage, logAudit }) {
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [service, setService] = useState("");
+  const [methodOrDose, setMethodOrDose] = useState("");
+  const [visitDate, setVisitDate] = useState(new Date().toISOString().slice(0, 10));
+  const [followUpDate, setFollowUpDate] = useState("");
+  const [notes, setNotes] = useState("");
+  const [otherText, setOtherText] = useState("");
+  const [visits, setVisits] = usePersistentState(`bazza_program_visits_${title}`, []);
+  const [view, setView] = useState("new");
+  const config = {
+    "Immunization Unit": { subtitle: "Immunization registration, vaccination, follow-up and history", services: ["BCG","OPV","Pentavalent","PCV","Measles","Yellow Fever","Other"], fieldLabel: "Dose / Stage", fieldOptions: ["Birth Dose","1st Dose","2nd Dose","3rd Dose","Booster","Other"] },
+    "Family Planning Unit": { subtitle: "Family planning counselling, services, follow-up and patient records", services: ["Counselling","Contraceptive Service","Implant","IUCD","Injectable","Pills","Condom","Other"], fieldLabel: "Method", fieldOptions: ["Counselling Only","Implant","IUCD","Injectable","Pills","Condom","Other"] },
+    "Adolescent Unit": { subtitle: "Adolescent health services, counselling, follow-up and patient records", services: ["Adolescent Counselling","Health Education","Sexual & Reproductive Health Education","Nutrition Counselling","Follow-up","Other"], fieldLabel: "Service Detail", fieldOptions: ["Routine Visit","Counselling","Follow-up","Other"] }
+  }[title];
+  const filtered = patients.filter((p) => { const q=search.trim().toLowerCase(); if(!q)return true; return [p.name,p.card,p.phone,p.phoneNumber].some(v=>String(v||"").toLowerCase().includes(q)); });
+  const uniquePatients = new Set(visits.map(v=>v.card)).size;
+  const completed = visits.filter(v=>v.status === "Completed").length;
+  const followUps = visits.filter(v=>v.followUpDate).length;
+  const today = new Date().toISOString().slice(0,10);
+  const selectPatient = (p) => { setSelected(p); setSearch(p.name); };
+  const save = () => {
+    if(!selected) return showMessage("Zaɓi patient daga ICT/Records.");
+    if(!service) return showMessage("Zaɓi service.");
+    if(!methodOrDose) return showMessage(`Zaɓi ${config.fieldLabel}.`);
+    if(service === "Other" && !otherText.trim()) return showMessage("Rubuta bayanin Other.");
+    const visit={id:`PRG-${Date.now()}`,unit:title,patientId:selected.id,patient:selected.name,card:selected.card,phone:selected.phone||selected.phoneNumber||"",service,methodOrDose,otherText:otherText.trim(),visitDate,followUpDate,notes:notes.trim(),status:"Completed",date:new Date().toLocaleString()};
+    setVisits(prev=>[visit,...prev]);
+    if(setPatients) setPatients(prev=>prev.map(p=>p.id===selected.id?{...p,programVisits:[visit,...(Array.isArray(p.programVisits)?p.programVisits:[])]}:p));
+    if(logAudit) logAudit(`${title}: visit saved`, title, `${selected.name} (${selected.card})`);
+    showMessage(`${title}: an ajiye visit na ${selected.name}.`);
+    setSelected(null); setSearch(""); setService(""); setMethodOrDose(""); setFollowUpDate(""); setNotes(""); setOtherText(""); setView("history");
+  };
   return <div>
-    <PageHeader title="Nursing Unit" subtitle="Pre-consultation measurements, patient preparation and handoff to Consultant" icon="♙" />
+    <PageHeader title={title} subtitle={config.subtitle} icon="✚" />
+    <div className="stats-grid"><StatCard title="Total Visits" value={visits.length} icon="◉"/><StatCard title="Completed" value={completed} icon="✓"/><StatCard title="Follow-up" value={followUps} icon="→"/><StatCard title="Patients" value={uniquePatients} icon="●"/></div>
+    <div className="toolbar"><button className={`button ${view==="new"?"primary":"secondary"}`} onClick={()=>setView("new")}>New Visit</button><button className={`button ${view==="history"?"primary":"secondary"}`} onClick={()=>setView("history")}>Visit History</button><button className={`button ${view==="followup"?"primary":"secondary"}`} onClick={()=>setView("followup")}>Follow-up</button></div>
+    {view==="new" && <div className="panel"><h2>New {title.replace(" Unit","")} Visit</h2><p className="muted">Patient/Card Number yana zuwa daga ICT/Records. Wannan unit ba ya ƙirƙirar sabon Card Number.</p>
+      <div className="field"><label>Search Patient</label><input className="search-input" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Name / Card Number / Phone"/></div>
+      {search&&!selected&&<div className="search-results">{filtered.slice(0,10).map(p=><button key={p.id} className="result-item" onClick={()=>selectPatient(p)}>{p.name} — {p.card} — {p.phone||p.phoneNumber||"No phone"}</button>)}{!filtered.length&&<div className="muted">No patient found.</div>}</div>}
+      {selected&&<div className="selected-patient"><strong>{selected.name}</strong> — {selected.card} — {selected.phone||selected.phoneNumber||"No phone"} <button className="small-button" onClick={()=>{setSelected(null);setSearch("");}}>Change</button></div>}
+      <div className="form-grid"><FormField label="Service"><select value={service} onChange={e=>setService(e.target.value)}><option value="">Select service</option>{config.services.map(o=><option key={o}>{o}</option>)}</select></FormField><FormField label={config.fieldLabel}><select value={methodOrDose} onChange={e=>setMethodOrDose(e.target.value)}><option value="">Select</option>{config.fieldOptions.map(o=><option key={o}>{o}</option>)}</select></FormField><FormField label="Visit Date"><input type="date" value={visitDate} onChange={e=>setVisitDate(e.target.value)}/></FormField><FormField label="Follow-up Date"><input type="date" min={today} value={followUpDate} onChange={e=>setFollowUpDate(e.target.value)}/></FormField></div>
+      {service==="Other"&&<FormField label="Other — Additional Detail"><input value={otherText} onChange={e=>setOtherText(e.target.value)} placeholder="Write the service/detail"/></FormField>}
+      <FormField label="Counselling / Additional Notes"><textarea rows="4" value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Additional notes..."/></FormField><button className="button primary" onClick={save}>Save Visit</button></div>}
+    {view==="history"&&<div className="panel"><h2>Visit History</h2><div className="table-scroll"><table><thead><tr><th>Patient</th><th>Card</th><th>Service</th><th>Method/Dose</th><th>Visit Date</th><th>Follow-up</th><th>Status</th></tr></thead><tbody>{visits.map(v=><tr key={v.id}><td>{v.patient}</td><td>{v.card}</td><td>{v.service}{v.otherText?` — ${v.otherText}`:""}</td><td>{v.methodOrDose}</td><td>{v.visitDate}</td><td>{v.followUpDate||"—"}</td><td>{v.status}</td></tr>)}{!visits.length&&<tr><td colSpan="7">No visit recorded.</td></tr>}</tbody></table></div></div>}
+    {view==="followup"&&<div className="panel"><h2>Follow-up List</h2><div className="table-scroll"><table><thead><tr><th>Patient</th><th>Card</th><th>Unit</th><th>Service</th><th>Follow-up Date</th><th>Status</th></tr></thead><tbody>{visits.filter(v=>v.followUpDate).map(v=><tr key={`follow-${v.id}`}><td>{v.patient}</td><td>{v.card}</td><td>{v.unit}</td><td>{v.service}</td><td>{v.followUpDate}</td><td>{v.followUpDate<today?"Due":"Upcoming"}</td></tr>)}{!visits.some(v=>v.followUpDate)&&<tr><td colSpan="6">No follow-up recorded.</td></tr>}</tbody></table></div></div>}
+  </div>;
+}
+
+function InChargePage({
+  patients = [],
+  staff = [],
+  transactions = [],
+  labRequests = [],
+  pharmacyPrescriptions = [],
+  ultrasoundRequests = [],
+  wardRecords = [],
+}) {
+  const [view, setView] = useState("overview");
+  const [search, setSearch] = useState("");
+
+  const admitted = wardRecords.filter((r) => r.status === "Admitted");
+  const pendingCash = transactions.filter((t) => String(t.status || "").toLowerCase() === "pending");
+  const todayCash = transactions.filter((t) => String(t.status || "").toLowerCase() === "paid");
+  const pendingLab = labRequests.filter((r) => !["Completed", "Result Ready", "Sent to Consultant"].includes(r.status));
+  const pendingPharmacy = pharmacyPrescriptions.filter((r) => !["Dispensed", "Completed"].includes(r.status));
+  const pendingUltrasound = ultrasoundRequests.filter((r) => !["Result Ready", "Sent to Consultant", "Completed"].includes(r.status));
+
+  const q = search.trim().toLowerCase();
+  const filteredPatients = patients.filter((p) =>
+    !q || [p.name, p.card, p.phone].some((v) => String(v || "").toLowerCase().includes(q))
+  );
+
+  return (
+    <div>
+      <PageHeader
+        title="In-Charge"
+        subtitle="Hospital-wide monitoring, reports, staff, patients, cashier and department status"
+        icon="◈"
+      />
+
+      <div className="stats-grid">
+        <StatCard title="Total Patients" value={patients.length} icon="●" />
+        <StatCard title="Admitted Patients" value={admitted.length} icon="▣" />
+        <StatCard title="Staff" value={staff.length} icon="♟" />
+        <StatCard title="Transactions" value={transactions.length} icon="₦" />
+        <StatCard title="Lab Requests" value={labRequests.length} icon="⚗" />
+        <StatCard title="Pharmacy" value={pharmacyPrescriptions.length} icon="⚕" />
+        <StatCard title="Ultrasound" value={ultrasoundRequests.length} icon="◉" />
+        <StatCard title="Ward Patients" value={admitted.length} icon="♥" />
+      </div>
+
+      <div className="card">
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+          <button className={view === "overview" ? "primary" : "secondary"} onClick={() => setView("overview")}>Overview</button>
+          <button className={view === "patients" ? "primary" : "secondary"} onClick={() => setView("patients")}>Patients</button>
+          <button className={view === "departments" ? "primary" : "secondary"} onClick={() => setView("departments")}>Department Monitor</button>
+          <button className={view === "cashier" ? "primary" : "secondary"} onClick={() => setView("cashier")}>Cashier</button>
+          <button className={view === "staff" ? "primary" : "secondary"} onClick={() => setView("staff")}>Staff</button>
+        </div>
+
+        {view === "overview" && (
+          <div style={{ display: "grid", gap: 12 }}>
+            <h2>Hospital Monitoring</h2>
+            <div className="table-wrap">
+              <table><thead><tr><th>Area</th><th>Total</th><th>Pending / Active</th><th>Status</th></tr></thead>
+                <tbody>
+                  <tr><td>Patients</td><td>{patients.length}</td><td>—</td><td><StatusBadge status="Active" /></td></tr>
+                  <tr><td>Laboratory</td><td>{labRequests.length}</td><td>{pendingLab.length}</td><td><StatusBadge status={pendingLab.length ? "Pending" : "Clear"} /></td></tr>
+                  <tr><td>Pharmacy</td><td>{pharmacyPrescriptions.length}</td><td>{pendingPharmacy.length}</td><td><StatusBadge status={pendingPharmacy.length ? "Pending" : "Clear"} /></td></tr>
+                  <tr><td>Ultrasound</td><td>{ultrasoundRequests.length}</td><td>{pendingUltrasound.length}</td><td><StatusBadge status={pendingUltrasound.length ? "Pending" : "Clear"} /></td></tr>
+                  <tr><td>Wards</td><td>{wardRecords.length}</td><td>{admitted.length}</td><td><StatusBadge status={admitted.length ? "Active" : "Clear"} /></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p><strong>Monitoring only:</strong> In-Charge na duba bayanai ne; ba ya gyara ko delete departmental clinical records.</p>
+          </div>
+        )}
+
+        {view === "patients" && (
+          <div style={{ display: "grid", gap: 12 }}>
+            <h2>Global Patient Search</h2>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, card number or phone" />
+            <div className="table-wrap"><table><thead><tr><th>Name</th><th>Card No.</th><th>Phone</th><th>Sex</th></tr></thead>
+              <tbody>{filteredPatients.map((p) => <tr key={p.id}><td>{p.name}</td><td>{p.card}</td><td>{p.phone || "—"}</td><td>{p.sex || "—"}</td></tr>)}
+              {filteredPatients.length === 0 && <tr><td colSpan="4">No patient found.</td></tr>}</tbody>
+            </table></div>
+          </div>
+        )}
+
+        {view === "departments" && (
+          <div style={{ display: "grid", gap: 12 }}>
+            <h2>Department Monitor</h2>
+            <div className="table-wrap"><table><thead><tr><th>Department</th><th>Records</th><th>Active/Pending</th></tr></thead>
+              <tbody>
+                <tr><td>ICT Centre</td><td>{patients.length}</td><td>Patient profiles</td></tr>
+                <tr><td>Records Unit</td><td>{transactions.filter(t => t.department === "Records Unit").length}</td><td>Transactions</td></tr>
+                <tr><td>Nursing Unit</td><td>{patients.filter(p => p.nursing).length}</td><td>Nursing records</td></tr>
+                <tr><td>Consultant Room</td><td>{patients.filter(p => p.consultation).length}</td><td>Consultations</td></tr>
+                <tr><td>Laboratory Unit</td><td>{labRequests.length}</td><td>{pendingLab} pending</td></tr>
+                <tr><td>Pharmacy Unit</td><td>{pharmacyPrescriptions.length}</td><td>{pendingPharmacy} pending</td></tr>
+                <tr><td>Ultrasound Room</td><td>{ultrasoundRequests.length}</td><td>{pendingUltrasound} pending</td></tr>
+                <tr><td>Wards</td><td>{wardRecords.length}</td><td>{admitted.length} admitted</td></tr>
+              </tbody>
+            </table></div>
+          </div>
+        )}
+
+        {view === "cashier" && (
+          <div style={{ display: "grid", gap: 12 }}>
+            <h2>Cashier Monitoring</h2>
+            <div className="stats-grid">
+              <StatCard title="All Transactions" value={transactions.length} icon="₦" />
+              <StatCard title="Paid" value={todayCash.length} icon="✓" />
+              <StatCard title="Pending" value={pendingCash.length} icon="!" />
+            </div>
+            <div className="table-wrap"><table><thead><tr><th>Department</th><th>Patient</th><th>Service</th><th>Amount</th><th>Method</th><th>Status</th></tr></thead>
+              <tbody>{transactions.slice(0, 50).map((t, i) => <tr key={t.id || t.transactionNumber || i}><td>{t.department || "—"}</td><td>{t.patientName || "—"}</td><td>{t.service || t.description || "—"}</td><td>₦{Number(t.amount || 0).toLocaleString()}</td><td>{t.method || "—"}</td><td>{t.status || "—"}</td></tr>)}
+              {transactions.length === 0 && <tr><td colSpan="6">No transactions found.</td></tr>}</tbody>
+            </table></div>
+          </div>
+        )}
+
+        {view === "staff" && (
+          <div style={{ display: "grid", gap: 12 }}>
+            <h2>Staff Monitoring</h2>
+            <div className="table-wrap"><table><thead><tr><th>Name</th><th>Department</th><th>Role</th><th>Category</th></tr></thead>
+              <tbody>{staff.map((s, i) => <tr key={s.id || i}><td>{s.name}</td><td>{s.department || "—"}</td><td>{s.role || "—"}</td><td>{s.category || "Staff"}</td></tr>)}
+              {staff.length === 0 && <tr><td colSpan="4">No staff found.</td></tr>}</tbody>
+            </table></div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+function ReportsPage({ patients = [], transactions = [], labRequests = [], pharmacyPrescriptions = [], ultrasoundRequests = [], wardRecords = [], attendance = [], rosterEntries = [] }) {
+  const paid = transactions.filter((t) => t.paymentStatus === "Paid" || t.paymentStatus === "FREE");
+  const total = paid.reduce((sum, t) => sum + Number(t.amount || 0), 0);
+  const today = new Date().toLocaleDateString();
+  const todayAttendance = attendance.filter((a) => a.date === today);
+  const exportReport = () => {
+    const rows = [
+      ["BAZZA PRIMARY HEALTH CARE"],
+      ["General Report"],
+      [`Generated: ${new Date().toLocaleString()}`],
+      [],
+      ["Patients", patients.length],
+      ["Transactions", transactions.length],
+      ["Paid/Free Collections", total],
+      ["Laboratory Requests", labRequests.length],
+      ["Pharmacy Prescriptions", pharmacyPrescriptions.length],
+      ["Ultrasound Requests", ultrasoundRequests.length],
+      ["Ward Records", wardRecords.length],
+      ["Roster Entries", rosterEntries.length],
+      ["Attendance Today", todayAttendance.length],
+    ];
+    const csv = rows.map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `Bazza-PHC-General-Report-${Date.now()}.csv`; a.click(); URL.revokeObjectURL(url);
+  };
+  return <div><PageHeader title="Reports" subtitle="General and department reports generated from saved system data" icon="▥" />
     <div className="stats-grid">
-      <StatCard title="Patients" value={patients.length} icon="◉" />
-      <StatCard title="Nursing Records" value={savedRecords.length} icon="✓" />
-      <StatCard title="Ready for Consultant" value={ready.length} icon="→" />
-      <StatCard title="Completed" value={savedRecords.filter(r => r.status === "Completed").length} icon="▣" />
+      <StatCard title="Patients" value={patients.length} icon="●" /><StatCard title="Transactions" value={transactions.length} icon="₦" />
+      <StatCard title="Collections" value={`₦${total.toLocaleString()}`} icon="✓" /><StatCard title="Attendance Today" value={todayAttendance.length} icon="▦" />
+    </div>
+    <div className="card"><h2>General Report</h2><p className="muted">Wannan report ɗin yana amfani da saved data na duk system ɗin.</p><div className="table-scroll"><table><tbody>
+      <tr><td>Laboratory Requests</td><td>{labRequests.length}</td></tr><tr><td>Pharmacy Prescriptions</td><td>{pharmacyPrescriptions.length}</td></tr><tr><td>Ultrasound Requests</td><td>{ultrasoundRequests.length}</td></tr><tr><td>Ward Records</td><td>{wardRecords.length}</td></tr><tr><td>Roster Entries</td><td>{rosterEntries.length}</td></tr>
+    </tbody></table></div><button className="button primary" onClick={exportReport}>Export General Report</button></div>
+  </div>;
+}
+
+function AlertsPage({ currentUser, patients = [], alerts = [], setAlerts, receptionQueue = [], setReceptionQueue, showMessage, logAudit }) {
+  const [target, setTarget] = useState("Nursing Unit");
+  const [message, setMessage] = useState("");
+  const [patientCard, setPatientCard] = useState("");
+  const [nextPatient, setNextPatient] = useState("");
+  const targets = ["Nursing Unit", "Consultant Room", "Laboratory Unit", "Pharmacy Unit", "Ultrasound Room", "Records Unit", "Reception / Next Patient"];
+  const send = () => {
+    if (!message.trim()) return showMessage?.("Rubuta alert message.");
+    const patient = patients.find((p) => String(p.card || p.cardNumber) === String(patientCard));
+    const alert = { id: `ALT-${Date.now()}`, from: currentUser?.name || "System", fromDepartment: currentUser?.department || currentUser?.role || "Administration", target, message: message.trim(), patientName: patient?.name || "", card: patient?.card || patientCard || "", date: new Date().toLocaleString(), read: false };
+    setAlerts((prev) => [alert, ...prev]);
+    if (target === "Nursing Unit" && nextPatient.trim()) setReceptionQueue((prev) => [{ id: `RQ-${Date.now()}`, patientName: nextPatient.trim(), card: patient?.card || patientCard || "", from: currentUser?.name || "Consultant", date: new Date().toLocaleString(), status: "Waiting" }, ...prev]);
+    logAudit?.("Send Alert", "Alerts", `${target}: ${message.trim()}`);
+    setMessage(""); setNextPatient(""); setPatientCard(""); showMessage?.("An aika alert.");
+  };
+  const visible = alerts.filter((a) => a.target === currentUser?.department || currentUser?.role === "Super Admin" || currentUser?.role === "In-Charge" || a.from === currentUser?.name);
+  return <div><PageHeader title="Department Alerts" subtitle="Department-to-department alerts with restricted visibility" icon="!" />
+    <div className="card"><h2>Send Alert</h2><div className="form-grid"><FormField label="Target Department"><select value={target} onChange={(e)=>setTarget(e.target.value)}>{targets.map((x)=><option key={x}>{x}</option>)}</select></FormField><FormField label="Patient/Card Number (optional)"><select value={patientCard} onChange={(e)=>setPatientCard(e.target.value)}><option value="">Select patient</option>{patients.map(p=><option key={p.id} value={p.card}>{p.name} — {p.card}</option>)}</select></FormField><FormField label="Next Patient Name (Consultant → Nursing)"><input value={nextPatient} onChange={(e)=>setNextPatient(e.target.value)} placeholder="Patient name" /></FormField><FormField label="Alert Message"><textarea value={message} onChange={(e)=>setMessage(e.target.value)} rows="4" placeholder="Write alert..." /></FormField></div><button className="button primary" onClick={send}>Send Alert</button></div>
+    <div className="card"><h2>Visible Alerts</h2>{visible.length ? visible.map(a=><div key={a.id} style={{border:"1px solid #e4e9ef",padding:12,borderRadius:8,marginBottom:8}}><strong>{a.fromDepartment} → {a.target}</strong><div>{a.message}</div><small>{a.patientName ? `${a.patientName} — ${a.card} • ` : ""}{a.date}</small></div>) : <p className="muted">No alerts.</p>}</div>
+    {receptionQueue.length ? <div className="card"><h2>Reception / Next Patient Board</h2>{receptionQueue.slice(0,20).map(q=><div key={q.id} style={{padding:10,borderBottom:"1px solid #eee"}}><strong>{q.patientName}</strong> — {q.card || "No Card"} <span className="muted">{q.status}</span></div>)}</div> : null}
+  </div>;
+}
+
+function SMSNotificationsPage({ patients = [], messages = [], setMessages, currentUser, showMessage, logAudit }) {
+  const templates = ["Result Ready", "Result Not Ready", "Please Return", "Follow-up Required", "Appointment/Visit Reminder", "Other"];
+  const [card, setCard] = useState(""); const [template, setTemplate] = useState("Result Ready"); const [extra, setExtra] = useState("");
+  const send = () => { const patient = patients.find(p => String(p.card || p.cardNumber) === String(card)); if (!patient) return showMessage?.("Zaɓi patient daga ICT/Records."); const phone = patient.phone || patient.phoneNumber; if (!phone) return showMessage?.("Babu phone number a Patient Profile."); const item={id:`SMS-${Date.now()}`,patientName:patient.name,card:patient.card,phone,template,message:extra,date:new Date().toLocaleString(),sender:currentUser?.name || "System",status:"Prepared"}; setMessages(prev=>[item,...prev]); logAudit?.("SMS Prepared","SMS / Notifications",`${template} to ${patient.name}`); setExtra(""); showMessage?.(`SMS an shirya zuwa ${phone}.`); };
+  return <div><PageHeader title="SMS / Notifications" subtitle="Patient messages using phone number saved by ICT" icon="✉" /><div className="card"><h2>Send Patient SMS</h2><div className="form-grid"><FormField label="Patient"><select value={card} onChange={e=>setCard(e.target.value)}><option value="">Select patient</option>{patients.map(p=><option key={p.id} value={p.card}>{p.name} — {p.card} — {p.phone || p.phoneNumber || "No phone"}</option>)}</select></FormField><FormField label="Template"><select value={template} onChange={e=>setTemplate(e.target.value)}>{templates.map(t=><option key={t}>{t}</option>)}</select></FormField><FormField label="Additional Message"><textarea rows="4" value={extra} onChange={e=>setExtra(e.target.value)} placeholder="Additional message..." /></FormField></div><button className="button primary" onClick={send}>Prepare SMS</button></div><div className="card"><h2>SMS History</h2><div className="table-scroll"><table><thead><tr><th>Patient</th><th>Phone</th><th>Template</th><th>Message</th><th>Date</th><th>Sender</th></tr></thead><tbody>{messages.length ? messages.map(m=><tr key={m.id}><td>{m.patientName}<br/>{m.card}</td><td>{m.phone}</td><td>{m.template}</td><td>{m.message || "—"}</td><td>{m.date}</td><td>{m.sender}</td></tr>) : <tr><td colSpan="6">No SMS history.</td></tr>}</tbody></table></div></div></div>;
+}
+
+function OutpatientPage({ patients = [], visits = [], setVisits, transactions = [], setTransactions, currentUser, showMessage, logAudit }) {
+  const department = currentUser?.department || "";
+  const servicesByDepartment = {
+    "Records Unit": ["Patient Card", "Patient File", "Card + File"],
+    "Nursing Unit": ["Vital Signs", "Nursing Assessment", "Injection / Nursing Procedure", "Other"],
+    "Consultant Room": ["Consultation", "Review Visit", "Follow-up", "Other"],
+    "Laboratory Unit": ["Malaria Test", "Full Blood Count (FBC)", "Urinalysis", "Blood Group", "Widal Test", "Pregnancy Test", "Other"],
+    "Pharmacy Unit": ["Prescription / Dispensing", "Medicine Refill", "Other"],
+    "Ultrasound Room": ["Abdominal Ultrasound", "Pelvic Ultrasound", "Obstetric Ultrasound", "Other"],
+    "Male Ward": ["Ward Service", "Bed Service", "Other"],
+    "Female Ward": ["Ward Service", "Bed Service", "Other"],
+    "Maternity Ward": ["Antenatal", "Postnatal", "Maternity Service", "Other"],
+    "Child Ward": ["Child Ward Service", "Bed Service", "Other"],
+    "Labour Room": ["Labour Monitoring", "Delivery Service", "Other"],
+    "Immunization Unit": ["BCG", "OPV", "Pentavalent", "Measles", "Yellow Fever", "Other"],
+    "Family Planning Unit": ["Counselling", "Contraceptive Service", "Implant", "IUCD", "Injectable", "Other"],
+    "Adolescent Unit": ["Adolescent Counselling", "Health Education", "Follow-up", "Mental Wellbeing Check", "Other"],
+  };
+  const serviceOptions = servicesByDepartment[department] || ["Department Service", "Other"];
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [service, setService] = useState("");
+  const [amount, setAmount] = useState(0);
+  const [paymentStatus, setPaymentStatus] = useState("Pending");
+
+  const save = () => {
+    if (!department) return showMessage?.("Ba a gane department ɗin mai amfani ba.");
+    if (!name.trim() || !service) return showMessage?.("Cika sunan patient sannan ka zaɓi service.");
+    const visitNo = `OP-${Date.now()}`;
+    const numericAmount = Number(amount || 0);
+    const visit = { id: Date.now(), visitNo, patientName: name.trim(), phone, department, service, amount: numericAmount, paymentStatus, paymentMethod: paymentStatus === "FREE" ? "FREE" : "Cash", date: new Date().toLocaleString(), createdBy: currentUser?.name || "System" };
+    setVisits(prev => [visit, ...prev]);
+    if (numericAmount > 0 || paymentStatus === "FREE") {
+      const txId = `TRX-${Date.now()}`;
+      setTransactions(prev => [{ id: txId, transactionNo: txId, department, patientName: name.trim(), card: "OUTPATIENT", service, amount: numericAmount, paymentMethod: paymentStatus === "FREE" ? "FREE" : "Cash", paymentStatus, cashier: currentUser?.name || department, date: new Date().toLocaleString() }, ...prev]);
+    }
+    logAudit?.("Outpatient Visit", department, `${visitNo} — ${service}`);
+    showMessage?.(`Outpatient visit ${visitNo} an ajiye a ${department}.`);
+    setName(""); setPhone(""); setService(""); setAmount(0); setPaymentStatus("Pending");
+  };
+
+  return <div>
+    <PageHeader title="Outpatient Services" subtitle={`Outpatient services na ${department}`} icon="O" />
+    <div className="panel">
+      <div className="panel-header"><div><h2>New Outpatient Visit</h2><p>Department yana fitowa ta atomatik daga login ɗinka. Babu Department selector.</p></div></div>
+      <div className="form-grid">
+        <FormField label="Department"><input value={department} readOnly /></FormField>
+        <FormField label="Patient Name"><input value={name} onChange={e=>setName(e.target.value)} placeholder="Patient name" /></FormField>
+        <FormField label="Phone"><input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Phone number" /></FormField>
+        <FormField label="Service"><select value={service} onChange={e=>setService(e.target.value)}><option value="">Select service</option>{serviceOptions.map(item=><option key={item}>{item}</option>)}</select></FormField>
+        <FormField label="Amount"><input type="number" min="0" value={amount} onChange={e=>setAmount(e.target.value)} /></FormField>
+        <FormField label="Payment Status"><select value={paymentStatus} onChange={e=>setPaymentStatus(e.target.value)}><option>Pending</option><option>Paid</option><option>FREE</option></select></FormField>
+      </div>
+      <div className="modal-actions left"><button className="button primary" onClick={save}>Create Outpatient Visit</button></div>
     </div>
     <div className="panel">
-      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
-        <button className="button primary" onClick={() => setView("queue")}>Patient Queue</button>
-        <button className="button secondary" onClick={() => setView("records")}>Pre-Consultation Records</button>
-        <button className="button secondary" onClick={() => setView("ready")}>Ready for Consultant</button>
+      <div className="panel-header"><div><h2>Outpatient History</h2><p>Wannan department kawai ne ake nuna wa.</p></div></div>
+      <div className="table-scroll"><table><thead><tr><th>Visit #</th><th>Patient</th><th>Department</th><th>Service</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>
+        {visits.filter(v => v.department === department).map(v=><tr key={v.id}><td>{v.visitNo}</td><td>{v.patientName}</td><td>{v.department}</td><td>{v.service}</td><td>₦{Number(v.amount||0).toLocaleString()}</td><td>{v.paymentStatus}</td><td>{v.date}</td></tr>)}
+        {!visits.some(v => v.department === department) && <tr><td colSpan="7">No outpatient visit for this department.</td></tr>}
+      </tbody></table></div>
+    </div>
+  </div>;
+}
+
+function ReceptionPage({ queue = [], setQueue, currentUser, showMessage }) {
+  const mark = (id, status) => setQueue(prev=>prev.map(q=>q.id===id?{...q,status}:q));
+  return <div><PageHeader title="Reception / Next Patient" subtitle="Consultant-to-Nursing next-patient board" icon="R" /><div className="card"><h2>Next Patient Board</h2>{queue.length?queue.slice(0,30).map(q=><div key={q.id} style={{display:"flex",justifyContent:"space-between",gap:12,padding:14,borderBottom:"1px solid #eee"}}><div><strong>{q.patientName}</strong><div className="muted">{q.card || "No Card"} • {q.from} • {q.date}</div></div><div style={{display:"flex",gap:6}}><button className="small-button" onClick={()=>mark(q.id,"Called")}>Called</button><button className="small-button" onClick={()=>mark(q.id,"Completed")}>Completed</button></div></div>):<p className="muted">No next patient currently waiting.</p>}</div></div>;
+}
+
+function ModulePage({ title, subtitle, icon, stats }) {
+  return (
+    <div>
+      <PageHeader title={title} subtitle={subtitle} icon={icon} />
+
+      <div className="stats-grid">
+        {stats.map(([name, value], index) => (
+          <StatCard
+            key={name}
+            title={name}
+            value={value}
+            icon={["▣", "✓", "!", "◉"][index % 4]}
+          />
+        ))}
       </div>
-      {view === "queue" && <>
-        <h2>Select Patient</h2>
-        <input className="search-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search card number, name or phone" />
-        <div className="search-results">{filtered.slice(0,15).map(p => <button key={p.id} className="result-item" onClick={() => {setSelected(p);setSearch(p.name);}}>{p.name} — {p.card} — {p.phone || "No phone"}</button>)}</div>
-        {selected && <div style={{marginTop:16}}>
-          <div className="card" style={{marginBottom:16}}><h2>Patient Information</h2><div className="form-grid">
-            <div className="access-box"><strong>Name</strong><span>{selected.name}</span></div>
-            <div className="access-box"><strong>Card Number</strong><span>{selected.card}</span></div>
-            <div className="access-box"><strong>Age</strong><span>{selected.age !== "" && selected.age != null ? `${selected.age} years` : "Not provided"}</span></div>
-            <div className="access-box"><strong>Sex</strong><span>{selected.sex || "Not provided"}</span></div>
-          </div></div>
-          <SearchableMultiSelectButtons label="Pre-Consultation Measurements — Select 2 or more" options={measurementOptions} value={measurements} onChange={setMeasurements} placeholder="Search BP, weight, temperature, pulse..." />
-          {measurements.length > 0 && <div className="card" style={{marginTop:16}}><h3>Enter Measurement Results</h3><p className="muted">Kowane measurement da ka zaɓa sai ka saka result/value dinsa.</p><div className="form-grid">
-            {measurements.map(m => <FormField key={m} label={m}><input value={measurementValues[m] || ""} onChange={e => updateMeasurement(m,e.target.value)} placeholder={`Enter ${m}`} /></FormField>)}
-          </div></div>}
-          <div className="form-grid" style={{marginTop:16}}>
-            <FormField label="Patient Condition"><select value={condition} onChange={e=>setCondition(e.target.value)}><option value="">Select condition</option>{conditionOptions.map(x=><option key={x}>{x}</option>)}</select></FormField>
-            <FormField label="Nursing Result"><select value={result} onChange={e=>setResult(e.target.value)}><option value="">Select result</option>{resultOptions.map(x=><option key={x}>{x}</option>)}</select></FormField>
-            <FormField label="Ward Assignment"><select value={ward} onChange={e=>{setWard(e.target.value);setBed("")}}><option value="">Select ward</option>{wards.map(x=><option key={x}>{x}</option>)}</select></FormField>
-            {beds.length>0 && <FormField label="Bed"><select value={bed} onChange={e=>setBed(e.target.value)}><option value="">Select bed</option>{beds.map(x=><option key={x}>{x}</option>)}</select></FormField>}
-            <FormField label="Report / Additional Clinical Notes"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Rubuta ƙarin bayanin nursing da ba standardized ba..." /></FormField>
-          </div>
-          <div className="access-box" style={{marginTop:16}}><strong>Workflow</strong><span>ICT/Records → Nursing Measurements → Ready for Consultant → Consultant Room</span></div>
-          <button className="button primary" onClick={save} style={{marginTop:16}}>Save & Send to Consultant Queue</button>
-        </div>}
-      </>}
-      {view === "records" && <div className="table-wrapper"><table><thead><tr><th>Patient</th><th>Card</th><th>Measurements & Results</th><th>Condition</th><th>Result</th><th>Status</th><th>Date</th></tr></thead><tbody>
-        {savedRecords.map(r=><tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{(r.measurements||[]).map(m=>`${m}: ${r.measurementValues?.[m]||"—"}`).join(" | ")}</td><td>{r.condition||"—"}</td><td>{r.result}</td><td>{r.status}</td><td>{r.date}</td></tr>)}
-        {!savedRecords.length && <tr><td colSpan="7">No pre-consultation record found.</td></tr>}
-      </tbody></table></div>}
-      {view === "ready" && <div className="table-wrapper"><table><thead><tr><th>Patient</th><th>Card</th><th>Measurements</th><th>Condition</th><th>Result</th><th>Notes</th><th>Date</th></tr></thead><tbody>
-        {ready.map(r=><tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{(r.measurements||[]).map(m=>`${m}: ${r.measurementValues?.[m]||"—"}`).join(" | ")}</td><td>{r.condition}</td><td>{r.result}</td><td>{r.notes||"—"}</td><td>{r.date}</td></tr>)}
-        {!ready.length && <tr><td colSpan="7">No patient is ready for Consultant.</td></tr>}
-      </tbody></table></div>}
+
+      <div className="panel empty-module">
+        <div className="large-module-icon">{icon}</div>
+
+        <h2>{title}</h2>
+
+        <p>
+          This module is ready for its full departmental workflow.
+          Department permissions remain separated from other units.
+        </p>
+
+        <button className="button primary">
+          Open {title}
+        </button>
+      </div>
     </div>
-  </div>;
+  );
 }
 
+function PageHeader({ title, subtitle, icon }) {
+  return (
+    <div className="page-header">
+      <div className="page-header-icon">{icon}</div>
 
-function WardNursingCarePanel({ wardName }) {
-  const [nursingRecords] = usePersistentState("bazza_nursing_records", []);
-  const [wardCareRecords, setWardCareRecords] = usePersistentState("bazza_ward_nursing_care_records", []);
-  const [selectedPatientId, setSelectedPatientId] = useState("");
-  const [tasks, setTasks] = useState([]);
-  const [notes, setNotes] = useState("");
-  const wardPatients = wardCareRecords.filter(r => r.ward === wardName && r.status !== "Discharged");
-  const taskOptions = ["Patient Assessment","Vital Signs Assessment","Medication Given","Injection Given","IV Fluid Started","Wound Care","Dressing Changed","Admission Assessment","Patient Education","Discharge Preparation","Other"];
-  const saveCare = () => {
-    const source = nursingRecords.find(r => String(r.patientId) === String(selectedPatientId) && r.ward === wardName);
-    if (!selectedPatientId) return alert("Zaɓi patient.");
-    if (tasks.length < 2) return alert("Zaɓi aƙalla nursing tasks guda 2.");
-    const id = Date.now();
-    const patient = source || wardPatients.find(r => String(r.patientId) === String(selectedPatientId));
-    const rec = { id, ward: wardName, patientId: selectedPatientId, patientName: patient?.patientName || "Unknown", card: patient?.card || "", tasks, notes: notes.trim(), status: "Completed", date: new Date().toLocaleString(), performedIn: wardName };
-    setWardCareRecords(prev => [rec, ...prev]);
-    setSelectedPatientId(""); setTasks([]); setNotes("");
+      <div>
+        <div className="eyebrow">BAZZA PHC</div>
+        <h1>{title}</h1>
+        <p>{subtitle}</p>
+      </div>
+    </div>
+  );
+}
+
+function ConsultantPage({
+  patients = [],
+  showMessage,
+  setPharmacyPrescriptions,
+  setLabRequests,
+  labRequests = [],
+  pharmacyPrescriptions = [],
+  ultrasoundRequests = [],
+  setUltrasoundRequests,
+  setPatients,
+}) {
+  const [search, setSearch] = useState("");
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [consultationNote, setConsultationNote] = useState("");
+  const [diagnosis, setDiagnosis] = useState("");
+  const [selectedTests, setSelectedTests] = useState([]);
+  const [selectedMedicines, setSelectedMedicines] = useState([]);
+  const [medicineDetails, setMedicineDetails] = useState({});
+  const [otherTest, setOtherTest] = useState("");
+  const [otherMedicine, setOtherMedicine] = useState("");
+  const [selectedUltrasound, setSelectedUltrasound] = useState("");
+  const [ultrasoundNotes, setUltrasoundNotes] = useState("");
+
+  const medicines = [
+    "Paracetamol 500mg",
+    "Amoxicillin 500mg",
+    "Metronidazole 400mg",
+    "Artemether/Lumefantrine",
+  ];
+
+  const laboratoryTests = {
+    "Malaria Test": 1500,
+    "Full Blood Count (FBC)": 3000,
+    "Urinalysis": 1000,
+    "Blood Group": 1000,
+    "Widal Test": 2000,
+    "Pregnancy Test": 1000,
   };
-  const patientOptions = Array.from(new Map(nursingRecords.filter(r => r.ward === wardName).map(r => [String(r.patientId), r])).values());
-  const combined = [...wardCareRecords.filter(r => r.ward === wardName), ...nursingRecords.filter(r => r.ward === wardName && !wardCareRecords.some(w => String(w.patientId) === String(r.patientId) && w.date === r.date))];
-  return <div className="panel" style={{marginTop:12}}>
-    <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"center",flexWrap:"wrap"}}><div><h2 style={{marginBottom:4}}>Ward Nursing Care / Patient Care</h2><p className="muted" style={{margin:0}}>Wannan ward ne ke rubuta abin da aka yi wa admitted patients. Ba ya canza Nursing pre-consultation records.</p></div><div className="access-box"><strong>Care Records</strong><span>{combined.length}</span></div></div>
-    <div className="card" style={{marginTop:16}}>
-      <h3>Record Nursing Care</h3>
-      <div className="form-grid"><FormField label="Patient"><select value={selectedPatientId} onChange={e=>setSelectedPatientId(e.target.value)}><option value="">Select ward patient</option>{patientOptions.map(p=><option key={p.patientId} value={p.patientId}>{p.patientName} — {p.card}</option>)}</select></FormField></div>
-      <SearchableMultiSelectButtons label="Nursing Tasks — Select 2 or more" options={taskOptions} value={tasks} onChange={setTasks} placeholder="Search task..." />
-      <FormField label="Ward Nursing Notes"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Rubuta clinical care notes idan akwai..." /></FormField>
-      <button className="button primary" onClick={saveCare} style={{marginTop:10}}>Save Ward Nursing Care</button>
+
+  const filteredPatients = patients.filter((patient) => {
+    const term = search.toLowerCase().trim();
+    if (!term) return true;
+    const name = String(
+      patient.name || `${patient.surname || ""} ${patient.otherNames || ""}`
+    ).toLowerCase();
+    const card = String(patient.card || patient.cardNumber || patient.id || "").toLowerCase();
+    const phone = String(patient.phone || patient.phoneNumber || "").toLowerCase();
+    return name.includes(term) || card.includes(term) || phone.includes(term);
+  }).slice(0, 12);
+
+  const getPatientName = (patient) => {
+    if (!patient) return "";
+    return patient.name || `${patient.surname || ""} ${patient.otherNames || ""}`.trim();
+  };
+
+  const getPatientCard = (patient) => {
+    if (!patient) return "";
+    return patient.card || patient.cardNumber || patient.id || "";
+  };
+
+  const toggleTest = (test) => {
+    setSelectedTests((previous) =>
+      previous.includes(test)
+        ? previous.filter((item) => item !== test)
+        : [...previous, test]
+    );
+  };
+
+  const toggleMedicine = (medicine) => {
+    setSelectedMedicines((previous) =>
+      previous.includes(medicine)
+        ? previous.filter((item) => item !== medicine)
+        : [...previous, medicine]
+    );
+  };
+
+  const updateMedicineDetail = (medicine, field, value) => {
+    setMedicineDetails((previous) => ({
+      ...previous,
+      [medicine]: {
+        ...(previous[medicine] || {}),
+        [field]: value,
+      },
+    }));
+  };
+
+  const selectPatient = (patient) => {
+    setSelectedPatient(patient);
+    setSearch(getPatientName(patient));
+    setConsultationNote(patient.consultation?.notes || "");
+    setDiagnosis(patient.consultation?.diagnosis || "");
+    setSelectedTests([]);
+    setSelectedMedicines([]);
+    setMedicineDetails({});
+    setOtherTest("");
+    setOtherMedicine("");
+    showMessage?.(`Patient selected: ${getPatientName(patient)}`);
+  };
+
+  const saveConsultation = () => {
+    if (!selectedPatient) {
+      showMessage?.("Da farko zaɓi patient.");
+      return;
+    }
+    if (!consultationNote.trim() && !diagnosis.trim()) {
+      showMessage?.("Shigar da consultation notes ko diagnosis.");
+      return;
+    }
+
+    const consultation = {
+      notes: consultationNote.trim(),
+      diagnosis: diagnosis.trim(),
+      consultant: "Consultant Room",
+      date: new Date().toLocaleString(),
+      status: "Completed",
+    };
+
+    if (setPatients) {
+      setPatients((previous) =>
+        previous.map((patient) =>
+          patient.id === selectedPatient.id
+            ? { ...patient, consultation }
+            : patient
+        )
+      );
+    }
+
+    setSelectedPatient((previous) =>
+      previous ? { ...previous, consultation } : previous
+    );
+    showMessage?.("Consultation saved successfully.");
+  };
+
+  const sendToLaboratory = () => {
+    if (!selectedPatient) {
+      showMessage?.("Da farko zaɓi patient.");
+      return;
+    }
+    if (!selectedTests.length && !otherTest.trim()) {
+      showMessage?.("Zaɓi aƙalla Laboratory Test ɗaya.");
+      return;
+    }
+    if (!setLabRequests) {
+      showMessage?.("Laboratory connection is not available.");
+      return;
+    }
+
+    const tests = [
+      ...selectedTests.map((test) => ({ test, amount: laboratoryTests[test] || 0 })),
+      ...(otherTest.trim() ? [{ test: otherTest.trim(), amount: 0 }] : []),
+    ];
+
+    const requests = tests.map((item, index) => ({
+      id: `LAB-${Date.now()}-${index}`,
+      patientId: selectedPatient.id,
+      card: getPatientCard(selectedPatient),
+      patientName: getPatientName(selectedPatient),
+      test: item.test,
+      consultant: "Consultant Room",
+      status: "New",
+      paymentStatus: "Pending",
+      paymentMethod: "Cash",
+      amount: item.amount,
+      result: "",
+      consultationNote,
+      date: new Date().toLocaleString(),
+    }));
+
+    setLabRequests((previous) => [...requests, ...previous]);
+    showMessage?.(`${requests.length} laboratory request${requests.length > 1 ? "s" : ""} sent successfully.`);
+    setSelectedTests([]);
+    setOtherTest("");
+  };
+
+  const sendToPharmacy = () => {
+    if (!selectedPatient) {
+      showMessage?.("Da farko zaɓi patient.");
+      return;
+    }
+    if (!selectedMedicines.length && !otherMedicine.trim()) {
+      showMessage?.("Zaɓi aƙalla medicine ɗaya.");
+      return;
+    }
+    if (!setPharmacyPrescriptions) {
+      showMessage?.("Pharmacy connection is not available.");
+      return;
+    }
+
+    const medicinesToSend = [
+      ...selectedMedicines,
+      ...(otherMedicine.trim() ? [otherMedicine.trim()] : []),
+    ];
+
+    const prescriptions = medicinesToSend.map((medicine, index) => {
+      const detail = medicineDetails[medicine] || {};
+      return {
+        id: `CONS-RX-${Date.now()}-${index}`,
+        patientId: selectedPatient.id,
+        patientName: getPatientName(selectedPatient),
+        card: getPatientCard(selectedPatient),
+        medicine,
+        quantity: Number(detail.quantity || 1),
+        instructions: detail.instructions || "",
+        duration: detail.duration || "",
+        consultant: "Consultant Room",
+        status: "New",
+        paymentStatus: "Pending",
+        paymentMethod: "Cash",
+        amount: 0,
+        date: new Date().toLocaleString(),
+      };
+    });
+
+    setPharmacyPrescriptions((previous) => [...prescriptions, ...previous]);
+    showMessage?.(`${prescriptions.length} prescription${prescriptions.length > 1 ? "s" : ""} sent to Pharmacy.`);
+    setSelectedMedicines([]);
+    setMedicineDetails({});
+    setOtherMedicine("");
+  };
+
+  const sendToUltrasound = () => {
+    if (!selectedPatient) return showMessage?.("Da farko zaɓi patient.");
+    if (!selectedUltrasound) return showMessage?.("Zaɓi Ultrasound service.");
+    if (!setUltrasoundRequests) return showMessage?.("Ultrasound connection is not available.");
+
+    const request = {
+      id: `CONS-US-${Date.now()}`,
+      patientId: selectedPatient.id,
+      patientName: getPatientName(selectedPatient),
+      card: getPatientCard(selectedPatient),
+      phone: selectedPatient.phone || selectedPatient.phoneNumber || "",
+      type: selectedUltrasound,
+      notes: ultrasoundNotes.trim() || consultationNote.trim(),
+      consultant: "Consultant Room",
+      status: "New",
+      paymentStatus: "Pending",
+      paymentMethod: "Cash",
+      amount: selectedUltrasound === "Other" ? 0 : 5000,
+      report: "",
+      requestedAt: new Date().toLocaleString(),
+      completedAt: "",
+    };
+
+    setUltrasoundRequests((previous) => [request, ...previous]);
+    if (setPatients) {
+      setPatients((previous) => previous.map((patient) => {
+        if (String(patient.id) !== String(selectedPatient.id)) return patient;
+        const existing = Array.isArray(patient.ultrasoundResults) ? patient.ultrasoundResults : [];
+        return {
+          ...patient,
+          ultrasoundResults: [
+            {
+              id: request.id,
+              card: request.card,
+              type: request.type,
+              notes: request.notes,
+              report: "",
+              status: "New",
+              consultant: "Consultant Room",
+              requestedAt: request.requestedAt,
+            },
+            ...existing.filter((item) => item.id !== request.id),
+          ],
+        };
+      }));
+    }
+    showMessage?.("Ultrasound request sent successfully.");
+    setSelectedUltrasound("");
+    setUltrasoundNotes("");
+  };
+
+  const sameSelectedPatient = (record) => {
+    if (!selectedPatient || !record) return false;
+    const selectedId = String(selectedPatient.id || "");
+    const selectedCard = String(getPatientCard(selectedPatient) || "");
+    return (selectedId && String(record.patientId || "") === selectedId) ||
+      (selectedCard && String(record.card || record.cardNumber || "") === selectedCard);
+  };
+
+  const readyLabResults = labRequests.filter(
+    (request) =>
+      sameSelectedPatient(request) &&
+      (request.status === "Result Ready" || request.status === "Sent to Consultant")
+  );
+
+  const patientPrescriptions = pharmacyPrescriptions.filter((item) => sameSelectedPatient(item));
+
+  const patientUltrasoundResults = [
+    ...ultrasoundRequests.filter((request) => sameSelectedPatient(request)),
+    ...(Array.isArray(selectedPatient?.ultrasoundResults) ? selectedPatient.ultrasoundResults : [])
+      .filter((item) => !ultrasoundRequests.some((request) => request.id === item.id)),
+  ];
+
+  const selectedProfile = selectedPatient || {};
+  const profileSections = [
+    ["ICT Registration", selectedProfile.ictRegistration],
+    ["Records", selectedProfile.records],
+    ["Nursing", selectedProfile.nursing],
+    ["Consultation", selectedProfile.consultation],
+  ];
+
+  return (
+    <div>
+      <PageHeader
+        title="Consultant Room"
+        subtitle="Consultation, diagnosis, laboratory requests, prescriptions and patient review"
+        icon="✚"
+      />
+
+      <div className="stats-grid">
+        <StatCard title="Waiting" value="5" icon="◉" />
+        <StatCard title="In Consultation" value="1" icon="✚" />
+        <StatCard title="Lab Requests" value={labRequests.length} icon="▣" />
+        <StatCard title="Completed" value="29" icon="✓" />
+      </div>
+
+      <div className="panel" style={{ marginTop: 20 }}>
+        <h2 style={{ marginTop: 0 }}>Select Patient</h2>
+        <input
+          className="search-input"
+          style={{ width: "100%", minWidth: 0 }}
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setSelectedPatient(null);
+          }}
+          placeholder="Search patient by name, Card Number or phone..."
+        />
+
+        {!selectedPatient && search.trim() && (
+          <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+            {filteredPatients.map((patient) => (
+              <button
+                type="button"
+                key={patient.id}
+                onClick={() => selectPatient(patient)}
+                style={{
+                  textAlign: "left",
+                  border: "1px solid #dce3e8",
+                  background: "#fff",
+                  borderRadius: 8,
+                  padding: 12,
+                }}
+              >
+                <strong>{getPatientName(patient)}</strong>
+                <div style={{ marginTop: 4, fontSize: 11, color: "#71808d" }}>
+                  Card: {getPatientCard(patient)} • Phone: {patient.phone || patient.phoneNumber || "-"}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {selectedPatient && (
+        <>
+          <div className="panel" style={{ marginTop: 20 }}>
+            <div className="panel-header">
+              <div>
+                <h2>Patient Profile</h2>
+                <p>Read-only information from ICT/Records/Nursing, with Consultant section editable here.</p>
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 15 }}>
+              <div><strong>Name</strong><div>{getPatientName(selectedPatient)}</div></div>
+              <div><strong>Card Number</strong><div>{getPatientCard(selectedPatient)}</div></div>
+              <div><strong>Age</strong><div>{selectedPatient.age || "-"}</div></div>
+              <div><strong>Address</strong><div>{selectedPatient.address || "-"}</div></div>
+              <div><strong>Phone</strong><div>{selectedPatient.phone || selectedPatient.phoneNumber || "-"}</div></div>
+              <div><strong>Sex</strong><div>{selectedPatient.sex || selectedPatient.gender || "-"}</div></div>
+              <div><strong>Status</strong><div>{selectedPatient.status || "-"}</div></div>
+              <div><strong>Spouse Name</strong><div>{selectedPatient.spouseName || "-"}</div></div>
+            </div>
+
+            <div style={{ marginTop: 18, display: "grid", gap: 10 }}>
+              {profileSections.map(([title, data]) => (
+                <div key={title} style={{ border: "1px solid #e4e9ef", borderRadius: 8, padding: 12, background: "#fafbfd" }}>
+                  <strong>{title}</strong>
+                  <div style={{ marginTop: 5, fontSize: 12, color: "#71808d", whiteSpace: "pre-wrap" }}>
+                    {data ? JSON.stringify(data, null, 2) : "No saved information available."}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="panel" style={{ marginTop: 20 }}>
+            <h2 style={{ marginTop: 0 }}>Live Consultation</h2>
+            <div className="form-grid">
+              <label className="form-field">
+                <span>Diagnosis</span>
+                <input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder="Enter diagnosis" />
+              </label>
+              <label className="form-field" style={{ gridColumn: "1 / -1" }}>
+                <span>Consultation Notes</span>
+                <textarea rows={5} value={consultationNote} onChange={(e) => setConsultationNote(e.target.value)} placeholder="Enter consultation notes..." />
+              </label>
+            </div>
+            <button type="button" className="button primary" onClick={saveConsultation}>Save Consultation</button>
+          </div>
+
+          <div className="panel" style={{ marginTop: 20 }}>
+            <h2 style={{ marginTop: 0 }}>Laboratory Services</h2>
+            <p style={{ marginTop: 0, color: "#71808d" }}>Click tests to select multiple services without using Ctrl.</p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {Object.entries(laboratoryTests).map(([name, price]) => (
+                <button
+                  key={name}
+                  type="button"
+                  className={`button ${selectedTests.includes(name) ? "primary" : "secondary"}`}
+                  onClick={() => toggleTest(name)}
+                >
+                  {name} — ₦{price.toLocaleString()}
+                </button>
+              ))}
+              <button type="button" className={`button ${otherTest ? "primary" : "secondary"}`} onClick={() => setOtherTest(otherTest ? "" : "Other Test")}>Others</button>
+            </div>
+            {otherTest && (
+              <label className="form-field" style={{ marginTop: 15 }}>
+                <span>Other Laboratory Test</span>
+                <input value={otherTest === "Other Test" ? "" : otherTest} onChange={(e) => setOtherTest(e.target.value)} placeholder="Type other test" />
+              </label>
+            )}
+            <div style={{ marginTop: 15, color: "#71808d", fontSize: 12 }}>
+              Selected: {selectedTests.length ? selectedTests.join(", ") : "None"}{otherTest && otherTest !== "Other Test" ? `, ${otherTest}` : ""}
+            </div>
+            <button type="button" className="button primary" style={{ marginTop: 15 }} onClick={sendToLaboratory}>Send Request to Laboratory</button>
+          </div>
+
+          <div className="panel" style={{ marginTop: 20 }}>
+            <h2 style={{ marginTop: 0 }}>Ultrasound Services</h2>
+            <p style={{ marginTop: 0, color: "#71808d" }}>Consultant can request Ultrasound directly for the selected patient. The request will appear in Ultrasound Room using the same Patient/Card Number.</p>
+            <div className="form-grid">
+              <FormField label="Ultrasound Type">
+                <select value={selectedUltrasound} onChange={(e) => setSelectedUltrasound(e.target.value)}>
+                  <option value="">Select ultrasound service</option>
+                  <option>Obstetric Ultrasound</option>
+                  <option>Abdominal Ultrasound</option>
+                  <option>Pelvic Ultrasound</option>
+                  <option>Renal Ultrasound</option>
+                  <option>Breast Ultrasound</option>
+                  <option>Other</option>
+                </select>
+              </FormField>
+              <FormField label="Ultrasound Notes / Clinical Request">
+                <textarea value={ultrasoundNotes} onChange={(e) => setUltrasoundNotes(e.target.value)} placeholder="Enter clinical request..." />
+              </FormField>
+            </div>
+            <button type="button" className="button primary" onClick={sendToUltrasound}>Send Request to Ultrasound</button>
+
+            <div style={{ marginTop: 18 }}>
+              <h3>Ultrasound Results</h3>
+              {patientUltrasoundResults.length === 0 ? (
+                <div style={{ padding: 12, background: "#f7f9fb", borderRadius: 8, color: "#71808d" }}>No Ultrasound request found for this patient.</div>
+              ) : (
+                <div style={{ display: "grid", gap: 10 }}>
+                  {patientUltrasoundResults.map((request) => (
+                    <div key={request.id} style={{ border: "1px solid #dce3e8", borderRadius: 8, padding: 12 }}>
+                      <strong>{request.type}</strong>
+                      <div style={{ marginTop: 5 }}>Status: {request.status}</div>
+                      <div style={{ marginTop: 5, fontSize: 12, color: "#71808d" }}>Requested: {request.requestedAt || "-"}</div>
+                      {request.notes && <div style={{ marginTop: 7 }}><strong>Request:</strong> {request.notes}</div>}
+                      {request.report && <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}><strong>Report:</strong> {request.report}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="panel" style={{ marginTop: 20 }}>
+            <h2 style={{ marginTop: 0 }}>Prescription</h2>
+            <p style={{ marginTop: 0, color: "#71808d" }}>Click medicines to select multiple medicines. Quantity/instructions can be entered for each selected medicine.</p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {medicines.map((item) => (
+                <button key={item} type="button" className={`button ${selectedMedicines.includes(item) ? "primary" : "secondary"}`} onClick={() => toggleMedicine(item)}>{item}</button>
+              ))}
+              <button type="button" className={`button ${otherMedicine ? "primary" : "secondary"}`} onClick={() => setOtherMedicine(otherMedicine ? "" : "Other Medicine")}>Others</button>
+            </div>
+
+            {selectedMedicines.map((item) => {
+              const detail = medicineDetails[item] || {};
+              return (
+                <div key={item} style={{ marginTop: 12, padding: 14, border: "1px solid #e4e9ef", borderRadius: 8 }}>
+                  <strong>{item}</strong>
+                  <div className="form-grid" style={{ marginTop: 10 }}>
+                    <label className="form-field"><span>Quantity</span><input type="number" min="1" value={detail.quantity || 1} onChange={(e) => updateMedicineDetail(item, "quantity", e.target.value)} /></label>
+                    <label className="form-field"><span>Duration</span><input value={detail.duration || ""} onChange={(e) => updateMedicineDetail(item, "duration", e.target.value)} placeholder="e.g. 3 days" /></label>
+                    <label className="form-field" style={{ gridColumn: "1 / -1" }}><span>Instructions</span><input value={detail.instructions || ""} onChange={(e) => updateMedicineDetail(item, "instructions", e.target.value)} placeholder="e.g. Take after food" /></label>
+                  </div>
+                </div>
+              );
+            })}
+
+            {otherMedicine && (
+              <label className="form-field" style={{ marginTop: 15 }}>
+                <span>Other Medicine</span>
+                <input value={otherMedicine === "Other Medicine" ? "" : otherMedicine} onChange={(e) => setOtherMedicine(e.target.value)} placeholder="Type other medicine" />
+              </label>
+            )}
+            <button type="button" className="button primary" style={{ marginTop: 15 }} onClick={sendToPharmacy}>Send Prescription to Pharmacy</button>
+          </div>
+
+          <div className="panel" style={{ marginTop: 20 }}>
+            <h2 style={{ marginTop: 0 }}>Laboratory Results</h2>
+            {readyLabResults.length === 0 ? (
+              <div style={{ padding: 15, background: "#f7f9fb", borderRadius: 8, color: "#71808d" }}>No laboratory results are ready for review.</div>
+            ) : (
+              <div style={{ display: "grid", gap: 12 }}>
+                {readyLabResults.map((request) => (
+                  <div key={request.id} style={{ border: "1px solid #dce3e8", borderRadius: 10, padding: 15 }}>
+                    <strong>{request.test}</strong>
+                    <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>{request.result || "No result entered yet."}</div>
+                    <div style={{ marginTop: 8, fontSize: 11, color: "#71808d" }}>{request.status} • {request.date}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="panel" style={{ marginTop: 20 }}>
+            <h2 style={{ marginTop: 0 }}>Pharmacy Results / Dispensing Status</h2>
+            {patientPrescriptions.length === 0 ? (
+              <div style={{ padding: 15, background: "#f7f9fb", borderRadius: 8, color: "#71808d" }}>No Pharmacy prescription found for this patient.</div>
+            ) : (
+              <div className="table-wrapper">
+                <table>
+                  <thead><tr><th>Medicine</th><th>Qty</th><th>Instructions</th><th>Status</th><th>Date</th></tr></thead>
+                  <tbody>
+                    {patientPrescriptions.map((item) => (
+                      <tr key={item.id}>
+                        <td>{item.medicine}</td>
+                        <td>{item.quantity}</td>
+                        <td>{item.instructions || "-"}{item.duration ? ` (${item.duration})` : ""}</td>
+                        <td><span className="status-badge active-status">{item.status || "Pending"}</span></td>
+                        <td>{item.dispensedAt || item.date || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
-    {combined.length === 0 ? <div className="empty-state" style={{marginTop:16}}>Babu Nursing care record da aka ajiye wa wannan ward tukuna.</div> : <div className="table-wrapper" style={{marginTop:16}}><table><thead><tr><th>Patient</th><th>Card</th><th>Tasks</th><th>Notes</th><th>Status</th><th>Date</th></tr></thead><tbody>{combined.map((r,i)=><tr key={`${r.id}-${i}`}><td>{r.patientName}</td><td>{r.card}</td><td><div style={{display:"flex",flexWrap:"wrap",gap:5}}>{(r.tasks||[]).map(t=><span key={t} className="badge">{t}</span>)}</div></td><td>{r.notes||"—"}</td><td><StatusBadge status={r.status||"Completed"} /></td><td>{r.date||"—"}</td></tr>)}</tbody></table></div>}
-  </div>;
+  );
 }
 
+function StatCard({ title, value, icon, text }) {
+  return (
+    <div className="stat-card">
+      <div className="stat-icon">{icon}</div>
+
+      <div>
+        <span>{title}</span>
+        <strong>{value}</strong>
+
+        {text && <small>{text}</small>}
+      </div>
+    </div>
+  );
+}
+
+function PatientTable({ patients }) {
+  return (
+    <div className="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Card Number</th>
+            <th>Patient Name</th>
+            <th>Age</th>
+            <th>Address</th>
+            <th>Phone</th>
+            <th>Sex</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {patients.map((patient) => (
+            <tr key={patient.id}>
+              <td>
+                <strong>{patient.card}</strong>
+              </td>
+
+              <td>{patient.name}</td>
+
+              <td>{patient.age || "—"}</td>
+
+              <td>{patient.address || "—"}</td>
+
+              <td>{patient.phone}</td>
+
+              <td>{patient.sex}</td>
+
+              <td>
+                <span className="status-badge active-status">
+                  {patient.status}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function FormField({ label, children }) {
+  return (
+    <label className="form-field">
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function Modal({ title, onClose, children }) {
+  return (
+    <div className="modal-overlay" onMouseDown={onClose}>
+      <div
+        className="modal"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="modal-header">
+          <h2>{title}</h2>
+
+          <button className="close-button" onClick={onClose}>
+            ×
+          </button>
+        </div>
+
+        <div className="modal-body">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+const styles = `
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  font-family: Inter, Arial, Helvetica, sans-serif;
+  color: #172033;
+  background: #f5f7fb;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #f5f7fb;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  background: #f5f7fb;
+}
+
+.sidebar {
+  width: 265px;
+  min-height: 100vh;
+  background: #102b46;
+  color: white;
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+}
+
+.brand {
+  height: 76px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 20px;
+  border-bottom: 1px solid rgba(255,255,255,.09);
+}
+
+.brand-logo {
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  background: #18a56b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 22px;
+}
+
+.brand-title {
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.brand-subtitle {
+  color: #9eb1c5;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.facility-name {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255,255,255,.09);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.facility-name strong {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.facility-name span {
+  color: #9eb1c5;
+  font-size: 9px;
+}
+
+.menu {
+  padding: 10px 10px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.menu-section {
+  color: #6f879f;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  padding: 15px 12px 7px;
+}
+
+.menu-item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #c5d1dc;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.menu-item:hover {
+  background: rgba(255,255,255,.06);
+  color: white;
+}
+
+.menu-item.active {
+  background: #18a56b;
+  color: white;
+  font-weight: 700;
+}
+
+.menu-icon {
+  width: 22px;
+  text-align: center;
+  font-size: 15px;
+}
+
+.sidebar-footer {
+  padding: 15px 20px;
+  border-top: 1px solid rgba(255,255,255,.09);
+  color: #9eb1c5;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.online-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #27c983;
+}
+
+.main {
+  margin-left: 265px;
+  width: calc(100% - 265px);
+  min-height: 100vh;
+}
+
+.topbar {
+  height: 76px;
+  background: white;
+  border-bottom: 1px solid #e5e9ef;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 30px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.top-title {
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.top-location {
+  color: #7a8796;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.icon-button {
+  border: 1px solid #e2e7ed;
+  background: white;
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+}
+
+.user-box {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #dff4eb;
+  color: #168258;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+}
+
+.user-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-details strong {
+  font-size: 12px;
+}
+
+.user-details span {
+  font-size: 10px;
+  color: #8792a0;
+}
+
+.logout-button {
+  border: 0;
+  background: #fff0f0;
+  color: #c53a3a;
+  padding: 9px 13px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.content {
+  padding: 28px 30px 50px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.welcome {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+}
+
+.welcome h1,
+.page-header h1 {
+  margin: 3px 0 5px;
+  font-size: 27px;
+}
+
+.welcome p,
+.page-header p {
+  margin: 0;
+  color: #7b8794;
+  font-size: 13px;
+}
+
+.eyebrow {
+  color: #18a56b;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+
+.date-box {
+  background: white;
+  border: 1px solid #e3e8ee;
+  border-radius: 10px;
+  padding: 12px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: right;
+}
+
+.date-box strong {
+  font-size: 13px;
+}
+
+.date-box span {
+  color: #84909d;
+  font-size: 10px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.stat-card {
+  background: white;
+  border: 1px solid #e4e9ef;
+  border-radius: 12px;
+  padding: 19px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  min-height: 100px;
+}
+
+.stat-icon {
+  width: 45px;
+  height: 45px;
+  border-radius: 10px;
+  background: #e5f6ef;
+  color: #168258;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 19px;
+  font-weight: 800;
+}
+
+.stat-card span {
+  display: block;
+  color: #7b8794;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.stat-card strong {
+  display: block;
+  font-size: 23px;
+}
+
+.stat-card small {
+  display: block;
+  color: #a0a8b2;
+  margin-top: 3px;
+  font-size: 10px;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1.4fr .8fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.panel {
+  background: white;
+  border: 1px solid #e4e9ef;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 18px;
+}
+
+.panel-header h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.panel-header p {
+  margin: 0;
+  color: #8a95a1;
+  font-size: 11px;
+}
+
+.department-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.department-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid #edf0f3;
+}
+
+.department-row:last-child {
+  border-bottom: 0;
+}
+
+.dept-icon {
+  width: 36px;
+  height: 36px;
+  background: #eef7f3;
+  color: #168258;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+}
+
+.department-row div:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.department-row strong {
+  font-size: 12px;
+}
+
+.department-row span {
+  color: #8b96a2;
+  font-size: 10px;
+  margin-top: 3px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22b978;
+}
+
+.quick-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.quick-actions button {
+  border: 1px solid #e4e9ef;
+  background: #fafbfd;
+  border-radius: 9px;
+  padding: 17px 10px;
+  color: #263345;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.quick-actions button:hover {
+  border-color: #18a56b;
+}
+
+.quick-actions span {
+  display: block;
+  font-size: 20px;
+  color: #18a56b;
+  margin-bottom: 7px;
+}
+
+.recent-panel {
+  margin-top: 20px;
+}
+
+.text-button {
+  border: 0;
+  background: transparent;
+  color: #168258;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 24px;
+}
+
+.page-header-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: #e5f6ef;
+  color: #168258;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.toolbar {
+  background: white;
+  border: 1px solid #e4e9ef;
+  padding: 15px;
+  border-radius: 11px;
+  margin-bottom: 16px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.search-input {
+  border: 1px solid #dce2e8;
+  border-radius: 8px;
+  padding: 10px 13px;
+  min-width: 300px;
+  outline: none;
+}
+
+.search-input:focus,
+input:focus,
+select:focus {
+  border-color: #18a56b;
+  box-shadow: 0 0 0 3px rgba(24,165,107,.08);
+}
+
+.button {
+  border: 0;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 12px;
+}
+
+.button.primary {
+  background: #18a56b;
+  color: white;
+}
+
+.button.primary:hover {
+  background: #138b59;
+}
+
+.button.secondary {
+  background: #eef1f4;
+  color: #485462;
+}
+
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th {
+  text-align: left;
+  background: #f8fafc;
+  color: #687585;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 12px;
+  border-bottom: 1px solid #e5e9ee;
+  white-space: nowrap;
+}
+
+td {
+  padding: 13px 12px;
+  border-bottom: 1px solid #edf0f3;
+  font-size: 12px;
+  color: #3f4c5b;
+}
+
+tbody tr:hover {
+  background: #fbfcfd;
+}
+
+.username-badge,
+.role-badge,
+.status-badge,
+.shift-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 20px;
+  padding: 5px 8px;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.username-badge {
+  background: #f0f3f6;
+  color: #596675;
+}
+
+.role-badge {
+  background: #eaf2ff;
+  color: #386ca7;
+}
+
+.status-badge.active-status {
+  background: #e4f7ee;
+  color: #168258;
+}
+
+.status-badge.inactive-status {
+  background: #fff0f0;
+  color: #b84040;
+}
+
+.shift-badge {
+  background: #eef4fb;
+  color: #41698f;
+}
+
+.table-actions {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.small-button {
+  border: 1px solid #dfe5eb;
+  background: white;
+  color: #455362;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.small-button:hover {
+  border-color: #18a56b;
+  color: #168258;
+}
+
+.small-button.danger {
+  color: #b63c3c;
+}
+
+.empty-cell {
+  text-align: center;
+  padding: 30px;
+  color: #8d98a4;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 15px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.form-field span,
+.login-card label {
+  font-size: 11px;
+  font-weight: 800;
+  color: #586575;
+}
+
+input,
+select {
+  width: 100%;
+  border: 1px solid #dce2e8;
+  background: white;
+  border-radius: 8px;
+  padding: 10px 12px;
+  outline: none;
+  color: #263345;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.modal-actions.left {
+  justify-content: flex-start;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 27, 42, .56);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.modal {
+  width: min(700px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  background: white;
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.22);
+}
+
+.modal-header {
+  padding: 17px 20px;
+  border-bottom: 1px solid #e8ecf0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.close-button {
+  border: 0;
+  background: #f1f3f5;
+  width: 31px;
+  height: 31px;
+  border-radius: 50%;
+  font-size: 19px;
+  color: #66717e;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-description {
+  color: #7c8794;
+  font-size: 12px;
+  margin-top: 0;
+}
+
+.permission-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.permission-item {
+  border: 1px solid #e1e6eb;
+  padding: 13px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.permission-item input {
+  width: auto;
+}
+
+.empty-module {
+  min-height: 330px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.large-module-icon {
+  width: 70px;
+  height: 70px;
+  border-radius: 17px;
+  background: #e5f6ef;
+  color: #168258;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.empty-module h2 {
+  margin: 15px 0 5px;
+}
+
+.empty-module p {
+  max-width: 560px;
+  color: #7d8996;
+  font-size: 12px;
+  line-height: 1.7;
+  margin-bottom: 18px;
+}
+
+.shift-rules {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.shift-rules div {
+  border: 1px solid #e4e9ef;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.shift-rules strong {
+  font-size: 11px;
+}
+
+.shift-rules span {
+  font-size: 10px;
+  color: #84909d;
+}
+
+.toast {
+  position: fixed;
+  right: 25px;
+  top: 90px;
+  background: #172b40;
+  color: white;
+  padding: 12px 16px;
+  border-radius: 8px;
+  z-index: 200;
+  font-size: 12px;
+  box-shadow: 0 10px 25px rgba(0,0,0,.18);
+}
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eef3f6;
+  padding: 25px;
+}
+
+.login-card {
+  width: min(430px, 100%);
+  background: white;
+  border: 1px solid #e2e7ec;
+  border-radius: 17px;
+  padding: 35px;
+  box-shadow: 0 15px 45px rgba(26,48,69,.10);
+}
+
+.login-logo {
+  width: 65px;
+  height: 65px;
+  margin: 0 auto 15px;
+  background: #18a56b;
+  color: white;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  font-weight: 900;
+}
+
+.login-card h1 {
+  text-align: center;
+  margin: 0;
+  text-transform: uppercase;
+  font-size: 25px;
+  color: #102b46;
+}
+
+.login-subtitle {
+  text-align: center;
+  color: #8a95a1;
+  font-size: 11px;
+  margin: 6px 0 17px;
+}
+
+.login-line {
+  height: 1px;
+  background: #e6ebef;
+  margin-bottom: 23px;
+}
+
+.login-card h2 {
+  margin: 0 0 18px;
+  font-size: 17px;
+}
+
+.login-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.login-card input {
+  margin-bottom: 8px;
+}
+
+.login-button {
+  margin-top: 5px;
+  border: 0;
+  border-radius: 8px;
+  background: #18a56b;
+  color: white;
+  padding: 12px;
+  font-weight: 900;
+}
+
+.login-button:hover {
+  background: #138b59;
+}
+
+.login-error {
+  background: #fff0f0;
+  color: #bd3b3b;
+  padding: 10px;
+  border-radius: 7px;
+  margin-bottom: 12px;
+  font-size: 11px;
+}
+
+.demo-box {
+  margin-top: 20px;
+  padding: 13px;
+  background: #f7f9fb;
+  border-radius: 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.demo-box strong {
+  font-size: 11px;
+  color: #344354;
+  margin-bottom: 3px;
+}
+
+.demo-box span {
+  font-size: 10px;
+  color: #758190;
+}
+
+.login-card footer {
+  text-align: center;
+  color: #a0a8b2;
+  font-size: 9px;
+  margin-top: 22px;
+}
+
+@media (max-width: 1100px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 800px) {
+  .sidebar {
+    width: 220px;
+  }
+
+  .main {
+    margin-left: 220px;
+    width: calc(100% - 220px);
+  }
+
+  .topbar {
+    padding: 0 15px;
+  }
+
+  .content {
+    padding: 20px 15px 40px;
+  }
+
+  .user-details {
+    display: none;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .sidebar {
+    width: 70px;
+  }
+
+  .brand {
+    justify-content: center;
+    padding: 10px;
+  }
+
+  .brand > div:not(.brand-logo),
+  .facility-name,
+  .menu-item span:not(.menu-icon),
+  .menu-section,
+  .sidebar-footer span {
+    display: none;
+  }
+
+  .menu-item {
+    justify-content: center;
+  }
+
+  .main {
+    margin-left: 70px;
+    width: calc(100% - 70px);
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .welcome {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .toolbar {
+    flex-direction: column;
+  }
+
+  .search-input {
+    min-width: 0;
+  }
+
+  .top-location {
+    display: none;
+  }
+
+  .permission-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .shift-rules {
+    grid-template-columns: 1fr;
+  }
+}
+
+.searchable-select-wrap{position:relative}.searchable-select-trigger{width:100%;display:flex;justify-content:space-between;align-items:center;padding:11px 12px;border:1px solid #d8dee6;border-radius:8px;background:#fff;cursor:pointer;text-align:left}.searchable-select-menu{position:absolute;z-index:1000;left:0;right:0;top:calc(100% + 4px);background:#fff;border:1px solid #d8dee6;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.12);padding:7px;max-height:320px;overflow:auto}.searchable-option{width:100%;border:0;background:#fff;padding:10px;text-align:left;display:flex;justify-content:space-between;gap:10px;cursor:pointer}.searchable-option:hover{background:#f3f7f5}
+`;
+function PharmacyPage({
+  patients = [],
+  prescriptions,
+  setPrescriptions,
+  showMessage,
+  setTransactions,
+  transactions = [],
+  currentUser,
+}) {
+  const [view, setView] = useState("dashboard");
+  const [search, setSearch] = useState("");
+  const [selectedPatient, setSelectedPatient] = useState(null);
+
+  const [medicine, setMedicine] = useState("");
+  const [quantity, setQuantity] = useState(1);
+  const [instructions, setInstructions] = useState("");
+  const [duration, setDuration] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("Cash");
+  const [paymentStatus, setPaymentStatus] = useState("Pending");
+
+  const [stock, setStock] = usePersistentState("bazza_pharmacy_stock", [
+    {
+      id: 1,
+      medicine: "Paracetamol 500mg",
+      category: "Tablet",
+      price: 500,
+      quantity: 100,
+      reorderLevel: 20,
+    },
+    {
+      id: 2,
+      medicine: "Amoxicillin 500mg",
+      category: "Capsule",
+      price: 1500,
+      quantity: 50,
+      reorderLevel: 10,
+    },
+    {
+      id: 3,
+      medicine: "Metronidazole 400mg",
+      category: "Tablet",
+      price: 800,
+      quantity: 35,
+      reorderLevel: 10,
+    },
+    {
+      id: 4,
+      medicine: "Artemether/Lumefantrine",
+      category: "Tablet",
+      price: 1200,
+      quantity: 20,
+      reorderLevel: 5,
+    },
+  ]);
+
+  const filteredPatients = useMemo(() => {
+    const term = search.trim().toLowerCase();
+
+    if (!term) {
+      return patients.slice(0, 10);
+    }
+
+    return patients
+      .filter((patient) => {
+        const name = String(patient.name || "").toLowerCase();
+        const card = String(patient.card || "").toLowerCase();
+        const phone = String(patient.phone || "").toLowerCase();
+
+        return (
+          name.includes(term) ||
+          card.includes(term) ||
+          phone.includes(term)
+        );
+      })
+      .slice(0, 10);
+  }, [patients, search]);
+
+  const filteredPrescriptions = useMemo(() => {
+    const term = search.trim().toLowerCase();
+
+    if (!term) {
+      return prescriptions;
+    }
+
+    return prescriptions.filter((item) => {
+      return (
+        item.patientName.toLowerCase().includes(term) ||
+        item.card.toLowerCase().includes(term) ||
+        item.medicine.toLowerCase().includes(term) ||
+        item.id.toLowerCase().includes(term)
+      );
+    });
+  }, [prescriptions, search]);
+  const totalPrescriptions = prescriptions.length;
+
+  const newPrescriptions = prescriptions.filter(
+    (item) => item.status === "New"
+  ).length;
+
+  const dispensedToday = prescriptions.filter(
+    (item) => item.status === "Dispensed"
+  ).length;
+
+  const pendingPrescriptions = prescriptions.filter(
+    (item) =>
+      item.status === "New" ||
+      item.status === "Pending"
+  ).length;
+
+  const stockAlerts = stock.filter(
+    (item) => item.quantity <= item.reorderLevel
+  ).length;
+
+  const money = (value) => {
+    return `₦${Number(value || 0).toLocaleString()}`;
+  };
+
+  const getPatientName = (patient) => {
+    if (!patient) return "";
+
+    return (
+      patient.name ||
+      `${patient.surname || ""} ${patient.otherNames || ""}`.trim()
+    );
+  };
+
+  const getPatientCard = (patient) => {
+    if (!patient) return "";
+
+    return patient.card || patient.cardNumber || patient.id || "";
+  };
+
+  const selectPatient = (patient) => {
+    setSelectedPatient(patient);
+    setSearch(getPatientName(patient));
+
+    if (showMessage) {
+      showMessage(
+        `Patient selected: ${getPatientName(patient)}`
+      );
+    }
+  };
+
+  const selectPrescriptionPatient = (item) => {
+    const patient = patients.find(
+      (patient) =>
+        String(patient.card || patient.cardNumber || patient.id) ===
+        String(item.card)
+    );
+
+    if (patient) {
+      setSelectedPatient(patient);
+    } else {
+      setSelectedPatient({
+        id: item.patientId,
+        card: item.card,
+        name: item.patientName,
+      });
+    }
+  };
+
+  const createPrescription = () => {
+    if (!selectedPatient) {
+      if (showMessage) {
+        showMessage("Please select a patient first.");
+      }
+      return;
+    }
+
+    if (!medicine) {
+      if (showMessage) {
+        showMessage("Please select medicine.");
+      }
+      return;
+    }
+
+    if (!quantity || Number(quantity) < 1) {
+      if (showMessage) {
+        showMessage("Please enter a valid quantity.");
+      }
+      return;
+    }
+
+    const selectedStock = stock.find(
+      (item) => item.medicine === medicine
+    );
+
+    if (!selectedStock) {
+      if (showMessage) {
+        showMessage("Selected medicine is not available in stock.");
+      }
+      return;
+    }
+
+    const requestedQuantity = Number(quantity);
+
+    if (requestedQuantity > selectedStock.quantity) {
+      if (showMessage) {
+        showMessage(
+          `Insufficient stock. Available quantity: ${selectedStock.quantity}`
+        );
+      }
+      return;
+    }
+
+    const totalAmount =
+      Number(selectedStock.price) * requestedQuantity;
+
+    const newPrescription = {
+      id: `RX-${String(prescriptions.length + 1).padStart(3, "0")}`,
+      patientId: selectedPatient.id,
+      patientName: getPatientName(selectedPatient),
+      card: getPatientCard(selectedPatient),
+      medicine,
+      quantity: requestedQuantity,
+      instructions,
+      duration,
+      consultant: "Consultant Room",
+      status: "New",
+      paymentStatus,
+      paymentMethod,
+      amount: totalAmount,
+      date: new Date().toLocaleString(),
+      dispensedBy: "",
+    };
+    
+    setPrescriptions((previous) => [
+  newPrescription,
+  ...previous,
+]);
+
+    if (setTransactions && totalAmount > 0) {
+  setTransactions((previous) => [
+    {
+      id: Date.now() + 1,
+      transactionNo: `TRX-${Date.now() + 1}`,
+      department: "Pharmacy Unit",
+      patientId: selectedPatient.id,
+      card: getPatientCard(selectedPatient),
+      patientName: getPatientName(selectedPatient),
+      service: medicine,
+      amount: totalAmount,
+      paymentMethod,
+      paymentStatus,
+      cashier: paymentStatus === "Paid" ? "Pharmacy Cashier" : "",
+      date: new Date().toLocaleString(),
+    },
+    ...previous,
+  ]);
+}
+
+    setMedicine("");
+    setQuantity(1);
+    setInstructions("");
+    setDuration("");
+    setPaymentStatus("Pending");
+    setPaymentMethod("Cash");
+
+    if (showMessage) {
+      showMessage(
+        `Prescription ${newPrescription.id} created successfully.`
+      );
+    }
+
+    setView("queue");
+  };
+
+  const dispensePrescription = (prescriptionId) => {
+    const prescription = prescriptions.find(
+      (item) => item.id === prescriptionId
+    );
+
+    if (!prescription) {
+      return;
+    }
+
+    if (prescription.status === "Dispensed") {
+      if (showMessage) {
+        showMessage("This prescription has already been dispensed.");
+      }
+      return;
+    }
+
+    const medicineStock = stock.find(
+      (item) => item.medicine === prescription.medicine
+    );
+
+    if (!medicineStock) {
+      if (showMessage) {
+        showMessage("Medicine not found in pharmacy stock.");
+      }
+      return;
+    }
+
+    if (medicineStock.quantity < prescription.quantity) {
+      if (showMessage) {
+        showMessage(
+          `Insufficient stock. Available: ${medicineStock.quantity}`
+        );
+      }
+      return;
+    }
+
+    setStock((previous) =>
+      previous.map((item) =>
+        item.id === medicineStock.id
+          ? {
+              ...item,
+              quantity:
+                Number(item.quantity) -
+                Number(prescription.quantity),
+            }
+          : item
+      )
+    );
+
+    setPrescriptions((previous) =>
+      previous.map((item) =>
+        item.id === prescriptionId
+          ? {
+              ...item,
+              status: "Dispensed",
+              dispensedBy: "Pharmacy Cashier",
+              dispensedAt: new Date().toLocaleString(),
+            }
+          : item
+      )
+    );
+
+    if (showMessage) {
+      showMessage(
+        `${prescription.medicine} dispensed successfully. Stock updated.`
+      );
+    }
+  };
+
+  const markAsPending = (prescriptionId) => {
+    setPrescriptions((previous) =>
+      previous.map((item) =>
+        item.id === prescriptionId
+          ? {
+              ...item,
+              status: "Pending",
+            }
+          : item
+      )
+    );
+
+    if (showMessage) {
+      showMessage("Prescription marked as Pending.");
+    }
+  };
+
+  const markAsPaid = (prescriptionId, method = "Cash") => {
+    setPrescriptions((previous) =>
+      previous.map((item) =>
+        item.id === prescriptionId
+          ? {
+              ...item,
+              paymentStatus: "Paid",
+              paymentMethod: method,
+            }
+          : item
+      )
+    );
+
+    if (showMessage) {
+      showMessage("Payment marked as Paid.");
+    }
+  };
+
+  const sendSMS = (prescription) => {
+    const patient = patients.find(
+      (item) =>
+        String(item.card || item.cardNumber || item.id) ===
+        String(prescription.card)
+    );
+
+    const phone = patient?.phone || patient?.phoneNumber;
+
+    if (!phone) {
+      if (showMessage) {
+        showMessage(
+          "Patient phone number is not available in the ICT Patient Profile."
+        );
+      }
+      return;
+    }
+
+    if (showMessage) {
+      showMessage(
+        `SMS prepared for ${prescription.patientName} (${phone}).`
+      );
+    }
+  };
+
+  const statCard = (title, value, icon) => (
+    <div
+      style={{
+        background: "#fff",
+        border: "1px solid #e7ebef",
+        borderRadius: 12,
+        padding: 18,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
+      }}
+    >
+      <div>
+        <div
+          style={{
+            color: "#7b8794",
+            fontSize: 11,
+            marginBottom: 7,
+          }}
+        >
+          {title}
+        </div>
+
+        <div
+          style={{
+            color: "#263442",
+            fontSize: 23,
+            fontWeight: 900,
+          }}
+        >
+          {value}
+        </div>
+      </div>
+
+      <div
+        style={{
+          width: 42,
+          height: 42,
+          borderRadius: 10,
+          background: "#eef9f4",
+          color: "#18a56b",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 20,
+        }}
+      >
+        {icon}
+      </div>
+    </div>
+  );
+
+  return (
+    <div>
+      <DepartmentCashierPanel department="Pharmacy Unit" transactions={transactions} setTransactions={setTransactions} currentUser={currentUser} showMessage={showMessage} />
+      {/* PAGE HEADER */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 15,
+          marginBottom: 22,
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 24,
+              color: "#263442",
+            }}
+          >
+            Pharmacy Unit
+          </h1>
+
+          <div
+            style={{
+              marginTop: 5,
+              color: "#7b8794",
+              fontSize: 12,
+            }}
+          >
+            Prescriptions, dispensing, medicine stock and patient SMS
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setView("new")}
+          style={{
+            border: 0,
+            borderRadius: 8,
+            padding: "11px 16px",
+            background: "#18a56b",
+            color: "#fff",
+            fontWeight: 800,
+            cursor: "pointer",
+          }}
+        >
+          + New Prescription
+        </button>
+      </div>
+
+      {/* NAVIGATION */}
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          marginBottom: 20,
+          flexWrap: "wrap",
+        }}
+      >
+        {[
+          ["dashboard", "Dashboard"],
+          ["new", "New Prescription"],
+          ["queue", "Prescription Queue"],
+          ["stock", "Medicine Stock"],
+        ].map(([key, label]) => (
+          <button
+            type="button"
+            key={key}
+            onClick={() => setView(key)}
+            style={{
+              border: "1px solid #dfe5ea",
+              borderRadius: 8,
+              padding: "9px 14px",
+              background:
+                view === key ? "#18a56b" : "#fff",
+              color:
+                view === key ? "#fff" : "#45525f",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* DASHBOARD */}
+      {view === "dashboard" && (
+        <>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns:
+                "repeat(4, minmax(0, 1fr))",
+              gap: 15,
+              marginBottom: 22,
+            }}
+          >
+            {statCard(
+              "New Prescriptions",
+              newPrescriptions,
+              "Rx"
+            )}
+
+            {statCard(
+              "Dispensed Today",
+              dispensedToday,
+              "✓"
+            )}
+
+            {statCard(
+              "Pending",
+              pendingPrescriptions,
+              "!"
+            )}
+
+            {statCard(
+              "Stock Alerts",
+              stockAlerts,
+              "⚠"
+            )}
+          </div>
+
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #e7ebef",
+              borderRadius: 12,
+              padding: 18,
+              marginBottom: 20,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 15,
+              }}
+            >
+              <div>
+                <h3
+                  style={{
+                    margin: 0,
+                    color: "#263442",
+                    fontSize: 16,
+                  }}
+                >
+                  Recent Prescriptions
+                </h3>
+
+                <div
+                  style={{
+                    color: "#8a95a1",
+                    fontSize: 11,
+                    marginTop: 4,
+                  }}
+                >
+                  Latest prescriptions received from Consultant
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setView("queue")}
+                style={{
+                  border: 0,
+                  background: "transparent",
+                  color: "#18a56b",
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                View All
+              </button>
+            </div>
+
+            <div style={{ overflowX: "auto" }}>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: 12,
+                }}
+              >
+                <thead>
+                  <tr>
+                    <th style={tableHeadStyle}>Prescription</th>
+                    <th style={tableHeadStyle}>Patient</th>
+                    <th style={tableHeadStyle}>Card No.</th>
+                    <th style={tableHeadStyle}>Medicine</th>
+                    <th style={tableHeadStyle}>Qty</th>
+                    <th style={tableHeadStyle}>Status</th>
+                    <th style={tableHeadStyle}>Payment</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {prescriptions
+                    .slice(0, 5)
+                    .map((item) => (
+                      <tr key={item.id}>
+                        <td style={tableCellStyle}>
+                          {item.id}
+                        </td>
+
+                        <td style={tableCellStyle}>
+                          {item.patientName}
+                        </td>
+
+                        <td style={tableCellStyle}>
+                          {item.card}
+                        </td>
+
+                        <td style={tableCellStyle}>
+                          {item.medicine}
+                        </td>
+
+                        <td style={tableCellStyle}>
+                          {item.quantity}
+                        </td>
+
+                        <td style={tableCellStyle}>
+                          <StatusBadge
+                            status={item.status}
+                          />
+                        </td>
+
+                        <td style={tableCellStyle}>
+                          <StatusBadge
+                            status={item.paymentStatus}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #e7ebef",
+              borderRadius: 12,
+              padding: 18,
+            }}
+          >
+            <h3
+              style={{
+                margin: "0 0 15px",
+                color: "#263442",
+                fontSize: 16,
+              }}
+            >
+              Stock Alerts
+            </h3>
+
+            {stock.filter(
+              (item) => item.quantity <= item.reorderLevel
+            ).length === 0 ? (
+              <div
+                style={{
+                  padding: 18,
+                  background: "#f5fbf8",
+                  borderRadius: 8,
+                  color: "#287453",
+                  fontSize: 12,
+                }}
+              >
+                ✓ No medicine is currently below the
+                reorder level.
+              </div>
+            ) : (
+              stock
+                .filter(
+                  (item) =>
+                    item.quantity <= item.reorderLevel
+                )
+                .map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      padding: "10px 0",
+                      borderBottom:
+                        "1px solid #edf0f2",
+                    }}
+                  >
+                    <span>{item.medicine}</span>
+
+                    <strong>
+                      {item.quantity} remaining
+                    </strong>
+                  </div>
+                ))
+            )}
+          </div>
+        </>
+      )}
+
+      {/* NEW PRESCRIPTION */}
+      {view === "new" && (
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid #e7ebef",
+            borderRadius: 12,
+            padding: 20,
+          }}
+        >
+          <h3
+            style={{
+              margin: "0 0 5px",
+              color: "#263442",
+            }}
+          >
+            New Prescription
+          </h3>
+
+          <p
+            style={{
+              margin: "0 0 20px",
+              color: "#7b8794",
+              fontSize: 12,
+            }}
+          >
+            Select the patient using the existing ICT
+            Patient/Card Number.
+          </p>
+
+          {/* PATIENT SEARCH */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={labelStyle}>
+              Search Patient
+            </label>
+
+            <input
+              value={search}
+              onChange={(event) =>
+                setSearch(event.target.value)
+              }
+              placeholder="Search by name, card number or phone"
+              style={inputStyle}
+            />
+
+            {search && filteredPatients.length > 0 && (
+              <div
+                style={{
+                  marginTop: 6,
+                  border: "1px solid #dfe5ea",
+                  borderRadius: 8,
+                  overflow: "hidden",
+                }}
+              >
+                {filteredPatients.map((patient) => (
+                  <button
+                    type="button"
+                    key={
+                      patient.id ||
+                      patient.card ||
+                      patient.cardNumber
+                    }
+                    onClick={() =>
+                      selectPatient(patient)
+                    }
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      textAlign: "left",
+                      border: 0,
+                      borderBottom:
+                        "1px solid #edf0f2",
+                      background: "#fff",
+                      padding: 12,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <strong
+                      style={{
+                        display: "block",
+                        color: "#263442",
+                      }}
+                    >
+                      {getPatientName(patient)}
+                    </strong>
+
+                    <span
+                      style={{
+                        color: "#7b8794",
+                        fontSize: 11,
+                      }}
+                    >
+                      Card: {getPatientCard(patient)}
+                      {patient.phone
+                        ? ` • ${patient.phone}`
+                        : ""}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* SELECTED PATIENT */}
+          {selectedPatient && (
+            <div
+              style={{
+                padding: 15,
+                borderRadius: 9,
+                background: "#f1faf6",
+                border: "1px solid #d5eee2",
+                marginBottom: 20,
+              }}
+            >
+              <div
+                style={{
+                  color: "#65736d",
+                  fontSize: 10,
+                  marginBottom: 5,
+                }}
+              >
+                Selected Patient
+              </div>
+
+              <strong
+                style={{
+                  color: "#1f5d43",
+                  fontSize: 14,
+                }}
+              >
+                {getPatientName(selectedPatient)}
+              </strong>
+
+              <div
+                style={{
+                  marginTop: 4,
+                  color: "#4c7765",
+                  fontSize: 11,
+                }}
+              >
+                Patient/Card Number:{" "}
+                {getPatientCard(selectedPatient)}
+              </div>
+            </div>
+          )}
+
+          {/* MEDICINE FORM */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns:
+                "repeat(2, minmax(0, 1fr))",
+              gap: 15,
+            }}
+          >
+            <div>
+              <label style={labelStyle}>
+                Medicine
+              </label>
+
+              <select
+                value={medicine}
+                onChange={(event) =>
+                  setMedicine(event.target.value)
+                }
+                style={inputStyle}
+              >
+                <option value="">
+                  Select medicine
+                </option>
+
+                {stock.map((item) => (
+                  <option
+                    key={item.id}
+                    value={item.medicine}
+                  >
+                    {item.medicine} —{" "}
+                    {money(item.price)} — Stock:{" "}
+                    {item.quantity}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Quantity
+              </label>
+
+              <input
+                type="number"
+                min="1"
+                value={quantity}
+                onChange={(event) =>
+                  setQuantity(event.target.value)
+                }
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Instructions
+              </label>
+
+              <input
+                value={instructions}
+                onChange={(event) =>
+                  setInstructions(event.target.value)
+                }
+                placeholder="e.g. Take 1 tablet three times daily"
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Duration
+              </label>
+
+              <input
+                value={duration}
+                onChange={(event) =>
+                  setDuration(event.target.value)
+                }
+                placeholder="e.g. 5 days"
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Payment Status
+              </label>
+
+              <select
+                value={paymentStatus}
+                onChange={(event) =>
+                  setPaymentStatus(event.target.value)
+                }
+                style={inputStyle}
+              >
+                <option value="Pending">Pending</option>
+                <option value="Paid">Paid</option>
+                <option value="Free">Free</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Payment Method
+              </label>
+
+              <select
+                value={paymentMethod}
+                onChange={(event) =>
+                  setPaymentMethod(event.target.value)
+                }
+                style={inputStyle}
+              >
+                <option value="Cash">Cash</option>
+                <option value="POS">POS</option>
+                <option value="Bank Transfer">
+                  Bank Transfer
+                </option>
+              </select>
+            </div>
+          </div>
+
+          {/* AMOUNT PREVIEW */}
+          {medicine && (
+            <div
+              style={{
+                marginTop: 20,
+                padding: 15,
+                borderRadius: 9,
+                background: "#f7f9fb",
+              }}
+            >
+              {(() => {
+                const item = stock.find(
+                  (stockItem) =>
+                    stockItem.medicine === medicine
+                );
+
+                const total =
+                  Number(item?.price || 0) *
+                  Number(quantity || 0);
+
+                return (
+                  <>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        fontSize: 12,
+                        marginBottom: 7,
+                      }}
+                    >
+                      <span>Unit Price</span>
+                      <strong>
+                        {money(item?.price)}
+                      </strong>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        fontSize: 12,
+                        fontWeight: 900,
+                      }}
+                    >
+                      <span>Total Amount</span>
+                      <strong
+                        style={{
+                          color: "#18a56b",
+                          fontSize: 17,
+                        }}
+                      >
+                        {money(total)}
+                      </strong>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              marginTop: 20,
+              flexWrap: "wrap",
+            }}
+          >
+            <button
+              type="button"
+              onClick={createPrescription}
+              style={primaryButtonStyle}
+            >
+              Create Prescription
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setView("dashboard")}
+              style={secondaryButtonStyle}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* QUEUE */}
+      {view === "queue" && (
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid #e7ebef",
+            borderRadius: 12,
+            padding: 18,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 15,
+              alignItems: "center",
+              marginBottom: 18,
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <h3
+                style={{
+                  margin: 0,
+                  color: "#263442",
+                }}
+              >
+                Prescription Queue
+              </h3>
+
+              <div
+                style={{
+                  marginTop: 4,
+                  color: "#8a95a1",
+                  fontSize: 11,
+                }}
+              >
+                Prescriptions received from Consultant Room
+              </div>
+            </div>
+
+            <input
+              value={search}
+              onChange={(event) =>
+                setSearch(event.target.value)
+              }
+              placeholder="Search patient, card or medicine"
+              style={{
+                ...inputStyle,
+                width: 260,
+              }}
+            />
+          </div>
+
+          <div style={{ overflowX: "auto" }}>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                minWidth: 1050,
+                fontSize: 11,
+              }}
+            >
+              <thead>
+                <tr>
+                  <th style={tableHeadStyle}>Rx No.</th>
+                  <th style={tableHeadStyle}>Patient</th>
+                  <th style={tableHeadStyle}>Card No.</th>
+                  <th style={tableHeadStyle}>Medicine</th>
+                  <th style={tableHeadStyle}>Qty</th>
+                  <th style={tableHeadStyle}>Instructions</th>
+                  <th style={tableHeadStyle}>Status</th>
+                  <th style={tableHeadStyle}>Payment</th>
+                  <th style={tableHeadStyle}>Actions</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {filteredPrescriptions.map(
+                  (item) => (
+                    <tr key={item.id}>
+                      <td style={tableCellStyle}>
+                        {item.id}
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        <strong>
+                          {item.patientName}
+                        </strong>
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        {item.card}
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        {item.medicine}
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        {item.quantity}
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        {item.instructions || "-"}
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        <StatusBadge
+                          status={item.status}
+                        />
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        <StatusBadge
+                          status={item.paymentStatus}
+                        />
+                      </td>
+
+                      <td
+                        style={{
+                          ...tableCellStyle,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            selectPrescriptionPatient(
+                              item
+                            )
+                          }
+                          style={smallButtonStyle}
+                        >
+                          Patient
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            dispensePrescription(
+                              item.id
+                            )
+                          }
+                          style={{
+                            ...smallButtonStyle,
+                            background: "#18a56b",
+                            color: "#fff",
+                            borderColor: "#18a56b",
+                          }}
+                          disabled={
+                            item.status === "Dispensed"
+                          }
+                        >
+                          Dispense
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            markAsPending(item.id)
+                          }
+                          style={smallButtonStyle}
+                        >
+                          Pending
+                        </button>
+
+                        {item.paymentStatus !==
+                          "Paid" && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              markAsPaid(
+                                item.id,
+                                "Cash"
+                              )
+                            }
+                            style={smallButtonStyle}
+                          >
+                            Paid
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            sendSMS(item)
+                          }
+                          style={smallButtonStyle}
+                        >
+                          SMS
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {filteredPrescriptions.length === 0 && (
+            <div
+              style={{
+                textAlign: "center",
+                padding: 35,
+                color: "#8a95a1",
+              }}
+            >
+              No prescriptions found.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* STOCK */}
+      {view === "stock" && (
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid #e7ebef",
+            borderRadius: 12,
+            padding: 18,
+          }}
+        >
+          <div style={{ marginBottom: 18 }}>
+            <h3
+              style={{
+                margin: 0,
+                color: "#263442",
+              }}
+            >
+              Medicine Stock
+            </h3>
+
+            <div
+              style={{
+                marginTop: 4,
+                color: "#8a95a1",
+                fontSize: 11,
+              }}
+            >
+              Stock is controlled by ICT Centre. Pharmacy
+              can view available stock and dispensing reduces
+              the quantity automatically.
+            </div>
+          </div>
+
+          <div style={{ overflowX: "auto" }}>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                minWidth: 750,
+                fontSize: 12,
+              }}
+            >
+              <thead>
+                <tr>
+                  <th style={tableHeadStyle}>
+                    Medicine
+                  </th>
+
+                  <th style={tableHeadStyle}>
+                    Category
+                  </th>
+
+                  <th style={tableHeadStyle}>
+                    Unit Price
+                  </th>
+
+                  <th style={tableHeadStyle}>
+                    Current Stock
+                  </th>
+
+                  <th style={tableHeadStyle}>
+                    Reorder Level
+                  </th>
+
+                  <th style={tableHeadStyle}>
+                    Status
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {stock.map((item) => {
+                  const low =
+                    item.quantity <=
+                    item.reorderLevel;
+
+                  return (
+                    <tr key={item.id}>
+                      <td style={tableCellStyle}>
+                        <strong>
+                          {item.medicine}
+                        </strong>
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        {item.category}
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        {money(item.price)}
+                      </td>
+
+                      <td
+                        style={{
+                          ...tableCellStyle,
+                          fontWeight: 900,
+                        }}
+                      >
+                        {item.quantity}
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        {item.reorderLevel}
+                      </td>
+
+                      <td style={tableCellStyle}>
+                        {low ? (
+                          <span
+                            style={{
+                              color: "#bd3b3b",
+                              fontWeight: 800,
+                            }}
+                          >
+                            Low Stock
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              color: "#287453",
+                              fontWeight: 800,
+                            }}
+                          >
+                            Available
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* SELECTED PATIENT QUICK INFO */}
+      {selectedPatient && view === "queue" && (
+        <div
+          style={{
+            marginTop: 18,
+            background: "#f7f9fb",
+            border: "1px solid #e3e8ec",
+            borderRadius: 10,
+            padding: 15,
+          }}
+        >
+          <strong
+            style={{
+              color: "#263442",
+              display: "block",
+              marginBottom: 5,
+            }}
+          >
+            Selected Patient
+          </strong>
+
+          <span
+            style={{
+              color: "#66727e",
+              fontSize: 12,
+            }}
+          >
+            {getPatientName(selectedPatient)} — Card:{" "}
+            {getPatientCard(selectedPatient)}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ================================
+   PHARMACY SUPPORT STYLES
+================================ */
+
+const tableHeadStyle = {
+  textAlign: "left",
+  padding: "11px 10px",
+  background: "#f7f9fb",
+  borderBottom: "1px solid #e4e9ed",
+  color: "#687582",
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+};
+
+const tableCellStyle = {
+  padding: "11px 10px",
+  borderBottom: "1px solid #edf0f2",
+  color: "#465360",
+  verticalAlign: "top",
+};
+
+const labelStyle = {
+  display: "block",
+  marginBottom: 6,
+  color: "#4e5c69",
+  fontSize: 11,
+  fontWeight: 800,
+};
+
+const inputStyle = {
+  width: "100%",
+  boxSizing: "border-box",
+  border: "1px solid #dce3e8",
+  borderRadius: 8,
+  padding: "10px 11px",
+  background: "#fff",
+  color: "#263442",
+  fontSize: 12,
+  outline: "none",
+};
+
+const primaryButtonStyle = {
+  border: 0,
+  borderRadius: 8,
+  padding: "11px 16px",
+  background: "#18a56b",
+  color: "#fff",
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const secondaryButtonStyle = {
+  border: "1px solid #dce3e8",
+  borderRadius: 8,
+  padding: "11px 16px",
+  background: "#fff",
+  color: "#465360",
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const smallButtonStyle = {
+  border: "1px solid #dce3e8",
+  borderRadius: 6,
+  padding: "6px 8px",
+  background: "#fff",
+  color: "#465360",
+  fontSize: 10,
+  fontWeight: 800,
+  cursor: "pointer",
+  marginRight: 5,
+  marginBottom: 5,
+};
+
+function StatusBadge({ status }) {
+  let background = "#f1f3f5";
+  let color = "#65717c";
+
+  if (
+    status === "Paid" ||
+    status === "Dispensed" ||
+    status === "Completed"
+  ) {
+    background = "#eaf8f1";
+    color = "#24734f";
+  }
+
+  if (
+    status === "New" ||
+    status === "Pending"
+  ) {
+    background = "#fff7e8";
+    color = "#9a6b16";
+  }
+
+  if (
+    status === "Free"
+  ) {
+    background = "#edf5ff";
+    color = "#35658e";
+  }
+
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        padding: "4px 8px",
+        borderRadius: 20,
+        background,
+        color,
+        fontSize: 10,
+        fontWeight: 800,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {status}
+    </span>
+  );
+}
+function MaleWardPage({ patients = [], records = [], setRecords, showMessage }) {
+  const [view, setView] = useState("patients");
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState(null);
+  const [bed, setBed] = useState("");
+  const [condition, setCondition] = useState("Stable");
+  const [diagnosis, setDiagnosis] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const wardRecords = records.filter((r) => r.ward === "Male Ward");
+  const beds = Array.from({ length: 12 }, (_, i) => `M-${String(i + 1).padStart(2, "0")}`);
+  const occupied = wardRecords.filter((r) => r.status === "Admitted");
+  const availableBeds = beds.filter((b) => !occupied.some((r) => r.bed === b));
+  const filtered = wardRecords.filter((r) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return [r.patientName, r.card, r.bed, r.diagnosis, r.condition].some((v) => String(v || "").toLowerCase().includes(q));
+  });
+
+  const admit = () => {
+    const patient = patients.find((p) => String(p.id) === String(selectedId));
+    if (!patient) return showMessage("Zaɓi mara lafiya na namiji.");
+    if (patient.sex !== "Male") return showMessage("Male Ward na karɓar male patient kawai.");
+    if (!bed) return showMessage("Zaɓi bed.");
+    if (occupied.some((r) => r.bed === bed)) return showMessage("Wannan bed ɗin yana occupied.");
+    const record = { id: Date.now(), ward: "Male Ward", patientId: patient.id, patientName: patient.name, card: patient.card, bed, condition, diagnosis: diagnosis.trim() || "Not specified", notes: notes.trim(), status: "Admitted", admittedAt: new Date().toLocaleString(), dischargedAt: "" };
+    setRecords((prev) => [record, ...prev]);
+    showMessage(`${patient.name} an admitted zuwa Male Ward.`);
+    setSelectedId(null); setBed(""); setCondition("Stable"); setDiagnosis(""); setNotes(""); setView("patients");
+  };
+
+  const discharge = (id) => {
+    setRecords((prev) => prev.map((r) => r.id === id ? { ...r, status: "Discharged", dischargedAt: new Date().toLocaleString() } : r));
+    showMessage("An yi discharge.");
+  };
+
+  return (
+    <div>
+      <PageHeader title="Male Ward" subtitle="Male patient admission, bed assignment, monitoring, notes and discharge" icon="M" />
+      <div className="stats-grid">
+        <StatCard title="Occupied Beds" value={occupied.length} icon="▣" />
+        <StatCard title="Available Beds" value={availableBeds.length} icon="✓" />
+        <StatCard title="New Admissions" value={wardRecords.filter((r) => r.status === "Admitted").length} icon="+" />
+        <StatCard title="Discharges" value={wardRecords.filter((r) => r.status === "Discharged").length} icon="↗" />
+      </div>
+      <div className="card">
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+          <button className={view === "patients" ? "primary" : "secondary"} onClick={() => setView("patients")}>Ward Patients</button>
+          <button className={view === "beds" ? "primary" : "secondary"} onClick={() => setView("beds")}>Bed Status</button>
+          <button className={view === "history" ? "primary" : "secondary"} onClick={() => setView("history")}>Discharge History</button>
+          <button className="primary" onClick={() => setView("admit")}>+ Admit Male Patient</button>
+        </div>
+        {view !== "admit" && <input className="search" placeholder="Search patient, card, bed or diagnosis" value={search} onChange={(e) => setSearch(e.target.value)} />}
+        {view === "admit" && (
+          <div style={{ display: "grid", gap: 12, maxWidth: 700 }}>
+            <h2>Admit Male Patient</h2>
+            <label>Patient<select value={selectedId || ""} onChange={(e) => setSelectedId(e.target.value)}><option value="">Select male patient</option>{patients.filter((p) => p.sex === "Male").map((p) => <option key={p.id} value={p.id}>{p.name} — {p.card}</option>)}</select></label>
+            <label>Bed<select value={bed} onChange={(e) => setBed(e.target.value)}><option value="">Select available bed</option>{availableBeds.map((b) => <option key={b} value={b}>{b}</option>)}</select></label>
+            <label>Condition<select value={condition} onChange={(e) => setCondition(e.target.value)}><option>Stable</option><option>Under Observation</option><option>Needs Attention</option><option>Critical</option></select></label>
+            <label>Diagnosis<input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder="Diagnosis" /></label>
+            <label>Ward Notes<textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Additional notes" /></label>
+            <button className="primary" onClick={admit}>Admit Patient</button>
+          </div>
+        )}
+        {view === "patients" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Condition</th><th>Diagnosis</th><th>Status</th><th>Action</th></tr></thead><tbody>{filtered.filter((r) => r.status === "Admitted").map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.condition}</td><td>{r.diagnosis}</td><td><StatusBadge status={r.status} /></td><td><button className="secondary" onClick={() => discharge(r.id)}>Discharge</button></td></tr>)}{filtered.filter((r) => r.status === "Admitted").length === 0 && <tr><td colSpan="7">No admitted male patient found.</td></tr>}</tbody></table></div>}
+        {view === "beds" && <div className="table-wrap"><table><thead><tr><th>Bed</th><th>Status</th><th>Patient</th><th>Card No.</th></tr></thead><tbody>{beds.map((b) => { const r = occupied.find((x) => x.bed === b); return <tr key={b}><td>{b}</td><td>{r ? "Occupied" : "Available"}</td><td>{r ? r.patientName : "—"}</td><td>{r ? r.card : "—"}</td></tr>; })}</tbody></table></div>}
+        {view === "history" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Admitted</th><th>Discharged</th></tr></thead><tbody>{wardRecords.filter((r) => r.status === "Discharged").map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.admittedAt}</td><td>{r.dischargedAt}</td></tr>)}{wardRecords.filter((r) => r.status === "Discharged").length === 0 && <tr><td colSpan="5">No discharge history found.</td></tr>}</tbody></table></div>}
+      </div>
+    </div>
+  );
+}
+
+function FemaleWardPage({ patients = [], records = [], setRecords, showMessage }) {
+  return <WardPageGeneric title="Female Ward" prefix="F" sex="Female" patients={patients} records={records} setRecords={setRecords} showMessage={showMessage} />;
+}
 
 function WardPageGeneric({ title, prefix, sex, patients = [], records = [], setRecords, showMessage }) {
   const [view, setView] = useState("patients");
@@ -3820,7 +7828,7 @@ function WardPageGeneric({ title, prefix, sex, patients = [], records = [], setR
   const available = beds.filter((b) => !occupied.some((r) => r.bed === b));
   const admit = () => { const p = patients.find((x) => String(x.id) === String(selectedId)); if (!p) return showMessage("Zaɓi patient."); if (p.sex !== sex) return showMessage(`${title} na karɓar ${sex.toLowerCase()} patient kawai.`); if (!bed) return showMessage("Zaɓi bed."); if (occupied.some((r) => r.bed === bed)) return showMessage("Bed ɗin yana occupied."); setRecords((prev) => [{ id: Date.now(), ward: title, patientId: p.id, patientName: p.name, card: p.card, bed, condition, diagnosis: diagnosis.trim() || "Not specified", status: "Admitted", admittedAt: new Date().toLocaleString(), dischargedAt: "" }, ...prev]); showMessage(`${p.name} an admitted zuwa ${title}.`); setSelectedId(""); setBed(""); setDiagnosis(""); setView("patients"); };
   const discharge = (id) => { setRecords((prev) => prev.map((r) => r.id === id ? { ...r, status: "Discharged", dischargedAt: new Date().toLocaleString() } : r)); showMessage("An yi discharge."); };
-  return <div><PageHeader title={title} subtitle={`${sex} patient admission, bed assignment, monitoring, notes and discharge`} icon={prefix} /><div className="stats-grid"><StatCard title="Occupied Beds" value={occupied.length} icon="▣" /><StatCard title="Available Beds" value={available.length} icon="✓" /><StatCard title="New Admissions" value={wardRecords.filter((r) => r.status === "Admitted").length} icon="+" /><StatCard title="Discharges" value={wardRecords.filter((r) => r.status === "Discharged").length} icon="↗" /></div><div className="card"><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}><button className="primary" onClick={() => setView("patients")}>Ward Patients</button><button className="secondary" onClick={() => setView("beds")}>Bed Status</button><button className="secondary" onClick={() => setView("history")}>Discharge History</button><button className="secondary" onClick={() => setView("nursing")}>Nursing Care / Reports</button><button className="primary" onClick={() => setView("admit")}>+ Admit {sex} Patient</button></div>{view === "admit" && <div style={{ display: "grid", gap: 12, maxWidth: 700 }}><h2>Admit {sex} Patient</h2><select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}><option value="">Select patient</option>{patients.filter((p) => p.sex === sex).map((p) => <option key={p.id} value={p.id}>{p.name} — {p.card}</option>)}</select><select value={bed} onChange={(e) => setBed(e.target.value)}><option value="">Select available bed</option>{available.map((b) => <option key={b}>{b}</option>)}</select><select value={condition} onChange={(e) => setCondition(e.target.value)}><option>Stable</option><option>Under Observation</option><option>Needs Attention</option><option>Critical</option></select><input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder="Diagnosis" /><button className="primary" onClick={admit}>Admit Patient</button></div>}{view === "patients" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Condition</th><th>Diagnosis</th><th>Status</th><th>Action</th></tr></thead><tbody>{occupied.map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.condition}</td><td>{r.diagnosis}</td><td><StatusBadge status={r.status} /></td><td><button className="secondary" onClick={() => discharge(r.id)}>Discharge</button></td></tr>)}{occupied.length === 0 && <tr><td colSpan="7">No admitted patient found.</td></tr>}</tbody></table></div>}{view === "beds" && <div className="table-wrap"><table><thead><tr><th>Bed</th><th>Status</th><th>Patient</th><th>Card No.</th></tr></thead><tbody>{beds.map((b) => { const r = occupied.find((x) => x.bed === b); return <tr key={b}><td>{b}</td><td>{r ? "Occupied" : "Available"}</td><td>{r ? r.patientName : "—"}</td><td>{r ? r.card : "—"}</td></tr>; })}</tbody></table></div>}{view === "history" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Admitted</th><th>Discharged</th></tr></thead><tbody>{wardRecords.filter((r) => r.status === "Discharged").map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.admittedAt}</td><td>{r.dischargedAt}</td></tr>)}</tbody></table></div>}{view === "nursing" && <WardNursingCarePanel wardName={title} />}</div></div>;
+  return <div><PageHeader title={title} subtitle={`${sex} patient admission, bed assignment, monitoring, notes and discharge`} icon={prefix} /><div className="stats-grid"><StatCard title="Occupied Beds" value={occupied.length} icon="▣" /><StatCard title="Available Beds" value={available.length} icon="✓" /><StatCard title="New Admissions" value={wardRecords.filter((r) => r.status === "Admitted").length} icon="+" /><StatCard title="Discharges" value={wardRecords.filter((r) => r.status === "Discharged").length} icon="↗" /></div><div className="card"><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}><button className="primary" onClick={() => setView("patients")}>Ward Patients</button><button className="secondary" onClick={() => setView("beds")}>Bed Status</button><button className="secondary" onClick={() => setView("history")}>Discharge History</button><button className="primary" onClick={() => setView("admit")}>+ Admit {sex} Patient</button></div>{view === "admit" && <div style={{ display: "grid", gap: 12, maxWidth: 700 }}><h2>Admit {sex} Patient</h2><select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}><option value="">Select patient</option>{patients.filter((p) => p.sex === sex).map((p) => <option key={p.id} value={p.id}>{p.name} — {p.card}</option>)}</select><select value={bed} onChange={(e) => setBed(e.target.value)}><option value="">Select available bed</option>{available.map((b) => <option key={b}>{b}</option>)}</select><select value={condition} onChange={(e) => setCondition(e.target.value)}><option>Stable</option><option>Under Observation</option><option>Needs Attention</option><option>Critical</option></select><input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder="Diagnosis" /><button className="primary" onClick={admit}>Admit Patient</button></div>}{view === "patients" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Condition</th><th>Diagnosis</th><th>Status</th><th>Action</th></tr></thead><tbody>{occupied.map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.condition}</td><td>{r.diagnosis}</td><td><StatusBadge status={r.status} /></td><td><button className="secondary" onClick={() => discharge(r.id)}>Discharge</button></td></tr>)}{occupied.length === 0 && <tr><td colSpan="7">No admitted patient found.</td></tr>}</tbody></table></div>}{view === "beds" && <div className="table-wrap"><table><thead><tr><th>Bed</th><th>Status</th><th>Patient</th><th>Card No.</th></tr></thead><tbody>{beds.map((b) => { const r = occupied.find((x) => x.bed === b); return <tr key={b}><td>{b}</td><td>{r ? "Occupied" : "Available"}</td><td>{r ? r.patientName : "—"}</td><td>{r ? r.card : "—"}</td></tr>; })}</tbody></table></div>}{view === "history" && <div className="table-wrap"><table><thead><tr><th>Patient</th><th>Card No.</th><th>Bed</th><th>Admitted</th><th>Discharged</th></tr></thead><tbody>{wardRecords.filter((r) => r.status === "Discharged").map((r) => <tr key={r.id}><td>{r.patientName}</td><td>{r.card}</td><td>{r.bed}</td><td>{r.admittedAt}</td><td>{r.dischargedAt}</td></tr>)}</tbody></table></div>}</div></div>;
 }
 
 
@@ -3878,4223 +7886,3 @@ function BackupRestorePage({ data, setters, showMessage }) {
 }
 
 export default App;
-
-/*
-================================================================================
-BAZZA PHC MASTER IMPLEMENTATION / VERIFICATION NOTES
-================================================================================
-This file intentionally preserves the executable application code above.
-The sections below are an in-file master specification and verification checklist
-for the approved Bazza Primary Health Care Sokoto design. They are comments only
-and do not change runtime behavior.
-
-Approved modules: ICT Centre, Records Unit, Nursing Unit, Consultant Room,
-Laboratory Unit, Pharmacy Unit, Ultrasound Room, In-Charge, General Cashier,
-Super Admin, Male Ward, Female Ward, Maternity Ward, Child Ward, Labour Room,
-Immunization Unit, Family Planning Unit, Adolescent Unit, Roster & Attendance,
-Outpatient Services, Reception / Next Patient, SMS / Notifications, Alerts,
-Reports, Audit Logs, ICT Stock / Inventory, Appointments, Patient Card Printing,
-and Backup / Restore.
-
-Security rule: department visibility must be enforced by authorization, not only
-by hiding menu items. Super Admin is the only role with unrestricted control.
-In-Charge is monitoring-only. Clinical departments do not create new patient
-card numbers. ICT creates the shared patient/card number.
-================================================================================
-*/
-/* [01] LOGIN & SECURITY */
-/* 01.01 CHECK: Role-based login */
-/* 01.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Role-based login. */
-/* 01.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 01.02 CHECK: Department isolation */
-/* 01.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Department isolation. */
-/* 01.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 01.03 CHECK: Audit every sensitive action */
-/* 01.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Audit every sensitive action. */
-/* 01.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 01.04 CHECK: Super Admin unrestricted control */
-/* 01.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Super Admin unrestricted control. */
-/* 01.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 01.05 CHECK: In-Charge read/monitor only */
-/* 01.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: In-Charge read/monitor only. */
-/* 01.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 01.06 CHECK: Never expose secret keys in frontend */
-/* 01.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Never expose secret keys in frontend. */
-/* 01.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [02] ICT CENTRE */
-/* 02.01 CHECK: Auto patient/card number */
-/* 02.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Auto patient/card number. */
-/* 02.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 02.02 CHECK: Surname */
-/* 02.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Surname. */
-/* 02.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 02.03 CHECK: Other Names */
-/* 02.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Other Names. */
-/* 02.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 02.04 CHECK: Phone Number */
-/* 02.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Phone Number. */
-/* 02.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 02.05 CHECK: Sex/Gender */
-/* 02.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Sex/Gender. */
-/* 02.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 02.06 CHECK: Age */
-/* 02.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Age. */
-/* 02.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 02.07 CHECK: Address */
-/* 02.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Address. */
-/* 02.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 02.08 CHECK: Spouse Name when applicable */
-/* 02.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Spouse Name when applicable. */
-/* 02.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 02.09 CHECK: Patient profile */
-/* 02.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: Patient profile. */
-/* 02.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 02.10 CHECK: Account status */
-/* 02.10 VERIFY: confirm the screen, data flow, permission and audit behavior for: Account status. */
-/* 02.10 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 02.11 CHECK: Patient search by card/name/phone */
-/* 02.11 VERIFY: confirm the screen, data flow, permission and audit behavior for: Patient search by card/name/phone. */
-/* 02.11 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [03] RECORDS UNIT */
-/* 03.01 CHECK: Receive ICT patient */
-/* 03.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Receive ICT patient. */
-/* 03.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 03.02 CHECK: Shared card number */
-/* 03.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Shared card number. */
-/* 03.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 03.03 CHECK: Card ₦100 */
-/* 03.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Card ₦100. */
-/* 03.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 03.04 CHECK: File ₦500 */
-/* 03.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: File ₦500. */
-/* 03.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 03.05 CHECK: Card + File ₦600 */
-/* 03.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Card + File ₦600. */
-/* 03.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 03.06 CHECK: Print payment slip */
-/* 03.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Print payment slip. */
-/* 03.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 03.07 CHECK: Records cashier */
-/* 03.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Records cashier. */
-/* 03.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 03.08 CHECK: General Cashier visibility */
-/* 03.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: General Cashier visibility. */
-/* 03.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 03.09 CHECK: Program/Data Search with restricted access */
-/* 03.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: Program/Data Search with restricted access. */
-/* 03.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [04] NURSING UNIT */
-/* 04.01 CHECK: Select standardized nursing tasks */
-/* 04.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Select standardized nursing tasks. */
-/* 04.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 04.02 CHECK: Allow multiple tasks by button clicks */
-/* 04.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Allow multiple tasks by button clicks. */
-/* 04.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 04.03 CHECK: Vital Signs Checked */
-/* 04.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Vital Signs Checked. */
-/* 04.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 04.04 CHECK: Patient Assessed */
-/* 04.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Patient Assessed. */
-/* 04.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 04.05 CHECK: Medication Given */
-/* 04.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Medication Given. */
-/* 04.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 04.06 CHECK: Wound Care */
-/* 04.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Wound Care. */
-/* 04.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 04.07 CHECK: Admission Assessment */
-/* 04.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Admission Assessment. */
-/* 04.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 04.08 CHECK: Patient Education */
-/* 04.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Patient Education. */
-/* 04.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 04.09 CHECK: Other task */
-/* 04.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: Other task. */
-/* 04.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 04.10 CHECK: Result select */
-/* 04.10 VERIFY: confirm the screen, data flow, permission and audit behavior for: Result select. */
-/* 04.10 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 04.11 CHECK: Ward select */
-/* 04.11 VERIFY: confirm the screen, data flow, permission and audit behavior for: Ward select. */
-/* 04.11 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 04.12 CHECK: Bed select */
-/* 04.12 VERIFY: confirm the screen, data flow, permission and audit behavior for: Bed select. */
-/* 04.12 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 04.13 CHECK: Report/Additional Notes */
-/* 04.13 VERIFY: confirm the screen, data flow, permission and audit behavior for: Report/Additional Notes. */
-/* 04.13 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 04.14 CHECK: Ready for Consultant */
-/* 04.14 VERIFY: confirm the screen, data flow, permission and audit behavior for: Ready for Consultant. */
-/* 04.14 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [05] CONSULTANT ROOM */
-/* 05.01 CHECK: Patient selection */
-/* 05.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Patient selection. */
-/* 05.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 05.02 CHECK: Full profile read access */
-/* 05.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Full profile read access. */
-/* 05.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 05.03 CHECK: Consultation notes */
-/* 05.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Consultation notes. */
-/* 05.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 05.04 CHECK: Diagnosis/assessment */
-/* 05.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Diagnosis/assessment. */
-/* 05.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 05.05 CHECK: Laboratory request */
-/* 05.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Laboratory request. */
-/* 05.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 05.06 CHECK: Pharmacy prescription */
-/* 05.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Pharmacy prescription. */
-/* 05.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 05.07 CHECK: Ultrasound request */
-/* 05.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Ultrasound request. */
-/* 05.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 05.08 CHECK: Reception/next patient */
-/* 05.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Reception/next patient. */
-/* 05.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 05.09 CHECK: Alerts to Nursing */
-/* 05.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: Alerts to Nursing. */
-/* 05.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 05.10 CHECK: Result review */
-/* 05.10 VERIFY: confirm the screen, data flow, permission and audit behavior for: Result review. */
-/* 05.10 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 05.11 CHECK: Follow-up */
-/* 05.11 VERIFY: confirm the screen, data flow, permission and audit behavior for: Follow-up. */
-/* 05.11 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [06] LABORATORY UNIT */
-/* 06.01 CHECK: Receive existing patient/card */
-/* 06.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Receive existing patient/card. */
-/* 06.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 06.02 CHECK: New */
-/* 06.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: New. */
-/* 06.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 06.03 CHECK: Pending */
-/* 06.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Pending. */
-/* 06.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 06.04 CHECK: Sample Received */
-/* 06.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Sample Received. */
-/* 06.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 06.05 CHECK: In Progress */
-/* 06.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: In Progress. */
-/* 06.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 06.06 CHECK: Completed */
-/* 06.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Completed. */
-/* 06.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 06.07 CHECK: Result Ready */
-/* 06.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Result Ready. */
-/* 06.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 06.08 CHECK: Sent to Consultant */
-/* 06.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Sent to Consultant. */
-/* 06.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 06.09 CHECK: Result field */
-/* 06.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: Result field. */
-/* 06.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 06.10 CHECK: SMS result ready */
-/* 06.10 VERIFY: confirm the screen, data flow, permission and audit behavior for: SMS result ready. */
-/* 06.10 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 06.11 CHECK: Cashier integration */
-/* 06.11 VERIFY: confirm the screen, data flow, permission and audit behavior for: Cashier integration. */
-/* 06.11 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 06.12 CHECK: Receipt/slip */
-/* 06.12 VERIFY: confirm the screen, data flow, permission and audit behavior for: Receipt/slip. */
-/* 06.12 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [07] PHARMACY UNIT */
-/* 07.01 CHECK: Receive prescription */
-/* 07.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Receive prescription. */
-/* 07.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 07.02 CHECK: Search medicine */
-/* 07.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Search medicine. */
-/* 07.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 07.03 CHECK: Medicine quantity */
-/* 07.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Medicine quantity. */
-/* 07.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 07.04 CHECK: Instructions */
-/* 07.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Instructions. */
-/* 07.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 07.05 CHECK: Duration */
-/* 07.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Duration. */
-/* 07.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 07.06 CHECK: Dispense */
-/* 07.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Dispense. */
-/* 07.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 07.07 CHECK: Stock deduction */
-/* 07.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Stock deduction. */
-/* 07.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 07.08 CHECK: Pending/Paid/FREE */
-/* 07.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Pending/Paid/FREE. */
-/* 07.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 07.09 CHECK: Dispensing result */
-/* 07.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: Dispensing result. */
-/* 07.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 07.10 CHECK: Consultant visibility */
-/* 07.10 VERIFY: confirm the screen, data flow, permission and audit behavior for: Consultant visibility. */
-/* 07.10 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 07.11 CHECK: Cashier integration */
-/* 07.11 VERIFY: confirm the screen, data flow, permission and audit behavior for: Cashier integration. */
-/* 07.11 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [08] ULTRASOUND ROOM */
-/* 08.01 CHECK: Receive Consultant request */
-/* 08.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Receive Consultant request. */
-/* 08.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 08.02 CHECK: Ultrasound type */
-/* 08.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Ultrasound type. */
-/* 08.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 08.03 CHECK: Clinical notes */
-/* 08.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Clinical notes. */
-/* 08.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 08.04 CHECK: Start scan */
-/* 08.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Start scan. */
-/* 08.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 08.05 CHECK: In Progress */
-/* 08.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: In Progress. */
-/* 08.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 08.06 CHECK: Result Ready */
-/* 08.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Result Ready. */
-/* 08.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 08.07 CHECK: Send to Consultant */
-/* 08.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Send to Consultant. */
-/* 08.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 08.08 CHECK: Report */
-/* 08.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Report. */
-/* 08.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 08.09 CHECK: Patient profile linkage */
-/* 08.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: Patient profile linkage. */
-/* 08.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 08.10 CHECK: Cashier */
-/* 08.10 VERIFY: confirm the screen, data flow, permission and audit behavior for: Cashier. */
-/* 08.10 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 08.11 CHECK: Print slip */
-/* 08.11 VERIFY: confirm the screen, data flow, permission and audit behavior for: Print slip. */
-/* 08.11 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [09] WARDS */
-/* 09.01 CHECK: Male Ward */
-/* 09.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Male Ward. */
-/* 09.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 09.02 CHECK: Female Ward */
-/* 09.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Female Ward. */
-/* 09.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 09.03 CHECK: Maternity Ward */
-/* 09.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Maternity Ward. */
-/* 09.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 09.04 CHECK: Child Ward */
-/* 09.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Child Ward. */
-/* 09.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 09.05 CHECK: Labour Room */
-/* 09.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Labour Room. */
-/* 09.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 09.06 CHECK: Admission */
-/* 09.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Admission. */
-/* 09.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 09.07 CHECK: Bed assignment */
-/* 09.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Bed assignment. */
-/* 09.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 09.08 CHECK: Monitoring */
-/* 09.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Monitoring. */
-/* 09.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 09.09 CHECK: Notes */
-/* 09.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: Notes. */
-/* 09.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 09.10 CHECK: Discharge */
-/* 09.10 VERIFY: confirm the screen, data flow, permission and audit behavior for: Discharge. */
-/* 09.10 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 09.11 CHECK: Discharge history */
-/* 09.11 VERIFY: confirm the screen, data flow, permission and audit behavior for: Discharge history. */
-/* 09.11 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 09.12 CHECK: No cashier in wards */
-/* 09.12 VERIFY: confirm the screen, data flow, permission and audit behavior for: No cashier in wards. */
-/* 09.12 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [10] MATERNITY */
-/* 10.01 CHECK: Antenatal */
-/* 10.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Antenatal. */
-/* 10.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 10.02 CHECK: Early Labour */
-/* 10.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Early Labour. */
-/* 10.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 10.03 CHECK: Active Labour */
-/* 10.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Active Labour. */
-/* 10.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 10.04 CHECK: Postnatal */
-/* 10.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Postnatal. */
-/* 10.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 10.05 CHECK: Gestational Age */
-/* 10.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Gestational Age. */
-/* 10.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 10.06 CHECK: Gravida */
-/* 10.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Gravida. */
-/* 10.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 10.07 CHECK: Para */
-/* 10.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Para. */
-/* 10.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 10.08 CHECK: Condition */
-/* 10.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Condition. */
-/* 10.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 10.09 CHECK: Diagnosis */
-/* 10.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: Diagnosis. */
-/* 10.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 10.10 CHECK: Ward Notes */
-/* 10.10 VERIFY: confirm the screen, data flow, permission and audit behavior for: Ward Notes. */
-/* 10.10 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 10.11 CHECK: Mark Delivered */
-/* 10.11 VERIFY: confirm the screen, data flow, permission and audit behavior for: Mark Delivered. */
-/* 10.11 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 10.12 CHECK: Discharge */
-/* 10.12 VERIFY: confirm the screen, data flow, permission and audit behavior for: Discharge. */
-/* 10.12 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [11] CHILD WARD */
-/* 11.01 CHECK: Child admission */
-/* 11.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Child admission. */
-/* 11.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 11.02 CHECK: Age */
-/* 11.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Age. */
-/* 11.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 11.03 CHECK: Guardian/Parent */
-/* 11.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Guardian/Parent. */
-/* 11.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 11.04 CHECK: Relationship */
-/* 11.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Relationship. */
-/* 11.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 11.05 CHECK: Condition */
-/* 11.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Condition. */
-/* 11.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 11.06 CHECK: Diagnosis */
-/* 11.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Diagnosis. */
-/* 11.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 11.07 CHECK: Ward Notes */
-/* 11.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Ward Notes. */
-/* 11.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 11.08 CHECK: Bed status */
-/* 11.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Bed status. */
-/* 11.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 11.09 CHECK: Discharge history */
-/* 11.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: Discharge history. */
-/* 11.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [12] PROGRAM UNITS */
-/* 12.01 CHECK: Immunization Unit */
-/* 12.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Immunization Unit. */
-/* 12.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 12.02 CHECK: Family Planning Unit */
-/* 12.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Family Planning Unit. */
-/* 12.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 12.03 CHECK: Adolescent Unit */
-/* 12.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Adolescent Unit. */
-/* 12.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 12.04 CHECK: Standardized service selection */
-/* 12.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Standardized service selection. */
-/* 12.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 12.05 CHECK: Patient/card lookup */
-/* 12.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Patient/card lookup. */
-/* 12.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 12.06 CHECK: Notes */
-/* 12.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Notes. */
-/* 12.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 12.07 CHECK: Status */
-/* 12.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Status. */
-/* 12.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 12.08 CHECK: Alerts */
-/* 12.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Alerts. */
-/* 12.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 12.09 CHECK: Reports */
-/* 12.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: Reports. */
-/* 12.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [13] CASHIER */
-/* 13.01 CHECK: Department Cashier */
-/* 13.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Department Cashier. */
-/* 13.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 13.02 CHECK: General Cashier */
-/* 13.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: General Cashier. */
-/* 13.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 13.03 CHECK: Cash */
-/* 13.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Cash. */
-/* 13.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 13.04 CHECK: POS */
-/* 13.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: POS. */
-/* 13.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 13.05 CHECK: Bank Transfer */
-/* 13.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Bank Transfer. */
-/* 13.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 13.06 CHECK: Transaction reference */
-/* 13.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Transaction reference. */
-/* 13.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 13.07 CHECK: Paid */
-/* 13.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Paid. */
-/* 13.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 13.08 CHECK: Pending */
-/* 13.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Pending. */
-/* 13.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 13.09 CHECK: FREE */
-/* 13.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: FREE. */
-/* 13.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 13.10 CHECK: Balance */
-/* 13.10 VERIFY: confirm the screen, data flow, permission and audit behavior for: Balance. */
-/* 13.10 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 13.11 CHECK: Receipt */
-/* 13.11 VERIFY: confirm the screen, data flow, permission and audit behavior for: Receipt. */
-/* 13.11 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 13.12 CHECK: Print receipt */
-/* 13.12 VERIFY: confirm the screen, data flow, permission and audit behavior for: Print receipt. */
-/* 13.12 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 13.13 CHECK: Transaction history */
-/* 13.13 VERIFY: confirm the screen, data flow, permission and audit behavior for: Transaction history. */
-/* 13.13 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 13.14 CHECK: Shift closing */
-/* 13.14 VERIFY: confirm the screen, data flow, permission and audit behavior for: Shift closing. */
-/* 13.14 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [14] ICT STOCK */
-/* 14.01 CHECK: ICT controls stock */
-/* 14.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: ICT controls stock. */
-/* 14.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 14.02 CHECK: FREE item */
-/* 14.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: FREE item. */
-/* 14.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 14.03 CHECK: Paid item */
-/* 14.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Paid item. */
-/* 14.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 14.04 CHECK: Issue to department */
-/* 14.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Issue to department. */
-/* 14.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 14.05 CHECK: Auto subtraction */
-/* 14.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Auto subtraction. */
-/* 14.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 14.06 CHECK: Reorder level */
-/* 14.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Reorder level. */
-/* 14.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 14.07 CHECK: Stock alerts */
-/* 14.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Stock alerts. */
-/* 14.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 14.08 CHECK: Movement history */
-/* 14.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Movement history. */
-/* 14.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 14.09 CHECK: Departments cannot bypass ICT stock rules */
-/* 14.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: Departments cannot bypass ICT stock rules. */
-/* 14.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [15] ROSTER */
-/* 15.01 CHECK: Monthly roster for staff/volunteers */
-/* 15.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Monthly roster for staff/volunteers. */
-/* 15.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 15.02 CHECK: Weekly roster for students */
-/* 15.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Weekly roster for students. */
-/* 15.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 15.03 CHECK: Morning shift */
-/* 15.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Morning shift. */
-/* 15.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 15.04 CHECK: Evening shift */
-/* 15.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Evening shift. */
-/* 15.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 15.05 CHECK: Night shift */
-/* 15.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Night shift. */
-/* 15.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 15.06 CHECK: Married staff Morning + Evening */
-/* 15.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Married staff Morning + Evening. */
-/* 15.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 15.07 CHECK: HOD Morning + Evening + Night */
-/* 15.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: HOD Morning + Evening + Night. */
-/* 15.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 15.08 CHECK: Volunteer selectable shifts */
-/* 15.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Volunteer selectable shifts. */
-/* 15.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 15.09 CHECK: Student selectable shifts */
-/* 15.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: Student selectable shifts. */
-/* 15.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [16] ROSTER OFF RULES */
-/* 16.01 CHECK: Morning: 5 duty days then 2 off */
-/* 16.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Morning: 5 duty days then 2 off. */
-/* 16.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 16.02 CHECK: Evening: 5 duty days then 3 off */
-/* 16.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Evening: 5 duty days then 3 off. */
-/* 16.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 16.03 CHECK: Night: 5 duty days then 4 off */
-/* 16.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Night: 5 duty days then 4 off. */
-/* 16.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 16.04 CHECK: Use approved rule consistently */
-/* 16.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Use approved rule consistently. */
-/* 16.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 16.05 CHECK: Department report from general roster */
-/* 16.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Department report from general roster. */
-/* 16.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [17] ATTENDANCE */
-/* 17.01 CHECK: Staff sign in */
-/* 17.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Staff sign in. */
-/* 17.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 17.02 CHECK: Staff sign out */
-/* 17.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Staff sign out. */
-/* 17.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 17.03 CHECK: Dashboard figures */
-/* 17.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Dashboard figures. */
-/* 17.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 17.04 CHECK: Staff dashboard figures */
-/* 17.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Staff dashboard figures. */
-/* 17.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 17.05 CHECK: General report */
-/* 17.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: General report. */
-/* 17.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 17.06 CHECK: Department report */
-/* 17.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Department report. */
-/* 17.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 17.07 CHECK: Attendance history */
-/* 17.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Attendance history. */
-/* 17.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 17.08 CHECK: Audit trail */
-/* 17.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Audit trail. */
-/* 17.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [18] ALERTS */
-/* 18.01 CHECK: Receiving department only */
-/* 18.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Receiving department only. */
-/* 18.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 18.02 CHECK: Consultant can alert Nursing */
-/* 18.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Consultant can alert Nursing. */
-/* 18.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 18.03 CHECK: Next patient name */
-/* 18.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Next patient name. */
-/* 18.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 18.04 CHECK: Reception board */
-/* 18.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Reception board. */
-/* 18.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 18.05 CHECK: Lab alerts */
-/* 18.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Lab alerts. */
-/* 18.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 18.06 CHECK: Pharmacy alerts */
-/* 18.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Pharmacy alerts. */
-/* 18.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 18.07 CHECK: Ultrasound alerts */
-/* 18.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Ultrasound alerts. */
-/* 18.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 18.08 CHECK: Do not broadcast private alerts to all departments */
-/* 18.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Do not broadcast private alerts to all departments. */
-/* 18.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [19] SMS */
-/* 19.01 CHECK: Phone pulled from ICT profile */
-/* 19.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Phone pulled from ICT profile. */
-/* 19.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 19.02 CHECK: Result Ready */
-/* 19.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Result Ready. */
-/* 19.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 19.03 CHECK: Result Not Ready */
-/* 19.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Result Not Ready. */
-/* 19.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 19.04 CHECK: Please Return */
-/* 19.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Please Return. */
-/* 19.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 19.05 CHECK: Follow-up Required */
-/* 19.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Follow-up Required. */
-/* 19.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 19.06 CHECK: Appointment/Visit Reminder */
-/* 19.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Appointment/Visit Reminder. */
-/* 19.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 19.07 CHECK: Other */
-/* 19.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Other. */
-/* 19.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 19.08 CHECK: Additional Message */
-/* 19.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Additional Message. */
-/* 19.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 19.09 CHECK: Message history */
-/* 19.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: Message history. */
-/* 19.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [20] APPOINTMENTS */
-/* 20.01 CHECK: Patient */
-/* 20.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Patient. */
-/* 20.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 20.02 CHECK: Department */
-/* 20.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Department. */
-/* 20.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 20.03 CHECK: Date */
-/* 20.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Date. */
-/* 20.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 20.04 CHECK: Time */
-/* 20.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Time. */
-/* 20.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 20.05 CHECK: Reason */
-/* 20.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Reason. */
-/* 20.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 20.06 CHECK: Status */
-/* 20.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Status. */
-/* 20.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 20.07 CHECK: Reminder */
-/* 20.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Reminder. */
-/* 20.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 20.08 CHECK: Follow-up */
-/* 20.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Follow-up. */
-/* 20.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [21] REPORTS */
-/* 21.01 CHECK: General reports */
-/* 21.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: General reports. */
-/* 21.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 21.02 CHECK: Department reports */
-/* 21.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Department reports. */
-/* 21.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 21.03 CHECK: Cashier reports */
-/* 21.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Cashier reports. */
-/* 21.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 21.04 CHECK: Stock reports */
-/* 21.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Stock reports. */
-/* 21.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 21.05 CHECK: Attendance reports */
-/* 21.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Attendance reports. */
-/* 21.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 21.06 CHECK: Roster reports */
-/* 21.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Roster reports. */
-/* 21.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 21.07 CHECK: Patient reports */
-/* 21.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Patient reports. */
-/* 21.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 21.08 CHECK: Clinical workflow reports */
-/* 21.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Clinical workflow reports. */
-/* 21.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 21.09 CHECK: Audit reports */
-/* 21.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: Audit reports. */
-/* 21.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [22] AUDIT LOGS */
-/* 22.01 CHECK: Login */
-/* 22.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Login. */
-/* 22.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 22.02 CHECK: Create */
-/* 22.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Create. */
-/* 22.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 22.03 CHECK: Edit */
-/* 22.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Edit. */
-/* 22.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 22.04 CHECK: Delete */
-/* 22.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Delete. */
-/* 22.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 22.05 CHECK: Payment */
-/* 22.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Payment. */
-/* 22.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 22.06 CHECK: Print */
-/* 22.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Print. */
-/* 22.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 22.07 CHECK: Stock issue */
-/* 22.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Stock issue. */
-/* 22.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 22.08 CHECK: Result update */
-/* 22.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Result update. */
-/* 22.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 22.09 CHECK: Prescription dispense */
-/* 22.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: Prescription dispense. */
-/* 22.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 22.10 CHECK: Admission */
-/* 22.10 VERIFY: confirm the screen, data flow, permission and audit behavior for: Admission. */
-/* 22.10 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 22.11 CHECK: Discharge */
-/* 22.11 VERIFY: confirm the screen, data flow, permission and audit behavior for: Discharge. */
-/* 22.11 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 22.12 CHECK: Permission change */
-/* 22.12 VERIFY: confirm the screen, data flow, permission and audit behavior for: Permission change. */
-/* 22.12 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 22.13 CHECK: Settings change */
-/* 22.13 VERIFY: confirm the screen, data flow, permission and audit behavior for: Settings change. */
-/* 22.13 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [23] BACKUP RESTORE */
-/* 23.01 CHECK: Full JSON backup */
-/* 23.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Full JSON backup. */
-/* 23.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 23.02 CHECK: Patients */
-/* 23.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Patients. */
-/* 23.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 23.03 CHECK: Staff */
-/* 23.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Staff. */
-/* 23.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 23.04 CHECK: Transactions */
-/* 23.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Transactions. */
-/* 23.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 23.05 CHECK: Lab */
-/* 23.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Lab. */
-/* 23.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 23.06 CHECK: Pharmacy */
-/* 23.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Pharmacy. */
-/* 23.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 23.07 CHECK: Ultrasound */
-/* 23.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Ultrasound. */
-/* 23.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 23.08 CHECK: Wards */
-/* 23.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Wards. */
-/* 23.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 23.09 CHECK: Roster */
-/* 23.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: Roster. */
-/* 23.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 23.10 CHECK: Attendance */
-/* 23.10 VERIFY: confirm the screen, data flow, permission and audit behavior for: Attendance. */
-/* 23.10 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 23.11 CHECK: Alerts */
-/* 23.11 VERIFY: confirm the screen, data flow, permission and audit behavior for: Alerts. */
-/* 23.11 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 23.12 CHECK: SMS */
-/* 23.12 VERIFY: confirm the screen, data flow, permission and audit behavior for: SMS. */
-/* 23.12 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 23.13 CHECK: Inventory */
-/* 23.13 VERIFY: confirm the screen, data flow, permission and audit behavior for: Inventory. */
-/* 23.13 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 23.14 CHECK: Appointments */
-/* 23.14 VERIFY: confirm the screen, data flow, permission and audit behavior for: Appointments. */
-/* 23.14 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 23.15 CHECK: Settings */
-/* 23.15 VERIFY: confirm the screen, data flow, permission and audit behavior for: Settings. */
-/* 23.15 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 23.16 CHECK: Restore validation */
-/* 23.16 VERIFY: confirm the screen, data flow, permission and audit behavior for: Restore validation. */
-/* 23.16 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [24] PRINTING */
-/* 24.01 CHECK: Patient card printing */
-/* 24.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Patient card printing. */
-/* 24.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 24.02 CHECK: Department receipt printing */
-/* 24.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Department receipt printing. */
-/* 24.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 24.03 CHECK: General cashier receipt printing */
-/* 24.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: General cashier receipt printing. */
-/* 24.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 24.04 CHECK: Ultrasound slip */
-/* 24.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Ultrasound slip. */
-/* 24.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 24.05 CHECK: Lab slip */
-/* 24.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Lab slip. */
-/* 24.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 24.06 CHECK: Pharmacy receipt */
-/* 24.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Pharmacy receipt. */
-/* 24.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 24.07 CHECK: Roster report */
-/* 24.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Roster report. */
-/* 24.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 24.08 CHECK: Department report */
-/* 24.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Department report. */
-/* 24.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 24.09 CHECK: No payment receipt from non-cashier departments */
-/* 24.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: No payment receipt from non-cashier departments. */
-/* 24.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [25] SEARCHABLE SELECTS */
-/* 25.01 CHECK: Click empty field to see options */
-/* 25.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Click empty field to see options. */
-/* 25.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 25.02 CHECK: Type beginning letters to filter */
-/* 25.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Type beginning letters to filter. */
-/* 25.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 25.03 CHECK: Select-only for standardized fields */
-/* 25.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Select-only for standardized fields. */
-/* 25.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 25.04 CHECK: Button/toggle multi-select where multiple choices are needed */
-/* 25.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Button/toggle multi-select where multiple choices are needed. */
-/* 25.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 25.05 CHECK: Free text only for genuine notes */
-/* 25.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Free text only for genuine notes. */
-/* 25.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [26] OUTPATIENT */
-/* 26.01 CHECK: Visit/transaction number */
-/* 26.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Visit/transaction number. */
-/* 26.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 26.02 CHECK: Printed slip */
-/* 26.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Printed slip. */
-/* 26.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 26.03 CHECK: Automatic pricing */
-/* 26.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Automatic pricing. */
-/* 26.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 26.04 CHECK: Discount/adjustment */
-/* 26.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Discount/adjustment. */
-/* 26.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 26.05 CHECK: Paid/FREE/Pending */
-/* 26.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Paid/FREE/Pending. */
-/* 26.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 26.06 CHECK: Balance */
-/* 26.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Balance. */
-/* 26.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 26.07 CHECK: General Cashier visibility */
-/* 26.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: General Cashier visibility. */
-/* 26.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 26.08 CHECK: No duplicate hospital profile when outpatient-only workflow applies */
-/* 26.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: No duplicate hospital profile when outpatient-only workflow applies. */
-/* 26.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [27] SUPABASE FUTURE */
-/* 27.01 CHECK: Move persistence from localStorage to Supabase */
-/* 27.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Move persistence from localStorage to Supabase. */
-/* 27.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 27.02 CHECK: Auth */
-/* 27.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Auth. */
-/* 27.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 27.03 CHECK: Profiles */
-/* 27.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Profiles. */
-/* 27.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 27.04 CHECK: Departments */
-/* 27.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Departments. */
-/* 27.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 27.05 CHECK: Roles */
-/* 27.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Roles. */
-/* 27.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 27.06 CHECK: Permissions */
-/* 27.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Permissions. */
-/* 27.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 27.07 CHECK: Patients */
-/* 27.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Patients. */
-/* 27.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 27.08 CHECK: Visits */
-/* 27.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Visits. */
-/* 27.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 27.09 CHECK: Transactions */
-/* 27.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: Transactions. */
-/* 27.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 27.10 CHECK: Lab requests */
-/* 27.10 VERIFY: confirm the screen, data flow, permission and audit behavior for: Lab requests. */
-/* 27.10 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 27.11 CHECK: Prescriptions */
-/* 27.11 VERIFY: confirm the screen, data flow, permission and audit behavior for: Prescriptions. */
-/* 27.11 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 27.12 CHECK: Ultrasound requests */
-/* 27.12 VERIFY: confirm the screen, data flow, permission and audit behavior for: Ultrasound requests. */
-/* 27.12 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 27.13 CHECK: Ward records */
-/* 27.13 VERIFY: confirm the screen, data flow, permission and audit behavior for: Ward records. */
-/* 27.13 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 27.14 CHECK: Inventory */
-/* 27.14 VERIFY: confirm the screen, data flow, permission and audit behavior for: Inventory. */
-/* 27.14 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 27.15 CHECK: Roster */
-/* 27.15 VERIFY: confirm the screen, data flow, permission and audit behavior for: Roster. */
-/* 27.15 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 27.16 CHECK: Attendance */
-/* 27.16 VERIFY: confirm the screen, data flow, permission and audit behavior for: Attendance. */
-/* 27.16 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 27.17 CHECK: Alerts */
-/* 27.17 VERIFY: confirm the screen, data flow, permission and audit behavior for: Alerts. */
-/* 27.17 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 27.18 CHECK: SMS */
-/* 27.18 VERIFY: confirm the screen, data flow, permission and audit behavior for: SMS. */
-/* 27.18 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 27.19 CHECK: Appointments */
-/* 27.19 VERIFY: confirm the screen, data flow, permission and audit behavior for: Appointments. */
-/* 27.19 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 27.20 CHECK: Audit logs */
-/* 27.20 VERIFY: confirm the screen, data flow, permission and audit behavior for: Audit logs. */
-/* 27.20 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 27.21 CHECK: RLS */
-/* 27.21 VERIFY: confirm the screen, data flow, permission and audit behavior for: RLS. */
-/* 27.21 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [28] RLS */
-/* 28.01 CHECK: Patient access by authorized workflow */
-/* 28.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Patient access by authorized workflow. */
-/* 28.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 28.02 CHECK: Department-scoped records */
-/* 28.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Department-scoped records. */
-/* 28.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 28.03 CHECK: Cashier-scoped payment data */
-/* 28.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Cashier-scoped payment data. */
-/* 28.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 28.04 CHECK: Super Admin unrestricted */
-/* 28.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Super Admin unrestricted. */
-/* 28.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 28.05 CHECK: In-Charge read-only */
-/* 28.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: In-Charge read-only. */
-/* 28.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 28.06 CHECK: No frontend-only security */
-/* 28.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: No frontend-only security. */
-/* 28.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 28.07 CHECK: Never expose service role key */
-/* 28.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Never expose service role key. */
-/* 28.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [29] TESTING */
-/* 29.01 CHECK: Login each role */
-/* 29.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: Login each role. */
-/* 29.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 29.02 CHECK: Verify menu visibility */
-/* 29.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: Verify menu visibility. */
-/* 29.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 29.03 CHECK: Verify direct URL isolation */
-/* 29.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: Verify direct URL isolation. */
-/* 29.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 29.04 CHECK: Create patient in ICT */
-/* 29.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: Create patient in ICT. */
-/* 29.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 29.05 CHECK: Send to Records */
-/* 29.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: Send to Records. */
-/* 29.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 29.06 CHECK: Open patient in Nursing */
-/* 29.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: Open patient in Nursing. */
-/* 29.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 29.07 CHECK: Send Lab request */
-/* 29.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: Send Lab request. */
-/* 29.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 29.08 CHECK: Send Pharmacy prescription */
-/* 29.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: Send Pharmacy prescription. */
-/* 29.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 29.09 CHECK: Send Ultrasound request */
-/* 29.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: Send Ultrasound request. */
-/* 29.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 29.10 CHECK: Complete Lab result */
-/* 29.10 VERIFY: confirm the screen, data flow, permission and audit behavior for: Complete Lab result. */
-/* 29.10 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 29.11 CHECK: Complete Ultrasound report */
-/* 29.11 VERIFY: confirm the screen, data flow, permission and audit behavior for: Complete Ultrasound report. */
-/* 29.11 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 29.12 CHECK: Dispense Pharmacy */
-/* 29.12 VERIFY: confirm the screen, data flow, permission and audit behavior for: Dispense Pharmacy. */
-/* 29.12 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 29.13 CHECK: Test cashier */
-/* 29.13 VERIFY: confirm the screen, data flow, permission and audit behavior for: Test cashier. */
-/* 29.13 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 29.14 CHECK: Test wards */
-/* 29.14 VERIFY: confirm the screen, data flow, permission and audit behavior for: Test wards. */
-/* 29.14 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 29.15 CHECK: Test roster */
-/* 29.15 VERIFY: confirm the screen, data flow, permission and audit behavior for: Test roster. */
-/* 29.15 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 29.16 CHECK: Test backup */
-/* 29.16 VERIFY: confirm the screen, data flow, permission and audit behavior for: Test backup. */
-/* 29.16 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* [30] FINAL QUALITY */
-/* 30.01 CHECK: No duplicate App */
-/* 30.01 VERIFY: confirm the screen, data flow, permission and audit behavior for: No duplicate App. */
-/* 30.01 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 30.02 CHECK: One export default */
-/* 30.02 VERIFY: confirm the screen, data flow, permission and audit behavior for: One export default. */
-/* 30.02 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 30.03 CHECK: No nested component declarations inside JSX */
-/* 30.03 VERIFY: confirm the screen, data flow, permission and audit behavior for: No nested component declarations inside JSX. */
-/* 30.03 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 30.04 CHECK: No duplicate imports */
-/* 30.04 VERIFY: confirm the screen, data flow, permission and audit behavior for: No duplicate imports. */
-/* 30.04 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 30.05 CHECK: No duplicate state names */
-/* 30.05 VERIFY: confirm the screen, data flow, permission and audit behavior for: No duplicate state names. */
-/* 30.05 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 30.06 CHECK: No broken route conditions */
-/* 30.06 VERIFY: confirm the screen, data flow, permission and audit behavior for: No broken route conditions. */
-/* 30.06 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 30.07 CHECK: No accidental data reset */
-/* 30.07 VERIFY: confirm the screen, data flow, permission and audit behavior for: No accidental data reset. */
-/* 30.07 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 30.08 CHECK: No department leakage */
-/* 30.08 VERIFY: confirm the screen, data flow, permission and audit behavior for: No department leakage. */
-/* 30.08 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 30.09 CHECK: No cashier leakage */
-/* 30.09 VERIFY: confirm the screen, data flow, permission and audit behavior for: No cashier leakage. */
-/* 30.09 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* 30.10 CHECK: No clinical edit permission for monitoring roles */
-/* 30.10 VERIFY: confirm the screen, data flow, permission and audit behavior for: No clinical edit permission for monitoring roles. */
-/* 30.10 EXPECT: behavior remains inside the approved Bazza PHC workflow and does not bypass department rules. */
-/* TEST-0001: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0001-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0001-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0001-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0002: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0002-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0002-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0002-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0003: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0003-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0003-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0003-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0004: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0004-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0004-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0004-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0005: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0005-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0005-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0005-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0006: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0006-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0006-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0006-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0007: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0007-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0007-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0007-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0008: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0008-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0008-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0008-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0009: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0009-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0009-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0009-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0010: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0010-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0010-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0010-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0011: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0011-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0011-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0011-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0012: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0012-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0012-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0012-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0013: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0013-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0013-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0013-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0014: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0014-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0014-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0014-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0015: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0015-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0015-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0015-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0016: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0016-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0016-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0016-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0017: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0017-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0017-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0017-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0018: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0018-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0018-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0018-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0019: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0019-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0019-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0019-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0020: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0020-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0020-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0020-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0021: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0021-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0021-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0021-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0022: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0022-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0022-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0022-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0023: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0023-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0023-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0023-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0024: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0024-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0024-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0024-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0025: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0025-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0025-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0025-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0026: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0026-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0026-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0026-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0027: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0027-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0027-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0027-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0028: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0028-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0028-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0028-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0029: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0029-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0029-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0029-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0030: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0030-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0030-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0030-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0031: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0031-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0031-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0031-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0032: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0032-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0032-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0032-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0033: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0033-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0033-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0033-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0034: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0034-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0034-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0034-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0035: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0035-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0035-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0035-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0036: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0036-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0036-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0036-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0037: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0037-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0037-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0037-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0038: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0038-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0038-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0038-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0039: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0039-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0039-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0039-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0040: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0040-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0040-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0040-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0041: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0041-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0041-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0041-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0042: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0042-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0042-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0042-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0043: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0043-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0043-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0043-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0044: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0044-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0044-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0044-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0045: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0045-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0045-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0045-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0046: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0046-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0046-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0046-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0047: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0047-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0047-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0047-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0048: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0048-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0048-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0048-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0049: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0049-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0049-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0049-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0050: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0050-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0050-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0050-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0051: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0051-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0051-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0051-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0052: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0052-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0052-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0052-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0053: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0053-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0053-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0053-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0054: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0054-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0054-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0054-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0055: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0055-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0055-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0055-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0056: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0056-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0056-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0056-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0057: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0057-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0057-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0057-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0058: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0058-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0058-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0058-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0059: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0059-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0059-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0059-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0060: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0060-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0060-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0060-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0061: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0061-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0061-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0061-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0062: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0062-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0062-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0062-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0063: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0063-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0063-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0063-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0064: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0064-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0064-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0064-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0065: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0065-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0065-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0065-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0066: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0066-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0066-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0066-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0067: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0067-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0067-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0067-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0068: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0068-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0068-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0068-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0069: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0069-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0069-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0069-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0070: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0070-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0070-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0070-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0071: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0071-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0071-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0071-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0072: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0072-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0072-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0072-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0073: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0073-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0073-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0073-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0074: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0074-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0074-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0074-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0075: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0075-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0075-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0075-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0076: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0076-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0076-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0076-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0077: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0077-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0077-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0077-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0078: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0078-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0078-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0078-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0079: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0079-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0079-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0079-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0080: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0080-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0080-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0080-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0081: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0081-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0081-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0081-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0082: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0082-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0082-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0082-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0083: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0083-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0083-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0083-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0084: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0084-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0084-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0084-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0085: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0085-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0085-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0085-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0086: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0086-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0086-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0086-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0087: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0087-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0087-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0087-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0088: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0088-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0088-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0088-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0089: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0089-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0089-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0089-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0090: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0090-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0090-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0090-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0091: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0091-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0091-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0091-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0092: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0092-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0092-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0092-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0093: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0093-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0093-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0093-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0094: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0094-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0094-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0094-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0095: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0095-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0095-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0095-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0096: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0096-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0096-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0096-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0097: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0097-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0097-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0097-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0098: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0098-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0098-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0098-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0099: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0099-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0099-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0099-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0100: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0100-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0100-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0100-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0101: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0101-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0101-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0101-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0102: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0102-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0102-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0102-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0103: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0103-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0103-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0103-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0104: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0104-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0104-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0104-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0105: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0105-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0105-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0105-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0106: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0106-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0106-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0106-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0107: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0107-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0107-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0107-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0108: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0108-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0108-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0108-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0109: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0109-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0109-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0109-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0110: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0110-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0110-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0110-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0111: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0111-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0111-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0111-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0112: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0112-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0112-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0112-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0113: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0113-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0113-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0113-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0114: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0114-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0114-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0114-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0115: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0115-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0115-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0115-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0116: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0116-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0116-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0116-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0117: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0117-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0117-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0117-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0118: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0118-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0118-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0118-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0119: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0119-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0119-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0119-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0120: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0120-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0120-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0120-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0121: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0121-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0121-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0121-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0122: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0122-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0122-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0122-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0123: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0123-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0123-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0123-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0124: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0124-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0124-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0124-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0125: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0125-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0125-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0125-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0126: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0126-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0126-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0126-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0127: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0127-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0127-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0127-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0128: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0128-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0128-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0128-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0129: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0129-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0129-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0129-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0130: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0130-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0130-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0130-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0131: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0131-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0131-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0131-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0132: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0132-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0132-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0132-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0133: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0133-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0133-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0133-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0134: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0134-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0134-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0134-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0135: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0135-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0135-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0135-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0136: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0136-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0136-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0136-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0137: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0137-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0137-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0137-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0138: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0138-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0138-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0138-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0139: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0139-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0139-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0139-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0140: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0140-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0140-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0140-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0141: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0141-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0141-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0141-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0142: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0142-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0142-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0142-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0143: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0143-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0143-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0143-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0144: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0144-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0144-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0144-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0145: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0145-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0145-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0145-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0146: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0146-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0146-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0146-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0147: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0147-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0147-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0147-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0148: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0148-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0148-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0148-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0149: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0149-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0149-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0149-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0150: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0150-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0150-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0150-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0151: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0151-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0151-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0151-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0152: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0152-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0152-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0152-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0153: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0153-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0153-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0153-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0154: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0154-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0154-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0154-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0155: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0155-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0155-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0155-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0156: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0156-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0156-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0156-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0157: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0157-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0157-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0157-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0158: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0158-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0158-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0158-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0159: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0159-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0159-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0159-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0160: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0160-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0160-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0160-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0161: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0161-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0161-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0161-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0162: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0162-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0162-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0162-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0163: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0163-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0163-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0163-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0164: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0164-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0164-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0164-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0165: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0165-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0165-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0165-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0166: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0166-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0166-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0166-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0167: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0167-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0167-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0167-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0168: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0168-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0168-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0168-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0169: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0169-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0169-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0169-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0170: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0170-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0170-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0170-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0171: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0171-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0171-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0171-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0172: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0172-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0172-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0172-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0173: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0173-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0173-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0173-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0174: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0174-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0174-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0174-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0175: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0175-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0175-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0175-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0176: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0176-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0176-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0176-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0177: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0177-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0177-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0177-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0178: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0178-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0178-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0178-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0179: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0179-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0179-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0179-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0180: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0180-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0180-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0180-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0181: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0181-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0181-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0181-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0182: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0182-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0182-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0182-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0183: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0183-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0183-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0183-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0184: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0184-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0184-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0184-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0185: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0185-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0185-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0185-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0186: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0186-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0186-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0186-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0187: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0187-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0187-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0187-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0188: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0188-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0188-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0188-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0189: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0189-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0189-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0189-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0190: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0190-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0190-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0190-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0191: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0191-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0191-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0191-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0192: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0192-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0192-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0192-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0193: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0193-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0193-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0193-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0194: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0194-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0194-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0194-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0195: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0195-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0195-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0195-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0196: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0196-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0196-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0196-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0197: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0197-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0197-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0197-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0198: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0198-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0198-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0198-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0199: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0199-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0199-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0199-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0200: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0200-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0200-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0200-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0201: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0201-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0201-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0201-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0202: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0202-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0202-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0202-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0203: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0203-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0203-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0203-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0204: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0204-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0204-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0204-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0205: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0205-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0205-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0205-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0206: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0206-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0206-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0206-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0207: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0207-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0207-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0207-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0208: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0208-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0208-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0208-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0209: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0209-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0209-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0209-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0210: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0210-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0210-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0210-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0211: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0211-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0211-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0211-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0212: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0212-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0212-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0212-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0213: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0213-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0213-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0213-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0214: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0214-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0214-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0214-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0215: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0215-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0215-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0215-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0216: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0216-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0216-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0216-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0217: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0217-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0217-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0217-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0218: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0218-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0218-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0218-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0219: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0219-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0219-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0219-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0220: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0220-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0220-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0220-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0221: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0221-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0221-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0221-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0222: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0222-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0222-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0222-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0223: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0223-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0223-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0223-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0224: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0224-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0224-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0224-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0225: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0225-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0225-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0225-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0226: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0226-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0226-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0226-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0227: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0227-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0227-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0227-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0228: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0228-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0228-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0228-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0229: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0229-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0229-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0229-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0230: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0230-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0230-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0230-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0231: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0231-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0231-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0231-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0232: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0232-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0232-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0232-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0233: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0233-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0233-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0233-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0234: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0234-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0234-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0234-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0235: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0235-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0235-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0235-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0236: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0236-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0236-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0236-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0237: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0237-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0237-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0237-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0238: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0238-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0238-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0238-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0239: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0239-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0239-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0239-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0240: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0240-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0240-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0240-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0241: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0241-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0241-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0241-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0242: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0242-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0242-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0242-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0243: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0243-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0243-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0243-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0244: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0244-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0244-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0244-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0245: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0245-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0245-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0245-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0246: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0246-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0246-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0246-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0247: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0247-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0247-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0247-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0248: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0248-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0248-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0248-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0249: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0249-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0249-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0249-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0250: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0250-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0250-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0250-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0251: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0251-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0251-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0251-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0252: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0252-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0252-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0252-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0253: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0253-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0253-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0253-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0254: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0254-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0254-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0254-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0255: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0255-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0255-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0255-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0256: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0256-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0256-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0256-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0257: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0257-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0257-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0257-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0258: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0258-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0258-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0258-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0259: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0259-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0259-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0259-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0260: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0260-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0260-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0260-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0261: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0261-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0261-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0261-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0262: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0262-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0262-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0262-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0263: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0263-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0263-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0263-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0264: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0264-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0264-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0264-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0265: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0265-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0265-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0265-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0266: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0266-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0266-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0266-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0267: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0267-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0267-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0267-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0268: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0268-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0268-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0268-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0269: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0269-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0269-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0269-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0270: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0270-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0270-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0270-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0271: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0271-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0271-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0271-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0272: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0272-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0272-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0272-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0273: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0273-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0273-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0273-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0274: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0274-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0274-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0274-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0275: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0275-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0275-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0275-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0276: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0276-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0276-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0276-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0277: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0277-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0277-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0277-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0278: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0278-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0278-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0278-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0279: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0279-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0279-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0279-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0280: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0280-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0280-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0280-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0281: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0281-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0281-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0281-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0282: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0282-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0282-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0282-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0283: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0283-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0283-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0283-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0284: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0284-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0284-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0284-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0285: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0285-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0285-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0285-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0286: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0286-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0286-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0286-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0287: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0287-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0287-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0287-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0288: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0288-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0288-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0288-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0289: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0289-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0289-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0289-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0290: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0290-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0290-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0290-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0291: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0291-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0291-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0291-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0292: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0292-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0292-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0292-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0293: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0293-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0293-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0293-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0294: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0294-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0294-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0294-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0295: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0295-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0295-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0295-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0296: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0296-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0296-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0296-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0297: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0297-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0297-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0297-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0298: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0298-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0298-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0298-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0299: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0299-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0299-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0299-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0300: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0300-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0300-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0300-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0301: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0301-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0301-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0301-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0302: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0302-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0302-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0302-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0303: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0303-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0303-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0303-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0304: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0304-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0304-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0304-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0305: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0305-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0305-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0305-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0306: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0306-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0306-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0306-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0307: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0307-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0307-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0307-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0308: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0308-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0308-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0308-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0309: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0309-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0309-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0309-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0310: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0310-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0310-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0310-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0311: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0311-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0311-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0311-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0312: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0312-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0312-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0312-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0313: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0313-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0313-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0313-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0314: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0314-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0314-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0314-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0315: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0315-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0315-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0315-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0316: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0316-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0316-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0316-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0317: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0317-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0317-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0317-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0318: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0318-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0318-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0318-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0319: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0319-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0319-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0319-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0320: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0320-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0320-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0320-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0321: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0321-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0321-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0321-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0322: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0322-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0322-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0322-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0323: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0323-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0323-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0323-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0324: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0324-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0324-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0324-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0325: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0325-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0325-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0325-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0326: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0326-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0326-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0326-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0327: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0327-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0327-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0327-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0328: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0328-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0328-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0328-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0329: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0329-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0329-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0329-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0330: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0330-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0330-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0330-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0331: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0331-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0331-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0331-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0332: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0332-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0332-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0332-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0333: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0333-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0333-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0333-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0334: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0334-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0334-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0334-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0335: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0335-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0335-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0335-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0336: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0336-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0336-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0336-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0337: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0337-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0337-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0337-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0338: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0338-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0338-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0338-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0339: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0339-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0339-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0339-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0340: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0340-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0340-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0340-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0341: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0341-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0341-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0341-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0342: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0342-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0342-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0342-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0343: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0343-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0343-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0343-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0344: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0344-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0344-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0344-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0345: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0345-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0345-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0345-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0346: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0346-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0346-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0346-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0347: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0347-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0347-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0347-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0348: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0348-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0348-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0348-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0349: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0349-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0349-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0349-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0350: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0350-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0350-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0350-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0351: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0351-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0351-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0351-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0352: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0352-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0352-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0352-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0353: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0353-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0353-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0353-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0354: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0354-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0354-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0354-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0355: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0355-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0355-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0355-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0356: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0356-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0356-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0356-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0357: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0357-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0357-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0357-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0358: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0358-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0358-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0358-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0359: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0359-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0359-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0359-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0360: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0360-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0360-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0360-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0361: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0361-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0361-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0361-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0362: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0362-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0362-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0362-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0363: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0363-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0363-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0363-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0364: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0364-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0364-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0364-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0365: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0365-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0365-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0365-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0366: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0366-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0366-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0366-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0367: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0367-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0367-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0367-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0368: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0368-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0368-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0368-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0369: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0369-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0369-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0369-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0370: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0370-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0370-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0370-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0371: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0371-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0371-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0371-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0372: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0372-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0372-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0372-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0373: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0373-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0373-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0373-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0374: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0374-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0374-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0374-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0375: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0375-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0375-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0375-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0376: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0376-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0376-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0376-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0377: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0377-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0377-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0377-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0378: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0378-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0378-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0378-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0379: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0379-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0379-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0379-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0380: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0380-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0380-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0380-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0381: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0381-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0381-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0381-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0382: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0382-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0382-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0382-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0383: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0383-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0383-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0383-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0384: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0384-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0384-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0384-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0385: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0385-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0385-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0385-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0386: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0386-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0386-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0386-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0387: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0387-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0387-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0387-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0388: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0388-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0388-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0388-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0389: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0389-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0389-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0389-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0390: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0390-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0390-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0390-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0391: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0391-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0391-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0391-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0392: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0392-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0392-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0392-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0393: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0393-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0393-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0393-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0394: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0394-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0394-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0394-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0395: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0395-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0395-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0395-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0396: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0396-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0396-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0396-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0397: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0397-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0397-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0397-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0398: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0398-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0398-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0398-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0399: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0399-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0399-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0399-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0400: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0400-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0400-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0400-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0401: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0401-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0401-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0401-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0402: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0402-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0402-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0402-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0403: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0403-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0403-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0403-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0404: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0404-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0404-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0404-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0405: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0405-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0405-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0405-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0406: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0406-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0406-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0406-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0407: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0407-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0407-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0407-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0408: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0408-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0408-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0408-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0409: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0409-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0409-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0409-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0410: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0410-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0410-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0410-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0411: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0411-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0411-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0411-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0412: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0412-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0412-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0412-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0413: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0413-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0413-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0413-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0414: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0414-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0414-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0414-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0415: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0415-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0415-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0415-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0416: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0416-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0416-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0416-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0417: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0417-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0417-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0417-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0418: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0418-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0418-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0418-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0419: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0419-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0419-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0419-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0420: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0420-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0420-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0420-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0421: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0421-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0421-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0421-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0422: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0422-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0422-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0422-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0423: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0423-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0423-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0423-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0424: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0424-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0424-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0424-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0425: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0425-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0425-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0425-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0426: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0426-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0426-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0426-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0427: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0427-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0427-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0427-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0428: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0428-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0428-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0428-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0429: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0429-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0429-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0429-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0430: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0430-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0430-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0430-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0431: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0431-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0431-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0431-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0432: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0432-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0432-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0432-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0433: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0433-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0433-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0433-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0434: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0434-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0434-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0434-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0435: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0435-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0435-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0435-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0436: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0436-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0436-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0436-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0437: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0437-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0437-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0437-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0438: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0438-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0438-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0438-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0439: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0439-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0439-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0439-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0440: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0440-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0440-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0440-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0441: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0441-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0441-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0441-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0442: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0442-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0442-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0442-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0443: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0443-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0443-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0443-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0444: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0444-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0444-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0444-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0445: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0445-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0445-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0445-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0446: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0446-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0446-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0446-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0447: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0447-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0447-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0447-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0448: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0448-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0448-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0448-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0449: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0449-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0449-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0449-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0450: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0450-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0450-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0450-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0451: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0451-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0451-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0451-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0452: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0452-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0452-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0452-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0453: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0453-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0453-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0453-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0454: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0454-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0454-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0454-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0455: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0455-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0455-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0455-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0456: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0456-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0456-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0456-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0457: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0457-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0457-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0457-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0458: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0458-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0458-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0458-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0459: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0459-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0459-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0459-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0460: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0460-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0460-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0460-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0461: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0461-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0461-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0461-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0462: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0462-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0462-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0462-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0463: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0463-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0463-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0463-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0464: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0464-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0464-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0464-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0465: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0465-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0465-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0465-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0466: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0466-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0466-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0466-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0467: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0467-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0467-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0467-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0468: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0468-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0468-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0468-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0469: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0469-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0469-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0469-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0470: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0470-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0470-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0470-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0471: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0471-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0471-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0471-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0472: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0472-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0472-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0472-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0473: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0473-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0473-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0473-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0474: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0474-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0474-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0474-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0475: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0475-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0475-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0475-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0476: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0476-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0476-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0476-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0477: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0477-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0477-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0477-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0478: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0478-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0478-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0478-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0479: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0479-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0479-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0479-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0480: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0480-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0480-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0480-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0481: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0481-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0481-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0481-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0482: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0482-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0482-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0482-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0483: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0483-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0483-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0483-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0484: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0484-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0484-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0484-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0485: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0485-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0485-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0485-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0486: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0486-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0486-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0486-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0487: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0487-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0487-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0487-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0488: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0488-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0488-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0488-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0489: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0489-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0489-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0489-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0490: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0490-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0490-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0490-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0491: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0491-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0491-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0491-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0492: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0492-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0492-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0492-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0493: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0493-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0493-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0493-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0494: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0494-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0494-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0494-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0495: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0495-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0495-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0495-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0496: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0496-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0496-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0496-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0497: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0497-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0497-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0497-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0498: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0498-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0498-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0498-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0499: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0499-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0499-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0499-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0500: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0500-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0500-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0500-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0501: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0501-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0501-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0501-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0502: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0502-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0502-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0502-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0503: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0503-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0503-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0503-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0504: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0504-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0504-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0504-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0505: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0505-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0505-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0505-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0506: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0506-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0506-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0506-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0507: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0507-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0507-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0507-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0508: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0508-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0508-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0508-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0509: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0509-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0509-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0509-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0510: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0510-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0510-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0510-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0511: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0511-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0511-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0511-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0512: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0512-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0512-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0512-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0513: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0513-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0513-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0513-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0514: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0514-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0514-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0514-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0515: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0515-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0515-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0515-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0516: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0516-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0516-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0516-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0517: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0517-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0517-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0517-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0518: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0518-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0518-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0518-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0519: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0519-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0519-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0519-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0520: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0520-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0520-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0520-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0521: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0521-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0521-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0521-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0522: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0522-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0522-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0522-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0523: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0523-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0523-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0523-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0524: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0524-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0524-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0524-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0525: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0525-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0525-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0525-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0526: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0526-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0526-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0526-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0527: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0527-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0527-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0527-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0528: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0528-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0528-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0528-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0529: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0529-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0529-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0529-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0530: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0530-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0530-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0530-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0531: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0531-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0531-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0531-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0532: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0532-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0532-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0532-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0533: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0533-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0533-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0533-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0534: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0534-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0534-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0534-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0535: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0535-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0535-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0535-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0536: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0536-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0536-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0536-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0537: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0537-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0537-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0537-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0538: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0538-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0538-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0538-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0539: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0539-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0539-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0539-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0540: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0540-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0540-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0540-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0541: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0541-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0541-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0541-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0542: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0542-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0542-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0542-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0543: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0543-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0543-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0543-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0544: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0544-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0544-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0544-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0545: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0545-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0545-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0545-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0546: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0546-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0546-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0546-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0547: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0547-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0547-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0547-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0548: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0548-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0548-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0548-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0549: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0549-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0549-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0549-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0550: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0550-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0550-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0550-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0551: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0551-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0551-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0551-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0552: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0552-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0552-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0552-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0553: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0553-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0553-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0553-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0554: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0554-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0554-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0554-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0555: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0555-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0555-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0555-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0556: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0556-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0556-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0556-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0557: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0557-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0557-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0557-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0558: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0558-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0558-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0558-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0559: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0559-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0559-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0559-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0560: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0560-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0560-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0560-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0561: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0561-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0561-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0561-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0562: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0562-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0562-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0562-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0563: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0563-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0563-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0563-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0564: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0564-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0564-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0564-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0565: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0565-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0565-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0565-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0566: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0566-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0566-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0566-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0567: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0567-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0567-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0567-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0568: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0568-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0568-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0568-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0569: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0569-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0569-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0569-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0570: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0570-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0570-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0570-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0571: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0571-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0571-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0571-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0572: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0572-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0572-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0572-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0573: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0573-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0573-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0573-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0574: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0574-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0574-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0574-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0575: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0575-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0575-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0575-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0576: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0576-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0576-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0576-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0577: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0577-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0577-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0577-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0578: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0578-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0578-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0578-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0579: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0579-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0579-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0579-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0580: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0580-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0580-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0580-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0581: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0581-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0581-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0581-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0582: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0582-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0582-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0582-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0583: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0583-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0583-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0583-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0584: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0584-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0584-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0584-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0585: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0585-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0585-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0585-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0586: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0586-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0586-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0586-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0587: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0587-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0587-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0587-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0588: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0588-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0588-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0588-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0589: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0589-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0589-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0589-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0590: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0590-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0590-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0590-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0591: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0591-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0591-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0591-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0592: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0592-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0592-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0592-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0593: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0593-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0593-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0593-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0594: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0594-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0594-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0594-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0595: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0595-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0595-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0595-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0596: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0596-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0596-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0596-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0597: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0597-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0597-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0597-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0598: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0598-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0598-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0598-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0599: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0599-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0599-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0599-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0600: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0600-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0600-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0600-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0601: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0601-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0601-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0601-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0602: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0602-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0602-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0602-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0603: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0603-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0603-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0603-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0604: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0604-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0604-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0604-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0605: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0605-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0605-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0605-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0606: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0606-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0606-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0606-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0607: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0607-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0607-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0607-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0608: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0608-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0608-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0608-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0609: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0609-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0609-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0609-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0610: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0610-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0610-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0610-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0611: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0611-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0611-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0611-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0612: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0612-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0612-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0612-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0613: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0613-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0613-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0613-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0614: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0614-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0614-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0614-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0615: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0615-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0615-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0615-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0616: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0616-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0616-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0616-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0617: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0617-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0617-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0617-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0618: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0618-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0618-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0618-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0619: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0619-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0619-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0619-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0620: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0620-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0620-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0620-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0621: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0621-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0621-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0621-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0622: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0622-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0622-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0622-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0623: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0623-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0623-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0623-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0624: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0624-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0624-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0624-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0625: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0625-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0625-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0625-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0626: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0626-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0626-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0626-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0627: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0627-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0627-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0627-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0628: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0628-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0628-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0628-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0629: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0629-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0629-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0629-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0630: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0630-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0630-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0630-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0631: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0631-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0631-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0631-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0632: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0632-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0632-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0632-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0633: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0633-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0633-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0633-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0634: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0634-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0634-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0634-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0635: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0635-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0635-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0635-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0636: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0636-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0636-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0636-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0637: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0637-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0637-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0637-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0638: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0638-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0638-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0638-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0639: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0639-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0639-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0639-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0640: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0640-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0640-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0640-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0641: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0641-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0641-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0641-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0642: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0642-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0642-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0642-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0643: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0643-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0643-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0643-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0644: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0644-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0644-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0644-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0645: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0645-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0645-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0645-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0646: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0646-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0646-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0646-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0647: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0647-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0647-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0647-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0648: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0648-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0648-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0648-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0649: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0649-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0649-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0649-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0650: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0650-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0650-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0650-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0651: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0651-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0651-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0651-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0652: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0652-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0652-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0652-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0653: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0653-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0653-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0653-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0654: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0654-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0654-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0654-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0655: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0655-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0655-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0655-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0656: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0656-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0656-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0656-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0657: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0657-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0657-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0657-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0658: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0658-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0658-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0658-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0659: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0659-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0659-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0659-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0660: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0660-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0660-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0660-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0661: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0661-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0661-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0661-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0662: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0662-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0662-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0662-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0663: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0663-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0663-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0663-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0664: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0664-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0664-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0664-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0665: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0665-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0665-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0665-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0666: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0666-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0666-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0666-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0667: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0667-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0667-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0667-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0668: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0668-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0668-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0668-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0669: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0669-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0669-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0669-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0670: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0670-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0670-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0670-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0671: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0671-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0671-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0671-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0672: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0672-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0672-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0672-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0673: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0673-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0673-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0673-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0674: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0674-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0674-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0674-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0675: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0675-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0675-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0675-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0676: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0676-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0676-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0676-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0677: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0677-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0677-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0677-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0678: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0678-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0678-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0678-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0679: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0679-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0679-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0679-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0680: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0680-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0680-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0680-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0681: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0681-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0681-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0681-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0682: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0682-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0682-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0682-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0683: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0683-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0683-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0683-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0684: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0684-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0684-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0684-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0685: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0685-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0685-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0685-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0686: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0686-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0686-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0686-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0687: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0687-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0687-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0687-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0688: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0688-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0688-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0688-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0689: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0689-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0689-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0689-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0690: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0690-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0690-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0690-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0691: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0691-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0691-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0691-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0692: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0692-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0692-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0692-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0693: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0693-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0693-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0693-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0694: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0694-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0694-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0694-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0695: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0695-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0695-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0695-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0696: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0696-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0696-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0696-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0697: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0697-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0697-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0697-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0698: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0698-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0698-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0698-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0699: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0699-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0699-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0699-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0700: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0700-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0700-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0700-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0701: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0701-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0701-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0701-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0702: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0702-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0702-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0702-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0703: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0703-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0703-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0703-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0704: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0704-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0704-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0704-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0705: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0705-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0705-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0705-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0706: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0706-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0706-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0706-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0707: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0707-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0707-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0707-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0708: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0708-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0708-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0708-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0709: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0709-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0709-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0709-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0710: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0710-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0710-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0710-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0711: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0711-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0711-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0711-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0712: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0712-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0712-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0712-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0713: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0713-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0713-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0713-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0714: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0714-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0714-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0714-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0715: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0715-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0715-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0715-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0716: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0716-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0716-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0716-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0717: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0717-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0717-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0717-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0718: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0718-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0718-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0718-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0719: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0719-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0719-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0719-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0720: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0720-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0720-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0720-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0721: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0721-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0721-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0721-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0722: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0722-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0722-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0722-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0723: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0723-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0723-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0723-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0724: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0724-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0724-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0724-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0725: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0725-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0725-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0725-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0726: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0726-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0726-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0726-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0727: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0727-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0727-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0727-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0728: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0728-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0728-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0728-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0729: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0729-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0729-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0729-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0730: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0730-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0730-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0730-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0731: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0731-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0731-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0731-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0732: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0732-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0732-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0732-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0733: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0733-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0733-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0733-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0734: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0734-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0734-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0734-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0735: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0735-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0735-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0735-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0736: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0736-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0736-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0736-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0737: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0737-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0737-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0737-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0738: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0738-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0738-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0738-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0739: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0739-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0739-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0739-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0740: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0740-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0740-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0740-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0741: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0741-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0741-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0741-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0742: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0742-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0742-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0742-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0743: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0743-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0743-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0743-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0744: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0744-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0744-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0744-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0745: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0745-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0745-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0745-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0746: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0746-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0746-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0746-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0747: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0747-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0747-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0747-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0748: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0748-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0748-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0748-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0749: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0749-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0749-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0749-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0750: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0750-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0750-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0750-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0751: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0751-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0751-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0751-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0752: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0752-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0752-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0752-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0753: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0753-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0753-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0753-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0754: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0754-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0754-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0754-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0755: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0755-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0755-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0755-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0756: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0756-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0756-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0756-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0757: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0757-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0757-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0757-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0758: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0758-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0758-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0758-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0759: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0759-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0759-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0759-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0760: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0760-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0760-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0760-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0761: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0761-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0761-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0761-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0762: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0762-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0762-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0762-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0763: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0763-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0763-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0763-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0764: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0764-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0764-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0764-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0765: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0765-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0765-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0765-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0766: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0766-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0766-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0766-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0767: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0767-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0767-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0767-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0768: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0768-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0768-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0768-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0769: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0769-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0769-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0769-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0770: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0770-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0770-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0770-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0771: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0771-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0771-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0771-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0772: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0772-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0772-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0772-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0773: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0773-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0773-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0773-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0774: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0774-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0774-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0774-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0775: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0775-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0775-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0775-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0776: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0776-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0776-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0776-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0777: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0777-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0777-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0777-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0778: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0778-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0778-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0778-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0779: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0779-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0779-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0779-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0780: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0780-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0780-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0780-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0781: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0781-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0781-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0781-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0782: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0782-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0782-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0782-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0783: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0783-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0783-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0783-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0784: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0784-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0784-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0784-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0785: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0785-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0785-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0785-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0786: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0786-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0786-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0786-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0787: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0787-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0787-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0787-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0788: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0788-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0788-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0788-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0789: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0789-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0789-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0789-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0790: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0790-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0790-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0790-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0791: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0791-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0791-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0791-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0792: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0792-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0792-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0792-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0793: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0793-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0793-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0793-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0794: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0794-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0794-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0794-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0795: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0795-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0795-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0795-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0796: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0796-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0796-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0796-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0797: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0797-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0797-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0797-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0798: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0798-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0798-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0798-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0799: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0799-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0799-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0799-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0800: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0800-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0800-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0800-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0801: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0801-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0801-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0801-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0802: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0802-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0802-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0802-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0803: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0803-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0803-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0803-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0804: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0804-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0804-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0804-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0805: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0805-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0805-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0805-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0806: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0806-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0806-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0806-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0807: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0807-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0807-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0807-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0808: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
-/* TEST-0808-DATA: Use existing demo records or test records only; never replace the shared patient/card number with a department-specific number. */
-/* TEST-0808-SECURITY: Attempt an unauthorized department action and confirm it is blocked. */
-/* TEST-0808-AUDIT: Confirm sensitive actions are traceable to the responsible user/role. */
-/* TEST-0809: Verify Bazza PHC workflow integrity; check authorization, persistence, search, status transitions, printing and audit logging where applicable. */
