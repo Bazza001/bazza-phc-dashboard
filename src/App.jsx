@@ -513,7 +513,6 @@ function App() {
 
     if (
       !staffForm.name.trim() ||
-      !staffForm.username.trim() ||
       !staffForm.password.trim()
     ) {
       showMessage("Cika dukkan muhimman bayanai.");
@@ -923,14 +922,6 @@ function App() {
               patients={patients}
               setPatients={setPatients}
               showMessage={showMessage}
-              currentUser={currentUser}
-              staff={staff}
-              openAddStaff={openAddStaff}
-              openEditStaff={openEditStaff}
-              deleteStaff={deleteStaff}
-              search={search}
-              setSearch={setSearch}
-              logAudit={logAudit}
             />
           )}
 
@@ -1558,7 +1549,7 @@ function DashboardPage({ currentUser, patients, staff, attendance = [], setAtten
   );
 }
 
-function ICTPage({ patients, setPatients, showMessage, currentUser, staff = [], openAddStaff, openEditStaff, deleteStaff, search, setSearch }) {
+function ICTPage({ patients, setPatients, showMessage }) {
   const [form, setForm] = useState({
     surname: "",
     otherNames: "",
@@ -1730,49 +1721,6 @@ function ICTPage({ patients, setPatients, showMessage, currentUser, staff = [], 
           </div>
         </form>
       </div>
-
-      {(currentUser?.role === "ICT Staff" || currentUser?.role === "Super Admin") && (
-        <div className="panel recent-panel">
-          <div className="panel-header">
-            <div>
-              <h2>Staff Management</h2>
-              <p>ICT Centre: ƙara ma'aikata, username, password, primary department da ƙarin departments.</p>
-            </div>
-            <button className="button primary" onClick={openAddStaff}>+ Add Staff</button>
-          </div>
-          <div className="toolbar">
-            <input
-              className="search-input"
-              value={search || ""}
-              onChange={(e) => setSearch?.(e.target.value)}
-              placeholder="Search staff, staff ID, username ko department..."
-            />
-          </div>
-          <div className="table-scroll">
-            <table>
-              <thead><tr><th>Staff ID</th><th>Name</th><th>Username</th><th>Primary Department</th><th>Departments</th><th>Role</th><th>Status</th><th>Action</th></tr></thead>
-              <tbody>
-                {(staff || []).filter((person) => {
-                  const q = String(search || "").toLowerCase().trim();
-                  if (!q) return true;
-                  return [person.name, person.staffId, person.username, person.department, person.role, ...(person.departments || [])].some(v => String(v || "").toLowerCase().includes(q));
-                }).map((person) => (
-                  <tr key={person.id}>
-                    <td><strong>{person.staffId}</strong></td>
-                    <td>{person.name}</td>
-                    <td>{person.username}</td>
-                    <td>{person.department}</td>
-                    <td>{(person.departments || [person.department]).join(", ")}</td>
-                    <td>{person.role}</td>
-                    <td>{person.status}</td>
-                    <td><button className="small-button" onClick={() => openEditStaff(person)}>Edit</button>{currentUser?.role === "Super Admin" && <button className="small-button danger" onClick={() => deleteStaff(person.id)}>Delete</button>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       <div className="panel recent-panel">
         <div className="panel-header">
@@ -2946,11 +2894,10 @@ function RosterPage({
   const shifts = ["Morning", "Evening", "Night"];
   const categories = ["Staff", "Volunteer", "Student"];
   const isPrivilegedViewer = ["Super Admin", "ICT Staff", "In-Charge"].includes(currentUser?.role);
-  const lockedDepartment = currentUser?.department || "";
   const canManageAttendanceHere = canManageAttendance(currentUser);
   const canManageSetup = canManageStaffDirectory(currentUser);
   const [view, setView] = useState(isPrivilegedViewer ? "general" : "department");
-  const [department, setDepartment] = useState(isPrivilegedViewer ? "All Departments" : lockedDepartment);
+  const [department, setDepartment] = useState("All Departments");
   const [selectedStaffId, setSelectedStaffId] = useState("");
   const [setupOpen, setSetupOpen] = useState(false);
   const [setup, setSetup] = useState({ staffId: "", category: "Staff", departments: [], maritalStatus: "Single", allowedShifts: shifts, isHOD: false });
@@ -2976,7 +2923,7 @@ function RosterPage({
   const userDepartments = Array.from(new Set((currentUser?.departments || [currentUser?.department]).filter(Boolean)));
   const allDepartments = ["All Departments", ...Array.from(new Set(staff.flatMap((p) => p.departments || [p.department]).filter(Boolean)))];
   const allowedDepartmentChoices = isPrivilegedViewer ? allDepartments : userDepartments;
-  const activeDepartment = isPrivilegedViewer ? department : lockedDepartment;
+  const activeDepartment = isPrivilegedViewer ? department : (department === "All Departments" || !userDepartments.includes(department) ? (userDepartments[0] || "") : department);
   const visibleStaff = activeDepartment === "All Departments" ? staff : staff.filter((p) => (p.departments || [p.department]).includes(activeDepartment));
   const visibleEntries = rosterEntries.filter((entry) => activeDepartment === "All Departments" || (entry.departments || []).includes(activeDepartment));
   const todayAttendance = attendance.filter((a) => a.date === todayKey);
@@ -3071,12 +3018,13 @@ function RosterPage({
         <button className={`button ${view === "department" ? "primary" : "secondary"}`} onClick={() => setView("department")}>Department Roster</button>
         {canManageAttendanceHere && <button className={`button ${view === "attendance" ? "primary" : "secondary"}`} onClick={() => setView("attendance")}>Sign In / Sign Out</button>}
         {canManageSetup && <button className={`button ${view === "setup" ? "primary" : "secondary"}`} onClick={() => setView("setup")}>Staff Roster Setup</button>}
+        {canManageSetup && <button className="button primary" onClick={openAddStaff}>+ Add Staff</button>}
       </div>
 
       {(view === "general" || view === "department") && (
         <div className="panel">
           <div className="panel-header"><div><h2>{view === "general" ? "General Staff Roster" : `${activeDepartment} Roster`}</h2><p>Staff/Volunteers = Monthly; Students = Weekly.</p></div><div className="button-row">{canManageSetup && <button className="button primary" onClick={generateRoster}>Generate Roster</button>}<button className="button secondary" onClick={printRoster}>Print Roster</button></div></div>
-          <div className="field" style={{ maxWidth: 420 }}><label>Department</label>{isPrivilegedViewer ? <select value={activeDepartment} onChange={(e) => setDepartment(e.target.value)}>{allowedDepartmentChoices.filter(Boolean).map((d) => <option key={d}>{d}</option>)}</select> : <input value={activeDepartment} readOnly />}</div>
+          <div className="field" style={{ maxWidth: 420 }}><label>Department</label><select value={activeDepartment} onChange={(e) => setDepartment(e.target.value)} disabled={!isPrivilegedViewer && allowedDepartmentChoices.length <= 1}>{allowedDepartmentChoices.filter(Boolean).map((d) => <option key={d}>{d}</option>)}</select></div>
           <div className="table-scroll"><table><thead><tr><th>Staff</th><th>Category</th><th>Department(s)</th><th>Period</th><th>Morning</th><th>Evening</th><th>Night</th><th>Sign In</th><th>Sign Out</th><th>Rules</th></tr></thead><tbody>
             {(visibleEntries.length ? visibleEntries.slice(0, 200) : visibleStaff.map((person, index) => ({ id: `preview-${person.id}`, staffId: person.staffId, name: person.name, category: person.category || "Staff", departments: person.departments || [person.department], period: person.category === "Student" ? "Weekly" : "Monthly", shifts: Object.fromEntries(shifts.map((sh) => [sh, eligibleShifts(person).includes(sh) ? cycleDuty(sh, index) : "—"])), rules: "Morning 6/1 • Evening 5/2 • Night 4/3" }))).map((entry) => { const record = [...attendance].reverse().find((a) => a.staffId === entry.staffId && a.date === entry.date); return <tr key={entry.id}><td>{entry.name}</td><td>{entry.category}</td><td>{(entry.departments || []).join(", ")}</td><td>{entry.period}</td>{shifts.map((sh) => <td key={sh}><span className="shift-badge">{entry.shifts?.[sh] || "—"}</span></td>)}<td>{record?.signIn || "—"}</td><td>{record?.signOut || "—"}</td><td>{entry.rules}</td></tr>;})}
           </tbody></table></div>
@@ -4320,69 +4268,183 @@ function SMSNotificationsPage({ patients = [], messages = [], setMessages, curre
   return <div><PageHeader title="SMS / Notifications" subtitle="Patient messages using phone number saved by ICT" icon="✉" /><div className="card"><h2>Send Patient SMS</h2><div className="form-grid"><FormField label="Patient"><select value={card} onChange={e=>setCard(e.target.value)}><option value="">Select patient</option>{patients.map(p=><option key={p.id} value={p.card}>{p.name} — {p.card} — {p.phone || p.phoneNumber || "No phone"}</option>)}</select></FormField><FormField label="Template"><select value={template} onChange={e=>setTemplate(e.target.value)}>{templates.map(t=><option key={t}>{t}</option>)}</select></FormField><FormField label="Additional Message"><textarea rows="4" value={extra} onChange={e=>setExtra(e.target.value)} placeholder="Additional message..." /></FormField></div><button className="button primary" onClick={send}>Prepare SMS</button></div><div className="card"><h2>SMS History</h2><div className="table-scroll"><table><thead><tr><th>Patient</th><th>Phone</th><th>Template</th><th>Message</th><th>Date</th><th>Sender</th></tr></thead><tbody>{messages.length ? messages.map(m=><tr key={m.id}><td>{m.patientName}<br/>{m.card}</td><td>{m.phone}</td><td>{m.template}</td><td>{m.message || "—"}</td><td>{m.date}</td><td>{m.sender}</td></tr>) : <tr><td colSpan="6">No SMS history.</td></tr>}</tbody></table></div></div></div>;
 }
 
-function OutpatientPage({ patients = [], visits = [], setVisits, transactions = [], setTransactions, currentUser, showMessage, logAudit }) {
-  const department = currentUser?.department || "";
-  const servicesByDepartment = {
-    "Records Unit": ["Patient Card", "Patient File", "Card + File"],
-    "Nursing Unit": ["Vital Signs", "Nursing Assessment", "Injection / Nursing Procedure", "Other"],
-    "Consultant Room": ["Consultation", "Review Visit", "Follow-up", "Other"],
+function OutpatientPage({
+  patients = [],
+  visits = [],
+  setVisits,
+  transactions = [],
+  setTransactions,
+  currentUser,
+  showMessage,
+  logAudit,
+}) {
+  const department = currentUser?.department || currentUser?.departments?.[0] || "";
+
+  const serviceOptions = {
+    "ICT Centre": ["Patient Registration", "Card Number Service", "Patient Profile Update", "Other"],
+    "Records Unit": ["Card", "File", "Card + File", "Patient Record Update", "Other"],
+    "Nursing Unit": ["Nursing Assessment", "Vital Signs", "Wound Care", "Patient Education", "Other"],
+    "Consultant Room": ["General Consultation", "Follow-up Consultation", "Other"],
     "Laboratory Unit": ["Malaria Test", "Full Blood Count (FBC)", "Urinalysis", "Blood Group", "Widal Test", "Pregnancy Test", "Other"],
-    "Pharmacy Unit": ["Prescription / Dispensing", "Medicine Refill", "Other"],
+    "Pharmacy Unit": ["Prescription Dispensing", "Over-the-Counter Medicine", "Other"],
     "Ultrasound Room": ["Abdominal Ultrasound", "Pelvic Ultrasound", "Obstetric Ultrasound", "Other"],
-    "Male Ward": ["Ward Service", "Bed Service", "Other"],
-    "Female Ward": ["Ward Service", "Bed Service", "Other"],
-    "Maternity Ward": ["Antenatal", "Postnatal", "Maternity Service", "Other"],
-    "Child Ward": ["Child Ward Service", "Bed Service", "Other"],
-    "Labour Room": ["Labour Monitoring", "Delivery Service", "Other"],
+    "Male Ward": ["Ward Review", "Nursing Service", "Other"],
+    "Female Ward": ["Ward Review", "Nursing Service", "Other"],
+    "Maternity Ward": ["Antenatal Review", "Postnatal Review", "Maternity Service", "Other"],
+    "Child Ward": ["Child Ward Review", "Nursing Service", "Other"],
+    "Labour Room": ["Labour Assessment", "Labour Monitoring", "Delivery Service", "Other"],
     "Immunization Unit": ["BCG", "OPV", "Pentavalent", "Measles", "Yellow Fever", "Other"],
     "Family Planning Unit": ["Counselling", "Contraceptive Service", "Implant", "IUCD", "Injectable", "Other"],
     "Adolescent Unit": ["Adolescent Counselling", "Health Education", "Follow-up", "Mental Wellbeing Check", "Other"],
   };
-  const serviceOptions = servicesByDepartment[department] || ["Department Service", "Other"];
+
+  const services = serviceOptions[department] || ["General Service", "Other"];
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [service, setService] = useState("");
+  const [service, setService] = useState(services[0] || "");
+  const [otherService, setOtherService] = useState("");
   const [amount, setAmount] = useState(0);
   const [paymentStatus, setPaymentStatus] = useState("Pending");
 
+  useEffect(() => {
+    setService(services[0] || "");
+    setOtherService("");
+  }, [department]);
+
+  const ownVisits = visits.filter((v) => v.department === department);
+  const selectedService = service === "Other" ? otherService.trim() : service;
+
   const save = () => {
-    if (!department) return showMessage?.("Ba a gane department ɗin mai amfani ba.");
-    if (!name.trim() || !service) return showMessage?.("Cika sunan patient sannan ka zaɓi service.");
+    if (!department) return showMessage?.("An kasa department na staff ba.");
+    if (!name.trim()) return showMessage?.("Cika sunan patient.");
+    if (!selectedService) return showMessage?.("Zaɓi service ɗin wannan department.");
+
     const visitNo = `OP-${Date.now()}`;
     const numericAmount = Number(amount || 0);
-    const visit = { id: Date.now(), visitNo, patientName: name.trim(), phone, department, service, amount: numericAmount, paymentStatus, paymentMethod: paymentStatus === "FREE" ? "FREE" : "Cash", date: new Date().toLocaleString(), createdBy: currentUser?.name || "System" };
-    setVisits(prev => [visit, ...prev]);
-    if (numericAmount > 0 || paymentStatus === "FREE") {
-      const txId = `TRX-${Date.now()}`;
-      setTransactions(prev => [{ id: txId, transactionNo: txId, department, patientName: name.trim(), card: "OUTPATIENT", service, amount: numericAmount, paymentMethod: paymentStatus === "FREE" ? "FREE" : "Cash", paymentStatus, cashier: currentUser?.name || department, date: new Date().toLocaleString() }, ...prev]);
+    const visit = {
+      id: Date.now(),
+      visitNo,
+      patientName: name.trim(),
+      phone: phone.trim(),
+      service: selectedService,
+      department,
+      amount: numericAmount,
+      paymentStatus,
+      paymentMethod: paymentStatus === "FREE" ? "FREE" : "Cash",
+      date: new Date().toLocaleString(),
+      createdBy: currentUser?.name || "System",
+    };
+
+    setVisits((prev) => [visit, ...prev]);
+
+    if (numericAmount > 0) {
+      setTransactions((prev) => [
+        {
+          id: `TRX-${Date.now()}`,
+          transactionNo: `TRX-${Date.now()}`,
+          department,
+          patientName: name.trim(),
+          card: "OUTPATIENT",
+          service: selectedService,
+          amount: numericAmount,
+          paymentMethod: paymentStatus === "FREE" ? "FREE" : "Cash",
+          paymentStatus,
+          cashier: currentUser?.name || "Outpatient",
+          date: new Date().toLocaleString(),
+        },
+        ...prev,
+      ]);
     }
-    logAudit?.("Outpatient Visit", department, `${visitNo} — ${service}`);
+
+    logAudit?.("Outpatient Visit", "Outpatient Services", `${visitNo} — ${selectedService} — ${department}`);
     showMessage?.(`Outpatient visit ${visitNo} an ajiye a ${department}.`);
-    setName(""); setPhone(""); setService(""); setAmount(0); setPaymentStatus("Pending");
+
+    setName("");
+    setPhone("");
+    setService(services[0] || "");
+    setOtherService("");
+    setAmount(0);
+    setPaymentStatus("Pending");
   };
 
-  return <div>
-    <PageHeader title="Outpatient Services" subtitle={`Outpatient services na ${department}`} icon="O" />
-    <div className="panel">
-      <div className="panel-header"><div><h2>New Outpatient Visit</h2><p>Department yana fitowa ta atomatik daga login ɗinka. Babu Department selector.</p></div></div>
-      <div className="form-grid">
-        <FormField label="Department"><input value={department} readOnly /></FormField>
-        <FormField label="Patient Name"><input value={name} onChange={e=>setName(e.target.value)} placeholder="Patient name" /></FormField>
-        <FormField label="Phone"><input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Phone number" /></FormField>
-        <FormField label="Service"><select value={service} onChange={e=>setService(e.target.value)}><option value="">Select service</option>{serviceOptions.map(item=><option key={item}>{item}</option>)}</select></FormField>
-        <FormField label="Amount"><input type="number" min="0" value={amount} onChange={e=>setAmount(e.target.value)} /></FormField>
-        <FormField label="Payment Status"><select value={paymentStatus} onChange={e=>setPaymentStatus(e.target.value)}><option>Pending</option><option>Paid</option><option>FREE</option></select></FormField>
+  return (
+    <div>
+      <PageHeader
+        title={`Outpatient Services — ${department || "Department"}`}
+        subtitle="Wannan department yana ganin kuma yana yin outpatient na kansa kawai. Ba a zaɓar department daga nan."
+        icon="O"
+      />
+
+      <div className="card">
+        <h2>New Outpatient Visit</h2>
+        <p className="muted">
+          Department: <strong>{department || "—"}</strong>
+        </p>
+
+        <div className="form-grid">
+          <FormField label="Patient Name">
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Patient name" />
+          </FormField>
+
+          <FormField label="Phone">
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone number" />
+          </FormField>
+
+          <FormField label="Service / Item">
+            <select value={service} onChange={(e) => setService(e.target.value)}>
+              {services.map((item) => <option key={item}>{item}</option>)}
+            </select>
+          </FormField>
+
+          {service === "Other" && (
+            <FormField label="Other Service">
+              <input value={otherService} onChange={(e) => setOtherService(e.target.value)} placeholder="Rubuta service na wannan department" />
+            </FormField>
+          )}
+
+          <FormField label="Amount">
+            <input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </FormField>
+
+          <FormField label="Payment Status">
+            <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)}>
+              <option>Pending</option>
+              <option>Paid</option>
+              <option>FREE</option>
+            </select>
+          </FormField>
+        </div>
+
+        <button className="button primary" onClick={save}>Create Outpatient Visit</button>
       </div>
-      <div className="modal-actions left"><button className="button primary" onClick={save}>Create Outpatient Visit</button></div>
+
+      <div className="card">
+        <h2>Outpatient History — {department || "Department"}</h2>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr><th>Visit #</th><th>Patient</th><th>Department</th><th>Service</th><th>Amount</th><th>Status</th><th>Date</th></tr>
+            </thead>
+            <tbody>
+              {ownVisits.length ? ownVisits.map((v) => (
+                <tr key={v.id}>
+                  <td>{v.visitNo}</td>
+                  <td>{v.patientName}</td>
+                  <td>{v.department}</td>
+                  <td>{v.service}</td>
+                  <td>₦{Number(v.amount || 0).toLocaleString()}</td>
+                  <td>{v.paymentStatus}</td>
+                  <td>{v.date}</td>
+                </tr>
+              )) : (
+                <tr><td colSpan="7">No outpatient visit na wannan department.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
-    <div className="panel">
-      <div className="panel-header"><div><h2>Outpatient History</h2><p>Wannan department kawai ne ake nuna wa.</p></div></div>
-      <div className="table-scroll"><table><thead><tr><th>Visit #</th><th>Patient</th><th>Department</th><th>Service</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>
-        {visits.filter(v => v.department === department).map(v=><tr key={v.id}><td>{v.visitNo}</td><td>{v.patientName}</td><td>{v.department}</td><td>{v.service}</td><td>₦{Number(v.amount||0).toLocaleString()}</td><td>{v.paymentStatus}</td><td>{v.date}</td></tr>)}
-        {!visits.some(v => v.department === department) && <tr><td colSpan="7">No outpatient visit for this department.</td></tr>}
-      </tbody></table></div>
-    </div>
-  </div>;
+  );
 }
 
 function ReceptionPage({ queue = [], setQueue, currentUser, showMessage }) {
