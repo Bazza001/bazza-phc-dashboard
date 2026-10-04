@@ -27,8 +27,7 @@ const PAGE_ACCESS = {
   "In-Charge": ["Super Admin", "In-Charge"],
   "Staff & Permissions": ["Super Admin"],
   "General Cashier": ["Super Admin", "General Cashier"],
-  "Roster & Attendance": ["ALL"],
-  "My Staff Dashboard": ["ALL"],
+  "Roster & Attendance": ["Super Admin", "In-Charge"],
   "Reports": ["Super Admin", "In-Charge", "General Cashier", "Records Staff", "Records Cashier", "Laboratory Staff", "Laboratory Cashier", "Pharmacy Staff", "Pharmacy Cashier", "Ultrasound Staff", "Ultrasound Cashier", "Nurse", "Consultant", "Ward Staff", "Immunization Staff", "Family Planning Staff", "Adolescent Staff"],
   "Alerts": ["Super Admin", "In-Charge", "Consultant", "Nurse", "Laboratory Staff", "Pharmacy Staff", "Ultrasound Staff"],
   "SMS / Notifications": ["Super Admin", "ICT Staff", "Records Staff", "Nurse", "Consultant", "Laboratory Staff", "Pharmacy Staff", "Ultrasound Staff", "Immunization Staff", "Family Planning Staff", "Adolescent Staff"],
@@ -43,8 +42,7 @@ const PAGE_ACCESS = {
 function canAccessPage(user, page) {
   if (!user) return false;
   if (user.role === "Super Admin") return true;
-  if (page === "My Staff Dashboard" || page === "Roster & Attendance") return true;
-  if (user.role === "In-Charge") return page === "Dashboard" || page === "In-Charge" || page === "Reports" || page === "Alerts" || page === "Audit Logs" || page === "ICT Stock / Inventory";
+  if (user.role === "In-Charge") return page === "Dashboard" || page === "In-Charge" || page === "Roster & Attendance" || page === "Reports" || page === "Alerts" || page === "Audit Logs" || page === "ICT Stock / Inventory";
   const allowed = PAGE_ACCESS[page];
   return !!allowed && (allowed.includes("ALL") || allowed.includes(user.role));
 }
@@ -78,8 +76,6 @@ const departments = [
   "Family Planning Unit",
   "Adolescent Unit",
 ];
-
-const rosterOnlyDepartments = ["Injection", "Accident & Emergency"];
 
 const permissions = [
   "View",
@@ -116,23 +112,22 @@ const roles = [
 ];
 
 const initialStaff = [
-  { id: 1, staffId: "HA-PHC/2026/001", name: "Usman", username: "Usman", password: "1234", department: "ICT Centre", departments: ["ICT Centre"], role: "Super Admin", status: "Active", category: "Staff", isHOD: true },
-  { id: 2, staffId: "HA-PHC/2026/002", name: "Altine", username: "Altine", password: "1234", department: "In-Charge", departments: ["In-Charge"], role: "In-Charge", status: "Active", category: "Staff", isHOD: true },
-  { id: 3, staffId: "HA-PHC/2026/003", name: "Bazza", username: "Bazza", password: "1234", department: "ICT Centre", departments: ["ICT Centre"], role: "ICT Staff", status: "Active", category: "Staff", isHOD: true },
-  { id: 4, staffId: "HA-PHC/2026/004", name: "Yusuf", username: "Yusuf", password: "1234", department: "Records Unit", departments: ["Records Unit"], role: "Records Staff", status: "Active", category: "Staff", isHOD: true },
-  { id: 5, staffId: "HA-PHC/2026/005", name: "Abdul", username: "Abdul", password: "1234", department: "Nursing Unit", departments: ["Nursing Unit"], role: "Nurse", status: "Active", category: "Staff", isHOD: true },
-  { id: 6, staffId: "HA-PHC/2026/006", name: "Kasimu", username: "Kasimu", password: "1234", department: "Consultant Room", departments: ["Consultant Room"], role: "Consultant", status: "Active", category: "Staff", isHOD: true },
-  { id: 7, staffId: "HA-PHC/2026/007", name: "Kabiru", username: "Kabiru", password: "1234", department: "Laboratory Unit", departments: ["Laboratory Unit"], role: "Laboratory Staff", status: "Active", category: "Staff", isHOD: true },
-  { id: 8, staffId: "HA-PHC/2026/008", name: "Hadiza", username: "Hadiza", password: "1234", department: "Pharmacy Unit", departments: ["Pharmacy Unit"], role: "Pharmacy Staff", status: "Active", category: "Staff", isHOD: true },
-  { id: 9, staffId: "HA-PHC/2026/009", name: "Abba", username: "Abba", password: "1234", department: "Ultrasound Room", departments: ["Ultrasound Room"], role: "Ultrasound Staff", status: "Active", category: "Staff", isHOD: true },
-  { id: 10, staffId: "HA-PHC/2026/010", name: "Dadi", username: "Dadi", password: "1234", department: "Male Ward", departments: ["Male Ward"], role: "Ward Staff", status: "Active", category: "Staff", isHOD: true },
-  { id: 11, staffId: "HA-PHC/2026/011", name: "Maryam", username: "Maryam", password: "1234", department: "Female Ward", departments: ["Female Ward"], role: "Ward Staff", status: "Active", category: "Staff", isHOD: true },
-  { id: 12, staffId: "HA-PHC/2026/012", name: "Zainab", username: "Zainab", password: "1234", department: "Maternity Ward", departments: ["Maternity Ward"], role: "Ward Staff", status: "Active", category: "Staff", isHOD: true },
-  { id: 13, staffId: "HA-PHC/2026/013", name: "Hafsa", username: "Hafsa", password: "1234", department: "Child Ward", departments: ["Child Ward"], role: "Ward Staff", status: "Active", category: "Staff", isHOD: true },
-  { id: 14, staffId: "HA-PHC/2026/014", name: "Shafa", username: "Shafa", password: "1234", department: "Labour Room", departments: ["Labour Room", "Family Planning Unit"], role: "Ward Staff", status: "Active", category: "Staff", isHOD: true },
-  { id: 15, staffId: "HA-PHC/2026/015", name: "Jidda", username: "Jidda", password: "1234", department: "Immunization Unit", departments: ["Immunization Unit"], role: "Immunization Staff", status: "Active", category: "Staff", isHOD: true },
-  { id: 16, staffId: "HA-PHC/2026/016", name: "Shafa", username: "Shafa-FP", password: "1234", department: "Family Planning Unit", departments: ["Family Planning Unit"], role: "Family Planning Staff", status: "Active", category: "Staff", isHOD: true },
-  { id: 17, staffId: "HA-PHC/2026/017", name: "Hajiya", username: "Hajiya", password: "1234", department: "Adolescent Unit", departments: ["Adolescent Unit"], role: "Adolescent Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 1, staffId: "HA-PHC/2026/001", name: "Usman", username: "usman", password: "1234", department: "Super Admin", departments: ["Super Admin"], role: "Super Admin", status: "Active", category: "Staff", isHOD: true },
+  { id: 2, staffId: "HA-PHC/2026/002", name: "Altine", username: "altine", password: "1234", department: "In-Charge", departments: ["In-Charge"], role: "In-Charge", status: "Active", category: "Staff", isHOD: true },
+  { id: 3, staffId: "HA-PHC/2026/003", name: "Bazza", username: "bazza", password: "1234", department: "ICT Centre", departments: ["ICT Centre"], role: "ICT Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 4, staffId: "HA-PHC/2026/004", name: "Yusuf", username: "yusuf", password: "1234", department: "Records Unit", departments: ["Records Unit"], role: "Records Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 5, staffId: "HA-PHC/2026/005", name: "Abdul", username: "abdul", password: "1234", department: "Nursing Unit", departments: ["Nursing Unit"], role: "Nurse", status: "Active", category: "Staff", isHOD: true },
+  { id: 6, staffId: "HA-PHC/2026/006", name: "Kasimu", username: "kasimu", password: "1234", department: "Consultant Room", departments: ["Consultant Room"], role: "Consultant", status: "Active", category: "Staff", isHOD: true },
+  { id: 7, staffId: "HA-PHC/2026/007", name: "Kabiru", username: "kabiru", password: "1234", department: "Laboratory Unit", departments: ["Laboratory Unit"], role: "Laboratory Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 8, staffId: "HA-PHC/2026/008", name: "Hadiza", username: "hadiza", password: "1234", department: "Pharmacy Unit", departments: ["Pharmacy Unit"], role: "Pharmacy Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 9, staffId: "HA-PHC/2026/009", name: "Abba", username: "abba", password: "1234", department: "Ultrasound Room", departments: ["Ultrasound Room"], role: "Ultrasound Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 10, staffId: "HA-PHC/2026/010", name: "Dadi", username: "dadi", password: "1234", department: "Male Ward", departments: ["Male Ward"], role: "Ward Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 11, staffId: "HA-PHC/2026/011", name: "Maryam", username: "maryam", password: "1234", department: "Female Ward", departments: ["Female Ward"], role: "Ward Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 12, staffId: "HA-PHC/2026/012", name: "Zainab", username: "zainab", password: "1234", department: "Maternity Ward", departments: ["Maternity Ward"], role: "Ward Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 13, staffId: "HA-PHC/2026/013", name: "Hafsa", username: "hafsa", password: "1234", department: "Child Ward", departments: ["Child Ward"], role: "Ward Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 14, staffId: "HA-PHC/2026/014", name: "Shafa", username: "shafa", password: "1234", department: "Labour Room", departments: ["Labour Room", "Family Planning Unit"], role: "Ward Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 15, staffId: "HA-PHC/2026/015", name: "Jidda", username: "jidda", password: "1234", department: "Immunization Unit", departments: ["Immunization Unit"], role: "Immunization Staff", status: "Active", category: "Staff", isHOD: true },
+  { id: 16, staffId: "HA-PHC/2026/016", name: "Hajiya", username: "hajiya", password: "1234", department: "Adolescent Unit", departments: ["Adolescent Unit"], role: "Adolescent Staff", status: "Active", category: "Staff", isHOD: true },
 ];
 
 function usePersistentState(key, initialValue) {
@@ -190,28 +185,6 @@ const demoPatients = [
   },
 ];
 
-function canManageStaffDirectory(user) {
-  return !!user && (user.role === "Super Admin" || user.role === "ICT Staff");
-}
-
-function canManageAttendance(user) {
-  return !!user && (user.role === "Super Admin" || user.role === "ICT Staff");
-}
-
-function nextStaffNumber(staff, year = new Date().getFullYear()) {
-  const prefix = `HA-PHC/${year}/`;
-  const used = new Set(
-    staff
-      .map((person) => String(person.staffId || ""))
-      .filter((id) => id.startsWith(prefix))
-      .map((id) => Number(id.slice(prefix.length)))
-      .filter(Number.isFinite)
-  );
-  let n = 1;
-  while (used.has(n)) n += 1;
-  return `${prefix}${String(n).padStart(3, "0")}`;
-}
-
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [supabaseReady, setSupabaseReady] = useState(false);
@@ -225,6 +198,14 @@ function App() {
   const [page, setPage] = useState("Dashboard"); 
   const [recordsView, setRecordsView] = useState("dashboard");
   const [staff, setStaff] = usePersistentState("bazza_staff", initialStaff);
+  useEffect(() => {
+    setStaff((prev) => {
+      const list = Array.isArray(prev) ? prev : [];
+      const existing = new Set(list.map((x) => String(x.username || "").toLowerCase()));
+      const missing = initialStaff.filter((x) => !existing.has(String(x.username).toLowerCase()));
+      return missing.length ? [...list, ...missing] : list;
+    });
+  }, []);
   const [patients, setPatients] = usePersistentState("bazza_patients", demoPatients);
   useEffect(() => { setPatients(prev => prev.map(p => ({ ...p, age: p.age ?? "", address: p.address ?? "", phone: p.phone ?? p.phoneNumber ?? "", sex: p.sex ?? p.gender ?? "", spouseName: p.spouseName ?? p.spouse ?? "" }))); }, []);
   const [transactions, setTransactions] = usePersistentState("bazza_transactions", []);
@@ -287,76 +268,6 @@ function App() {
     phone: "08169640287",
   });
 
-  useEffect(() => {
-    setStaff((previous) => {
-      const year = new Date().getFullYear();
-      const required = [
-        ["Super Admin", "Usman", "Usman", "ICT Centre", "Super Admin"],
-        ["In-Charge", "Altine", "Altine", "In-Charge", "In-Charge"],
-        ["ICT Staff", "Bazza", "Bazza", "ICT Centre", "ICT Staff"],
-        ["Records Staff", "Yusuf", "Yusuf", "Records Unit", "Records Staff"],
-        ["Nurse", "Abdul", "Abdul", "Nursing Unit", "Nurse"],
-        ["Consultant", "Kasimu", "Kasimu", "Consultant Room", "Consultant"],
-        ["Laboratory Staff", "Kabiru", "Kabiru", "Laboratory Unit", "Laboratory Staff"],
-        ["Pharmacy Staff", "Hadiza", "Hadiza", "Pharmacy Unit", "Pharmacy Staff"],
-        ["Ultrasound Staff", "Abba", "Abba", "Ultrasound Room", "Ultrasound Staff"],
-        ["Male Ward", "Dadi", "Dadi", "Male Ward", "Ward Staff"],
-        ["Female Ward", "Maryam", "Maryam", "Female Ward", "Ward Staff"],
-        ["Maternity Ward", "Zainab", "Zainab", "Maternity Ward", "Ward Staff"],
-        ["Child Ward", "Hafsa", "Hafsa", "Child Ward", "Ward Staff"],
-        ["Labour Room", "Shafa", "Shafa", "Labour Room", "Ward Staff"],
-        ["Immunization Staff", "Jidda", "Jidda", "Immunization Unit", "Immunization Staff"],
-        ["Adolescent Staff", "Hajiya", "Hajiya", "Adolescent Unit", "Adolescent Staff"],
-      ];
-      let changed = false;
-      const result = [...previous];
-      required.forEach(([key, name, username, department, role]) => {
-        const index = result.findIndex((p) => p.role === key || p.department === department);
-        if (index >= 0) {
-          const old = result[index];
-          const updated = { ...old, name, username, department, departments: Array.isArray(old.departments) && old.departments.length ? old.departments : [department], role, category: old.category || "Staff", status: old.status || "Active", isHOD: true };
-          if (JSON.stringify(old) !== JSON.stringify(updated)) { result[index] = updated; changed = true; }
-        } else {
-          result.push({ id: Date.now() + result.length, staffId: nextStaffNumber(result, year), name, username, password: "1234", department, departments: [department], role, status: "Active", category: "Staff", maritalStatus: "Single", allowedShifts: ["Morning", "Evening", "Night"], isHOD: true });
-          changed = true;
-        }
-      });
-      const shafaIndex = result.findIndex((p) => p.username === "Shafa" || p.name === "Shafa" || p.department === "Labour Room");
-      if (shafaIndex >= 0) {
-        const shafa = result[shafaIndex];
-        const shafaDepartments = Array.from(new Set([...(shafa.departments || [shafa.department]), "Labour Room", "Family Planning Unit"]));
-        if (JSON.stringify(shafaDepartments) !== JSON.stringify(shafa.departments || [])) {
-          result[shafaIndex] = { ...shafa, name: "Shafa", username: "Shafa", department: "Labour Room", departments: shafaDepartments, role: "Ward Staff", isHOD: true };
-          changed = true;
-        }
-      }
-      return changed ? result : previous;
-    });
-  }, []);
-
-  useEffect(() => {
-    setStaff((previous) => {
-      let changed = false;
-      const year = new Date().getFullYear();
-      const used = new Set();
-      const next = previous.map((person, index) => {
-        const departmentsForPerson = Array.from(new Set((person.departments || [person.department]).filter(Boolean)));
-        let staffId = person.staffId;
-        if (!/^HA-PHC\/\d{4}\/\d{3,}$/.test(String(staffId || ""))) {
-          let n = index + 1;
-          while (used.has(n)) n += 1;
-          staffId = `HA-PHC/${year}/${String(n).padStart(3, "0")}`;
-        }
-        used.add(Number(String(staffId).split("/").pop()));
-        const username = person.username || person.name;
-        const updated = { ...person, staffId, username, department: departmentsForPerson[0] || person.department, departments: departmentsForPerson };
-        if (JSON.stringify(updated) !== JSON.stringify(person)) changed = true;
-        return updated;
-      });
-      return changed ? next : previous;
-    });
-  }, []);
-
   const staffWithRosterMeta = useMemo(() =>
     staff.map((person) => ({
       category: person.category || "Staff",
@@ -372,6 +283,8 @@ function App() {
     })),
   [staff]);
   const [search, setSearch] = useState("");
+  const [loginMode, setLoginMode] = useState("department");
+  const [loginDepartment, setLoginDepartment] = useState("ICT Centre");
   const [loginForm, setLoginForm] = useState({
     username: "",
     password: "",
@@ -447,27 +360,26 @@ function App() {
 
   const handleLogin = (e) => {
     e.preventDefault();
-
-    const user = staff.find(
-      (person) =>
-        person.username === loginForm.username &&
-        person.password === loginForm.password &&
-        person.status === "Active"
-    );
-
+    const username = loginForm.username.trim().toLowerCase();
+    const password = loginForm.password;
+    const user = staff.find((person) => {
+      const usernameMatch = String(person.username || "").toLowerCase() === username;
+      const passwordMatch = person.password === password;
+      const active = person.status === "Active";
+      if (!usernameMatch || !passwordMatch || !active) return false;
+      if (loginMode === "staff") return true;
+      const allowedDepartments = person.departments || [person.department].filter(Boolean);
+      return loginDepartment === person.department || allowedDepartments.includes(loginDepartment);
+    });
     if (!user) {
-      logAudit("Failed Login", "Security", `Username: ${loginForm.username}`);
-      showMessage("Username ko Password ba daidai ba.");
+      logAudit("Failed Login", "Security", `${loginMode === "department" ? `Department: ${loginDepartment} — ` : "Staff — "}Username: ${loginForm.username}`);
+      showMessage("Department/Username/Password ba daidai ba.");
       return;
     }
-
-    logAudit("Login", "Security", `Successful login: ${user.username}`, user);
+    logAudit("Login", "Security", `Successful ${loginMode} login: ${user.username}`, user);
     setCurrentUser(user);
     setPage("Dashboard");
-    setLoginForm({
-      username: "",
-      password: "",
-    });
+    setLoginForm({ username: "", password: "" });
   };
 
   const handleLogout = () => {
@@ -481,14 +393,14 @@ function App() {
   }, [page]);
 
   const openAddStaff = () => {
-    if (!canManageStaffDirectory(currentUser)) return showMessage("ICT ko Super Admin ne kawai za su iya ƙara ma'aikaci.");
+    if (!canMutate(currentUser)) return showMessage("Super Admin kawai zai iya ƙara ma'aikaci.");
     setEditingStaff(null);
     setStaffForm(emptyStaffForm);
     setShowStaffModal(true);
   };
 
   const openEditStaff = (person) => {
-    if (!canManageStaffDirectory(currentUser)) return showMessage("ICT ko Super Admin ne kawai za su iya gyara ma'aikaci.");
+    if (!canMutate(currentUser)) return showMessage("Super Admin kawai zai iya gyara ma'aikaci.");
     setEditingStaff(person);
 
     setStaffForm({
@@ -509,7 +421,7 @@ function App() {
 
   const saveStaff = (e) => {
     e.preventDefault();
-    if (!canManageStaffDirectory(currentUser)) return showMessage("ICT ko Super Admin ne kawai za su iya canza staff.");
+    if (!canMutate(currentUser)) return showMessage("Super Admin kawai zai iya canza staff.");
 
     if (
       !staffForm.name.trim() ||
@@ -527,9 +439,6 @@ function App() {
             ? {
                 ...person,
                 ...staffForm,
-                username: staffForm.name.trim(),
-                department: Array.from(new Set([staffForm.department, ...(staffForm.departments || [])].filter(Boolean)))[0] || staffForm.department,
-                departments: Array.from(new Set([staffForm.department, ...(staffForm.departments || [])].filter(Boolean))),
               }
             : person
         )
@@ -537,17 +446,10 @@ function App() {
 
       showMessage("An sabunta ma'aikaci.");
     } else {
-      const selectedDepartments = Array.from(new Set([
-        staffForm.department,
-        ...(staffForm.departments || []),
-      ].filter(Boolean)));
       const newStaff = {
         id: Date.now(),
-        staffId: nextStaffNumber(staff),
+        staffId: `BZ${String(staff.length).padStart(3, "0")}`,
         ...staffForm,
-        username: staffForm.name.trim(),
-        department: selectedDepartments[0] || staffForm.department,
-        departments: selectedDepartments,
       };
 
       setStaff((prev) => [...prev, newStaff]);
@@ -596,6 +498,10 @@ function App() {
         setLoginForm={setLoginForm}
         handleLogin={handleLogin}
         notification={notification}
+        loginMode={loginMode}
+        setLoginMode={setLoginMode}
+        loginDepartment={loginDepartment}
+        setLoginDepartment={setLoginDepartment}
       />
     );
   }
@@ -625,13 +531,6 @@ function App() {
             icon="⌂"
             active={page === "Dashboard"}
             onClick={() => setPage("Dashboard")}
-          />
-
-          <MenuItem
-            label="My Staff Dashboard"
-            icon="♟"
-            active={page === "My Staff Dashboard"}
-            onClick={() => setPage("My Staff Dashboard")}
           />
 
           <div className="menu-section">PATIENT SERVICES</div>
@@ -907,27 +806,14 @@ function App() {
             />
           )}
 
-          {page === "My Staff Dashboard" && (
-            <StaffPersonalDashboard
-              currentUser={currentUser}
-              staff={staff}
-              attendance={attendance}
-              setAttendance={setAttendance}
-              rosterEntries={rosterEntries}
-              showMessage={showMessage}
-            />
-          )}
-
           {page === "ICT Centre" && (
             <ICTPage
               patients={patients}
               setPatients={setPatients}
-              showMessage={showMessage}
-              currentUser={currentUser}
               staff={staff}
-              openAddStaff={openAddStaff}
-              openEditStaff={openEditStaff}
-              deleteStaff={deleteStaff}
+              setStaff={setStaff}
+              currentUser={currentUser}
+              showMessage={showMessage}
             />
           )}
 
@@ -1152,8 +1038,17 @@ function App() {
                 />
               </FormField>
 
-              <FormField label="Username (automatic from staff name)">
-                <input value={staffForm.name.trim()} readOnly placeholder="Staff name becomes username" />
+              <FormField label="Username">
+                <input
+                  value={staffForm.username}
+                  onChange={(e) =>
+                    setStaffForm({
+                      ...staffForm,
+                      username: e.target.value,
+                    })
+                  }
+                  placeholder="Login username"
+                />
               </FormField>
 
               <FormField label="Password">
@@ -1183,19 +1078,6 @@ function App() {
                     <option key={department}>{department}</option>
                   ))}
                 </select>
-              </FormField>
-
-              <FormField label="Department(s) — Primary + additional departments">
-                <div className="button-row">
-                  {[...departments, ...rosterOnlyDepartments].filter((d) => !["General Cashier", "In-Charge"].includes(d)).map((department) => (
-                    <button type="button" key={department} className={`small-button ${(staffForm.departments || []).includes(department) ? "primary" : ""}`} onClick={() => {
-                      const current = Array.isArray(staffForm.departments) ? staffForm.departments : [];
-                      const next = current.includes(department) ? current.filter((d) => d !== department) : [...current, department];
-                      setStaffForm({ ...staffForm, departments: next, department: next[0] || staffForm.department });
-                    }}>{department}</button>
-                  ))}
-                </div>
-                <small className="muted">Zaɓi department ɗin primary sannan ka iya danna 2 ko fiye idan staff yana aiki a departments da yawa.</small>
               </FormField>
 
               <FormField label="Role">
@@ -1295,73 +1177,50 @@ function App() {
   )
 }
 
-function LoginScreen({
-  loginForm,
-  setLoginForm,
-  handleLogin,
-  notification,
-}) {
+function LoginScreen({ loginForm, setLoginForm, handleLogin, notification, loginMode, setLoginMode, loginDepartment, setLoginDepartment }) {
+  const loginDepartments = ["Super Admin", "In-Charge", ...departments];
   return (
     <div className="login-page">
       <style>{styles}</style>
-
       <div className="login-card">
         <div className="login-logo">B</div>
-
         <h1>Bazza PHC</h1>
-        <p className="login-subtitle">
-          Comprehensive Health Clinic Bazzah
-        </p>
-
+        <p className="login-subtitle">Comprehensive Health Clinic Bazzah</p>
         <div className="login-line"></div>
-
-        <h2>Staff Login</h2>
-
-        {notification && <div className="login-error">{notification}</div>}
-
-        <form onSubmit={handleLogin}>
-          <label>Username</label>
-          <input
-            value={loginForm.username}
-            onChange={(e) =>
-              setLoginForm({
-                ...loginForm,
-                username: e.target.value,
-              })
-            }
-            placeholder="Enter username"
-          />
-
-          <label>Password</label>
-          <input
-            type="password"
-            value={loginForm.password}
-            onChange={(e) =>
-              setLoginForm({
-                ...loginForm,
-                password: e.target.value,
-              })
-            }
-            placeholder="Enter password"
-          />
-
-          <button className="login-button" type="submit">
-            Login
-          </button>
-        </form>
-
-        <div className="demo-box">
-          <strong>Demo Login</strong>
-          <span>Super Admin: admin / 1234</span>
-          <span>In-Charge: altini / 1234</span>
-          <span>Pharmacy: hadiza / 1234</span>
-          <span>Ultrasound: abbayaro / 1234</span>
-          <span>Laboratory: kabiru / 1234</span>
+        <div className="button-row" style={{marginBottom:16}}>
+          <button type="button" className={`button ${loginMode === "department" ? "primary" : "secondary"}`} onClick={() => setLoginMode("department")}>Department Login</button>
+          <button type="button" className={`button ${loginMode === "staff" ? "primary" : "secondary"}`} onClick={() => setLoginMode("staff")}>Staff Login</button>
         </div>
-
-        <footer>
-          Primary Health Care Department • Sokoto State
-        </footer>
+        <h2>{loginMode === "department" ? "Department Login" : "Staff Login"}</h2>
+        {notification && <div className="login-error">{notification}</div>}
+        <form onSubmit={handleLogin}>
+          {loginMode === "department" && (
+            <>
+              <label>Department</label>
+              <select value={loginDepartment} onChange={(e) => setLoginDepartment(e.target.value)}>
+                {loginDepartments.map((d) => <option key={d}>{d}</option>)}
+              </select>
+            </>
+          )}
+          <label>Username</label>
+          <input value={loginForm.username} onChange={(e) => setLoginForm({...loginForm, username:e.target.value})} placeholder={loginMode === "staff" ? "Your staff username" : "Department username"} />
+          <label>Password</label>
+          <input type="password" value={loginForm.password} onChange={(e) => setLoginForm({...loginForm, password:e.target.value})} placeholder="Password" />
+          <button className="login-button" type="submit">Login</button>
+        </form>
+        <div className="demo-box">
+          <strong>Approved Department Logins</strong>
+          <span>Super Admin: usman / 1234</span>
+          <span>In-Charge: altine / 1234</span>
+          <span>ICT: bazza / 1234</span>
+          <span>Records: yusuf / 1234</span>
+          <span>Nursing: abdul / 1234</span>
+          <span>Consultant: kasimu / 1234</span>
+          <span>Laboratory: kabiru / 1234</span>
+          <span>Pharmacy: hadiza / 1234</span>
+          <span>Ultrasound: abba / 1234</span>
+        </div>
+        <footer>Primary Health Care Department • Sokoto State</footer>
       </div>
     </div>
   );
@@ -1555,7 +1414,19 @@ function DashboardPage({ currentUser, patients, staff, attendance = [], setAtten
   );
 }
 
-function ICTPage({ patients, setPatients, showMessage, currentUser, staff = [], openAddStaff, openEditStaff, deleteStaff }) {
+function ICTStaffAddPanel({ staff = [], setStaff, currentUser, showMessage }) {
+  const allowed = currentUser?.role === "Super Admin" || currentUser?.department === "ICT Centre" || currentUser?.role === "ICT Staff";
+  const [form, setForm] = useState({ name:"", password:"1234", primaryDepartment:"ICT Centre", additionalDepartments:[], category:"Staff", maritalStatus:"Single", isHOD:false });
+  const availableDepartments = departments.filter((d) => !["Super Admin","In-Charge"].includes(d));
+  const toggleDept = (dept) => setForm((f) => ({...f, additionalDepartments:f.additionalDepartments.includes(dept) ? f.additionalDepartments.filter(x=>x!==dept) : [...f.additionalDepartments,dept]}));
+  const makeUsername = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
+  const nextStaffNo = () => { const year = new Date().getFullYear(); const nums = staff.map(x => String(x.staffId||"").match(new RegExp(`HA-PHC/${year}/(\\d+)`))).filter(Boolean).map(m=>Number(m[1])); return `HA-PHC/${year}/${String((nums.length?Math.max(...nums):0)+1).padStart(3,"0")}`; };
+  const save = (e) => { e.preventDefault(); if(!allowed) return showMessage("ICT ko Super Admin kawai zai iya ƙara staff."); if(!form.name.trim()) return showMessage("Shigar da sunan staff."); const username=makeUsername(form.name); const exists=staff.some(x=>String(x.username||"").toLowerCase()===username); if(exists) return showMessage("Wannan sunan/username ya riga ya kasance."); const depts=[form.primaryDepartment,...form.additionalDepartments.filter(x=>x!==form.primaryDepartment)]; const role=form.primaryDepartment==="ICT Centre"?"ICT Staff":form.primaryDepartment==="Records Unit"?"Records Staff":form.primaryDepartment==="Nursing Unit"?"Nurse":form.primaryDepartment==="Consultant Room"?"Consultant":form.primaryDepartment==="Laboratory Unit"?"Laboratory Staff":form.primaryDepartment==="Pharmacy Unit"?"Pharmacy Staff":form.primaryDepartment==="Ultrasound Room"?"Ultrasound Staff":["Male Ward","Female Ward","Maternity Ward","Child Ward","Labour Room"].includes(form.primaryDepartment)?"Ward Staff":form.primaryDepartment==="Immunization Unit"?"Immunization Staff":form.primaryDepartment==="Family Planning Unit"?"Family Planning Staff":"Adolescent Staff"; const person={id:Date.now(),staffId:nextStaffNo(),name:form.name.trim(),username,password:form.password||"1234",department:form.primaryDepartment,departments:depts,role,status:"Active",category:form.category,maritalStatus:form.maritalStatus,isHOD:form.isHOD,allowedShifts:form.isHOD?["Morning","Evening","Night"]:["Morning","Evening","Night"]}; setStaff(prev=>[...prev,person]); showMessage(`An ƙara ${person.name}. Staff No: ${person.staffId}`); setForm({name:"",password:"1234",primaryDepartment:"ICT Centre",additionalDepartments:[],category:"Staff",maritalStatus:"Single",isHOD:false}); };
+  if(!allowed) return null;
+  return <div className="panel" style={{marginTop:18}}><div className="panel-header"><div><h2>Add Staff</h2><p>ICT ne ke ƙara ma'aikaci. Staff zai samu Staff Number da login.</p></div></div><form onSubmit={save}><div className="form-grid"><FormField label="Full Name"><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Staff full name" /></FormField><FormField label="Password"><input value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Default 1234" /></FormField><FormField label="Primary Department"><select value={form.primaryDepartment} onChange={e=>setForm({...form,primaryDepartment:e.target.value,additionalDepartments:form.additionalDepartments.filter(x=>x!==e.target.value)})}>{availableDepartments.map(d=><option key={d}>{d}</option>)}</select></FormField><FormField label="Category"><select value={form.category} onChange={e=>setForm({...form,category:e.target.value})}><option>Staff</option><option>Volunteer</option><option>Student</option></select></FormField><FormField label="Marital Status"><select value={form.maritalStatus} onChange={e=>setForm({...form,maritalStatus:e.target.value})}><option>Single</option><option>Married</option></select></FormField></div><div style={{marginTop:12}}><strong>Additional Departments — click 2 or more if needed</strong><div className="button-row" style={{marginTop:8}}>{availableDepartments.map(d=><button type="button" key={d} className={`button ${form.additionalDepartments.includes(d)?"primary":"secondary"}`} onClick={()=>toggleDept(d)}>{d}</button>)}</div></div><label style={{display:"flex",gap:8,alignItems:"center",marginTop:12}}><input type="checkbox" checked={form.isHOD} onChange={e=>setForm({...form,isHOD:e.target.checked})} /> HOD</label><div className="modal-actions left"><button className="button primary" type="submit">Add Staff</button></div></form></div>;
+}
+
+function ICTPage({ patients, setPatients, staff = [], setStaff, currentUser, showMessage }) {
   const [form, setForm] = useState({
     surname: "",
     otherNames: "",
@@ -1587,75 +1458,159 @@ function ICTPage({ patients, setPatients, showMessage, currentUser, staff = [], 
     };
 
     setPatients((prev) => [...prev, newPatient]);
-    setForm({ surname: "", otherNames: "", age: "", address: "", phone: "", sex: "Female", spouse: "" });
+
+    setForm({
+      surname: "",
+      otherNames: "",
+      age: "",
+      address: "",
+      phone: "",
+      sex: "Female",
+      spouse: "",
+    });
+
     showMessage(`An yi registration. Card Number: ${newPatient.card}`);
   };
 
-  const canManageStaff = currentUser?.role === "Super Admin" || currentUser?.role === "ICT Staff";
-  const ownDepartmentStaff = staff.filter((person) => (person.departments || [person.department]).includes("ICT Centre"));
-
   return (
     <div>
-      <PageHeader title="ICT Centre" subtitle="Patient registration, staff management and central information technology services" icon="▣" />
+      <PageHeader
+        title="ICT Centre"
+        subtitle="Patient registration and central information technology services"
+        icon="▣"
+      />
 
       <div className="stats-grid">
         <StatCard title="Patients" value={patients.length} icon="♙" />
         <StatCard title="New Today" value="12" icon="+" />
-        <StatCard title="ICT Staff" value={ownDepartmentStaff.length} icon="♟" />
+        <StatCard title="SMS Sent" value="38" icon="✉" />
         <StatCard title="System Status" value="Online" icon="●" />
       </div>
 
-      {canManageStaff && (
-        <div className="panel">
-          <div className="panel-header">
-            <div>
-              <h2>ICT Staff Management</h2>
-              <p>Add and manage hospital staff from ICT. Username is generated from the staff name.</p>
-            </div>
-            <button className="button primary" onClick={openAddStaff}>+ Add Staff</button>
-          </div>
-
-          <div className="table-scroll">
-            <table>
-              <thead><tr><th>Staff Number</th><th>Name</th><th>Username</th><th>Primary Department</th><th>Department(s)</th><th>Role</th><th>Action</th></tr></thead>
-              <tbody>
-                {ownDepartmentStaff.length ? ownDepartmentStaff.map((person) => (
-                  <tr key={person.id}>
-                    <td>{person.staffId}</td>
-                    <td>{person.name}</td>
-                    <td>{person.username}</td>
-                    <td>{person.department}</td>
-                    <td>{(person.departments || [person.department]).join(", ")}</td>
-                    <td>{person.role}</td>
-                    <td><div className="table-actions"><button className="small-button" onClick={() => openEditStaff(person)}>Edit</button>{person.role !== "Super Admin" && <button className="small-button" onClick={() => deleteStaff(person)}>Delete</button>}</div></td>
-                  </tr>
-                )) : <tr><td colSpan="7">No ICT staff found.</td></tr>}
-              </tbody>
-            </table>
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Register New Patient</h2>
+            <p>ICT creates the shared Patient/Card Number.</p>
           </div>
         </div>
-      )}
 
-      <div className="panel">
-        <div className="panel-header"><div><h2>Register New Patient</h2><p>ICT creates the shared Patient/Card Number.</p></div></div>
         <form onSubmit={registerPatient}>
           <div className="form-grid">
-            <FormField label="Surname"><input value={form.surname} onChange={(e)=>setForm({...form,surname:e.target.value})} placeholder="Surname" /></FormField>
-            <FormField label="Other Names"><input value={form.otherNames} onChange={(e)=>setForm({...form,otherNames:e.target.value})} placeholder="Other names" /></FormField>
-            <FormField label="Age"><input value={form.age} onChange={(e)=>setForm({...form,age:e.target.value})} placeholder="Age" /></FormField>
-            <FormField label="Address"><input value={form.address} onChange={(e)=>setForm({...form,address:e.target.value})} placeholder="Residential address" /></FormField>
-            <FormField label="Phone Number"><input value={form.phone} onChange={(e)=>setForm({...form,phone:e.target.value})} placeholder="Phone number" /></FormField>
-            <FormField label="Sex / Gender"><select value={form.sex} onChange={(e)=>setForm({...form,sex:e.target.value})}><option>Female</option><option>Male</option></select></FormField>
-            <FormField label="Spouse Name (if applicable)"><input value={form.spouse} onChange={(e)=>setForm({...form,spouse:e.target.value})} placeholder="Spouse name" /></FormField>
+            <FormField label="Surname">
+              <input
+                value={form.surname}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    surname: e.target.value,
+                  })
+                }
+                placeholder="Surname"
+              />
+            </FormField>
+
+            <FormField label="Other Names">
+              <input
+                value={form.otherNames}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    otherNames: e.target.value,
+                  })
+                }
+                placeholder="Other names"
+              />
+            </FormField>
+
+            <FormField label="Age">
+              <input
+                value={form.age}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    age: e.target.value,
+                  })
+                }
+                placeholder="Age"
+              />
+            </FormField>
+
+            <FormField label="Address">
+              <input
+                value={form.address}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    address: e.target.value,
+                  })
+                }
+                placeholder="Residential address"
+              />
+            </FormField>
+
+            <FormField label="Phone Number">
+              <input
+                value={form.phone}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    phone: e.target.value,
+                  })
+                }
+                placeholder="Phone number"
+              />
+            </FormField>
+
+            <FormField label="Sex / Gender">
+              <select
+                value={form.sex}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    sex: e.target.value,
+                  })
+                }
+              >
+                <option>Female</option>
+                <option>Male</option>
+              </select>
+            </FormField>
+
+            <FormField label="Spouse Name (if applicable)">
+              <input
+                value={form.spouse}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    spouse: e.target.value,
+                  })
+                }
+                placeholder="Spouse name"
+              />
+            </FormField>
           </div>
-          <div className="modal-actions left"><button className="button primary" type="submit">Register Patient</button></div>
+
+          <div className="modal-actions left">
+            <button className="button primary" type="submit">
+              Register Patient
+            </button>
+          </div>
         </form>
       </div>
 
       <div className="panel recent-panel">
-        <div className="panel-header"><div><h2>Patient Registry</h2><p>Search and view registered patients.</p></div></div>
+        <div className="panel-header">
+          <div>
+            <h2>Patient Registry</h2>
+            <p>Search and view registered patients.</p>
+          </div>
+        </div>
+
         <PatientTable patients={patients} />
       </div>
+
+      <ICTStaffAddPanel staff={staff} setStaff={setStaff} currentUser={currentUser} showMessage={showMessage} />
     </div>
   );
 }
@@ -2773,38 +2728,6 @@ function GeneralCashierPage({ transactions }) {
   );
 }
 
-function StaffPersonalDashboard({ currentUser, staff = [], attendance = [], setAttendance, rosterEntries = [], showMessage }) {
-  const person = staff.find((p) => p.id === currentUser?.id || p.staffId === currentUser?.staffId) || currentUser;
-  const todayKey = new Date().toLocaleDateString();
-  const record = [...attendance].reverse().find((a) => a.staffId === person?.staffId && a.date === todayKey);
-  const assignedDepartments = Array.from(new Set((person?.departments || [person?.department]).filter(Boolean)));
-  const myRoster = rosterEntries.filter((entry) => entry.staffId === person?.staffId).slice(0, 31);
-  const signIn = () => {
-    if (!person) return;
-    if (record?.signIn && !record?.signOut) return showMessage("Ka riga ka yi Sign In yau.");
-    setAttendance((prev) => [...prev, { id: `${person.staffId}-${Date.now()}`, staffId: person.staffId, name: person.name, department: person.department, departments: assignedDepartments, date: todayKey, signIn: new Date().toLocaleTimeString(), signOut: "", dutyStatus: "On Duty", recordedBy: person.name }]);
-    showMessage("An yi Sign In.");
-  };
-  const signOut = () => {
-    const open = [...attendance].reverse().find((a) => a.staffId === person?.staffId && a.date === todayKey && !a.signOut);
-    if (!open) return showMessage("Babu Sign In na yau.");
-    setAttendance((prev) => prev.map((a) => a.id === open.id ? { ...a, signOut: new Date().toLocaleTimeString(), dutyStatus: "Completed", recordedBy: person.name } : a));
-    showMessage("An yi Sign Out.");
-  };
-  return <div>
-    <PageHeader title={`My Staff Dashboard — ${person?.name || "Staff"}`} subtitle="Your staff information, assigned departments, roster and personal attendance" icon="♟" />
-    <div className="stats-grid">
-      <StatCard title="Staff Number" value={person?.staffId || "—"} icon="#" />
-      <StatCard title="Department(s)" value={assignedDepartments.length} icon="▦" />
-      <StatCard title="Today Sign In" value={record?.signIn || "—"} icon="✓" />
-      <StatCard title="Today Sign Out" value={record?.signOut || "—"} icon="↗" />
-    </div>
-    <div className="panel"><h2>Staff Information</h2><div className="form-grid"><div><strong>Name</strong><div>{person?.name || "—"}</div></div><div><strong>Username</strong><div>{person?.username || "—"}</div></div><div><strong>Role</strong><div>{person?.role || "—"}</div></div><div><strong>Roster Type</strong><div>{person?.category === "Student" ? "Weekly" : "Monthly"}</div></div><div><strong>Primary Department</strong><div>{person?.department || "—"}</div></div><div><strong>Assigned Departments</strong><div>{assignedDepartments.join(", ") || "—"}</div></div></div></div>
-    <div className="panel"><div className="panel-header"><div><h2>My Attendance</h2><p>System login/logout is separate from duty Sign In/Sign Out.</p></div><div className="button-row"><button className="button primary" onClick={signIn}>Sign In</button><button className="button secondary" onClick={signOut}>Sign Out</button></div></div><p><strong>Status:</strong> {record?.dutyStatus || "Not Signed In"}</p></div>
-    <div className="panel"><h2>My Roster</h2><div className="table-scroll"><table><thead><tr><th>Date</th><th>Department(s)</th><th>Morning</th><th>Evening</th><th>Night</th><th>Period</th></tr></thead><tbody>{myRoster.length ? myRoster.map((entry)=><tr key={entry.id}><td>{entry.date}</td><td>{(entry.departments||[]).join(", ")}</td><td>{entry.shifts?.Morning||"—"}</td><td>{entry.shifts?.Evening||"—"}</td><td>{entry.shifts?.Night||"—"}</td><td>{entry.period}</td></tr>) : <tr><td colSpan="6">Babu roster da aka generate tukuna.</td></tr>}</tbody></table></div></div>
-  </div>;
-}
-
 function RosterPage({
   staff,
   setStaff,
@@ -2817,24 +2740,33 @@ function RosterPage({
 }) {
   const shifts = ["Morning", "Evening", "Night"];
   const categories = ["Staff", "Volunteer", "Student"];
-  const isPrivilegedViewer = ["Super Admin", "ICT Staff", "In-Charge"].includes(currentUser?.role);
-  const canManageAttendanceHere = canManageAttendance(currentUser);
-  const canManageSetup = canManageStaffDirectory(currentUser);
-  const [view, setView] = useState(isPrivilegedViewer ? "general" : "department");
+  const [view, setView] = useState("general");
   const [department, setDepartment] = useState("All Departments");
+  const [period, setPeriod] = useState("current");
   const [selectedStaffId, setSelectedStaffId] = useState("");
   const [setupOpen, setSetupOpen] = useState(false);
-  const [setup, setSetup] = useState({ staffId: "", category: "Staff", departments: [], maritalStatus: "Single", allowedShifts: shifts, isHOD: false });
+  const [setup, setSetup] = useState({
+    staffId: "",
+    category: "Staff",
+    departments: [],
+    maritalStatus: "Single",
+    allowedShifts: ["Morning", "Evening", "Night"],
+    isHOD: false,
+  });
 
   const today = new Date();
   const todayKey = today.toLocaleDateString();
+  const monthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
   const weekStart = new Date(today);
   weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  const weekKey = weekStart.toISOString().slice(0, 10);
 
   const eligibleShifts = (person) => {
     if (person.isHOD || (person.role || "").toLowerCase().includes("hod")) return shifts;
     if (person.maritalStatus === "Married") return ["Morning", "Evening"];
-    if (person.category === "Student" || person.category === "Volunteer") return person.allowedShifts?.length ? person.allowedShifts : ["Morning", "Evening"];
+    if (person.category === "Student" || person.category === "Volunteer") {
+      return person.allowedShifts?.length ? person.allowedShifts : ["Morning", "Evening"];
+    }
     return person.allowedShifts?.length ? person.allowedShifts : shifts;
   };
 
@@ -2844,42 +2776,24 @@ function RosterPage({
     return index % 7 < 4 ? "Duty" : "Off";
   };
 
-  const userDepartments = Array.from(new Set((currentUser?.departments || [currentUser?.department]).filter(Boolean)));
-  const allDepartments = ["All Departments", ...Array.from(new Set(staff.flatMap((p) => p.departments || [p.department]).filter(Boolean)))];
-  const allowedDepartmentChoices = isPrivilegedViewer ? allDepartments : userDepartments;
-  const activeDepartment = isPrivilegedViewer ? department : (department === "All Departments" || !userDepartments.includes(department) ? (userDepartments[0] || "") : department);
-  const visibleStaff = activeDepartment === "All Departments" ? staff : staff.filter((p) => (p.departments || [p.department]).includes(activeDepartment));
-  const visibleEntries = rosterEntries.filter((entry) => activeDepartment === "All Departments" || (entry.departments || []).includes(activeDepartment));
-  const todayAttendance = attendance.filter((a) => a.date === todayKey);
-  const signedIn = todayAttendance.filter((a) => a.signIn && !a.signOut);
-  const signedOut = todayAttendance.filter((a) => a.signOut);
-  const onDuty = todayAttendance.filter((a) => a.dutyStatus === "On Duty");
-
   const generateRoster = () => {
-    if (!canManageSetup) return showMessage("ICT ko Super Admin ne kawai za su iya generate roster.");
     const generated = [];
-    const seen = new Set();
     staff.forEach((person) => {
       const isStudent = person.category === "Student";
       const days = isStudent ? 7 : new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
       const start = isStudent ? new Date(weekStart) : new Date(today.getFullYear(), today.getMonth(), 1);
-      const assignedDepartments = Array.from(new Set((person.departments || [person.department]).filter(Boolean)));
       const allowed = eligibleShifts(person);
       for (let i = 0; i < days; i++) {
         const d = new Date(start);
         d.setDate(start.getDate() + i);
-        const dateKey = d.toISOString().slice(0, 10);
-        const uniqueKey = `${person.staffId}-${dateKey}`;
-        if (seen.has(uniqueKey)) continue;
-        seen.add(uniqueKey);
         generated.push({
-          id: `${person.staffId}-${dateKey}`,
+          id: `${person.id}-${d.toISOString().slice(0, 10)}`,
           staffId: person.staffId,
           name: person.name,
           category: person.category || "Staff",
-          departments: assignedDepartments,
+          departments: person.departments || [person.department].filter(Boolean),
           date: d.toLocaleDateString(),
-          dateKey,
+          dateKey: d.toISOString().slice(0, 10),
           period: isStudent ? "Weekly" : "Monthly",
           shifts: Object.fromEntries(shifts.map((shift) => [shift, allowed.includes(shift) ? cycleDuty(shift, i) : "—"])),
           rules: "Morning 6 duty/1 off • Evening 5 duty/2 off • Night 4 duty/3 off",
@@ -2887,84 +2801,200 @@ function RosterPage({
       }
     });
     setRosterEntries(generated);
-    showMessage("An ƙirƙiri roster automatic kuma an cire duplicate.");
+    showMessage("An ƙirƙiri sabon roster kuma an ajiye shi.");
   };
 
-  const createOrUpdateAttendance = (person, mode) => {
-    if (!canManageAttendanceHere) return showMessage("ICT ko Super Admin ne kawai za su iya yi wa staff Sign In / Sign Out.");
-    const current = [...attendance].reverse().find((a) => a.staffId === person.staffId && a.date === todayKey && !a.signOut);
-    if (mode === "in") {
-      if (current) return showMessage("Wannan staff ya riga ya yi Sign In yau.");
-      const record = { id: `${person.staffId}-${Date.now()}`, staffId: person.staffId, name: person.name, department: person.department, departments: person.departments || [person.department], date: todayKey, signIn: new Date().toLocaleTimeString(), signOut: "", dutyStatus: "On Duty", recordedBy: currentUser?.name || "System" };
-      setAttendance((prev) => [...prev, record]);
-      showMessage(`${person.name} ya yi Sign In.`);
-    } else {
-      if (!current) return showMessage("Babu Sign In na yau da za a yi Sign Out.");
-      setAttendance((prev) => prev.map((a) => a.id === current.id ? { ...a, signOut: new Date().toLocaleTimeString(), dutyStatus: "Completed", recordedBy: currentUser?.name || "System" } : a));
-      showMessage(`${person.name} ya yi Sign Out.`);
+  const signIn = (person) => {
+    const existing = attendance.find((a) => a.staffId === person.staffId && a.date === todayKey && !a.signOut);
+    if (existing) {
+      showMessage("Wannan staff ya riga ya yi Sign In yau.");
+      return;
     }
+    const now = new Date().toLocaleTimeString();
+    setAttendance((prev) => [
+      ...prev.filter((a) => !(a.staffId === person.staffId && a.date === todayKey && !a.signOut)),
+      {
+        id: `${person.staffId}-${Date.now()}`,
+        staffId: person.staffId,
+        name: person.name,
+        department: person.department,
+        date: todayKey,
+        signIn: now,
+        signOut: "",
+        dutyStatus: "On Duty",
+      },
+    ]);
+    showMessage(`${person.name} ya yi Sign In.`);
   };
+
+  const signOut = (person) => {
+    const existing = [...attendance].reverse().find((a) => a.staffId === person.staffId && a.date === todayKey && !a.signOut);
+    if (!existing) {
+      showMessage("Babu Sign In na yau da za a yi Sign Out.");
+      return;
+    }
+    setAttendance((prev) => prev.map((a) => a.id === existing.id ? { ...a, signOut: new Date().toLocaleTimeString(), dutyStatus: "Completed" } : a));
+    showMessage(`${person.name} ya yi Sign Out.`);
+  };
+
+  const allDepartments = ["All Departments", ...Array.from(new Set(staff.flatMap((p) => p.departments || [p.department]).filter(Boolean)))];
+  const privilegedRoster = ["Super Admin","In-Charge"].includes(currentUser?.role) || currentUser?.department === "ICT Centre";
+  const effectiveDepartment = privilegedRoster ? department : (currentUser?.department || department);
+  const visibleStaff = effectiveDepartment === "All Departments" ? staff : staff.filter((p) => (p.departments || [p.department]).includes(effectiveDepartment));
+  const visibleEntries = rosterEntries.filter((entry) => effectiveDepartment === "All Departments" || (entry.departments || []).includes(effectiveDepartment));
+  const todayAttendance = attendance.filter((a) => a.date === todayKey);
+  const signedIn = todayAttendance.filter((a) => a.signIn && !a.signOut);
+  const signedOut = todayAttendance.filter((a) => a.signOut);
+  const onDuty = todayAttendance.filter((a) => a.dutyStatus === "On Duty");
 
   const openSetup = (person) => {
-    if (!canManageSetup) return showMessage("ICT ko Super Admin ne kawai za su iya gyara roster setup.");
     setSelectedStaffId(person.staffId);
-    setSetup({ staffId: person.staffId, category: person.category || "Staff", departments: Array.from(new Set(person.departments || [person.department].filter(Boolean))), maritalStatus: person.maritalStatus || "Single", allowedShifts: person.allowedShifts?.length ? person.allowedShifts : shifts, isHOD: !!person.isHOD });
+    setSetup({
+      staffId: person.staffId,
+      category: person.category || "Staff",
+      departments: person.departments || [person.department].filter(Boolean),
+      maritalStatus: person.maritalStatus || "Single",
+      allowedShifts: person.allowedShifts?.length ? person.allowedShifts : ["Morning", "Evening", "Night"],
+      isHOD: !!person.isHOD,
+    });
     setSetupOpen(true);
   };
 
   const saveSetup = () => {
-    if (!canManageSetup) return showMessage("ICT ko Super Admin ne kawai za su iya gyara roster setup.");
     const person = staff.find((p) => p.staffId === setup.staffId);
     if (!person) return;
-    const selectedDepartments = Array.from(new Set(setup.departments.filter(Boolean)));
-    if (!selectedDepartments.length) return showMessage("Dole a zaɓi aƙalla department ɗaya.");
-    const updated = { category: setup.category, departments: selectedDepartments, department: selectedDepartments[0], maritalStatus: setup.maritalStatus, isHOD: setup.isHOD, allowedShifts: setup.allowedShifts.length ? setup.allowedShifts : ["Morning", "Evening"] };
+    // Staff data is persisted by the parent. This event stores roster setup separately,
+    // so the roster remains available even after logout/login or reopening the app.
+    const updated = {
+      category: setup.category,
+      departments: setup.departments.length ? setup.departments : [person.department].filter(Boolean),
+      maritalStatus: setup.maritalStatus,
+      isHOD: setup.isHOD,
+      allowedShifts: setup.allowedShifts.length ? setup.allowedShifts : ["Morning", "Evening"],
+      department: setup.departments[0] || person.department,
+    };
     setStaff((prev) => prev.map((p) => p.staffId === person.staffId ? { ...p, ...updated } : p));
-    setRosterEntries((prev) => prev.map((entry) => entry.staffId === person.staffId ? { ...entry, ...updated, departments: selectedDepartments } : entry));
-    showMessage("An sabunta departments da roster setup.");
+    setRosterEntries((prev) => prev.map((entry) => entry.staffId === person.staffId ? { ...entry, ...updated } : entry));
+    showMessage("An ajiye Staff / Roster setup.");
     setSetupOpen(false);
   };
 
-  const printRoster = () => window.print();
+  const printRoster = () => {
+    window.print();
+  };
 
   return (
     <div>
-      <PageHeader title="Roster & Staff Attendance" subtitle="Automatic general/department roster, staff attendance and sign in/out" icon="▦" />
+      <PageHeader title="Roster & Staff Attendance" subtitle="General roster, department rosters, sign in/out and attendance" icon="▦" />
+
       <div className="stats-grid">
-        <StatCard title="Total Staff" value={visibleStaff.length} icon="♟" />
+        <StatCard title="Total Staff" value={staff.length} icon="♟" />
         <StatCard title="Signed In Today" value={signedIn.length} icon="✓" />
         <StatCard title="Signed Out Today" value={signedOut.length} icon="↗" />
         <StatCard title="On Duty" value={onDuty.length} icon="▦" />
       </div>
 
       <div className="toolbar">
-        {isPrivilegedViewer && <button className={`button ${view === "general" ? "primary" : "secondary"}`} onClick={() => setView("general")}>General Roster</button>}
+        <button className={`button ${view === "general" ? "primary" : "secondary"}`} onClick={() => setView("general")}>General Roster</button>
         <button className={`button ${view === "department" ? "primary" : "secondary"}`} onClick={() => setView("department")}>Department Roster</button>
-        {canManageAttendanceHere && <button className={`button ${view === "attendance" ? "primary" : "secondary"}`} onClick={() => setView("attendance")}>Sign In / Sign Out</button>}
-        {canManageSetup && <button className={`button ${view === "setup" ? "primary" : "secondary"}`} onClick={() => setView("setup")}>Staff Roster Setup</button>}
+        <button className={`button ${view === "attendance" ? "primary" : "secondary"}`} onClick={() => setView("attendance")}>Sign In / Sign Out</button>
+        <button className={`button ${view === "setup" ? "primary" : "secondary"}`} onClick={() => setView("setup")}>Staff Roster Setup</button>
       </div>
 
       {(view === "general" || view === "department") && (
         <div className="panel">
-          <div className="panel-header"><div><h2>{view === "general" ? "General Staff Roster" : `${activeDepartment} Roster`}</h2><p>Staff/Volunteers = Monthly; Students = Weekly.</p></div><div className="button-row">{canManageSetup && <button className="button primary" onClick={generateRoster}>Generate Roster</button>}<button className="button secondary" onClick={printRoster}>Print Roster</button></div></div>
-          <div className="field" style={{ maxWidth: 420 }}><label>Department</label><select value={activeDepartment} onChange={(e) => setDepartment(e.target.value)} disabled={!isPrivilegedViewer && allowedDepartmentChoices.length <= 1}>{allowedDepartmentChoices.filter(Boolean).map((d) => <option key={d}>{d}</option>)}</select></div>
-          <div className="table-scroll"><table><thead><tr><th>Staff</th><th>Category</th><th>Department(s)</th><th>Period</th><th>Morning</th><th>Evening</th><th>Night</th><th>Sign In</th><th>Sign Out</th><th>Rules</th></tr></thead><tbody>
-            {(visibleEntries.length ? visibleEntries.slice(0, 200) : visibleStaff.map((person, index) => ({ id: `preview-${person.id}`, staffId: person.staffId, name: person.name, category: person.category || "Staff", departments: person.departments || [person.department], period: person.category === "Student" ? "Weekly" : "Monthly", shifts: Object.fromEntries(shifts.map((sh) => [sh, eligibleShifts(person).includes(sh) ? cycleDuty(sh, index) : "—"])), rules: "Morning 6/1 • Evening 5/2 • Night 4/3" }))).map((entry) => { const record = [...attendance].reverse().find((a) => a.staffId === entry.staffId && a.date === entry.date); return <tr key={entry.id}><td>{entry.name}</td><td>{entry.category}</td><td>{(entry.departments || []).join(", ")}</td><td>{entry.period}</td>{shifts.map((sh) => <td key={sh}><span className="shift-badge">{entry.shifts?.[sh] || "—"}</span></td>)}<td>{record?.signIn || "—"}</td><td>{record?.signOut || "—"}</td><td>{entry.rules}</td></tr>;})}
-          </tbody></table></div>
+          <div className="panel-header">
+            <div>
+              <h2>{view === "general" ? "General Staff Roster" : `${department} Roster`}</h2>
+              <p>Staff/Volunteers use monthly roster; Students use weekly roster.</p>
+            </div>
+            <div className="button-row">
+              <button className="button primary" onClick={generateRoster}>Generate Roster</button>
+              <button className="button secondary" onClick={printRoster}>Print Roster</button>
+            </div>
+          </div>
+
+          {view === "department" && privilegedRoster && (
+            <div className="field" style={{ maxWidth: 360 }}>
+              <label>Department</label>
+              <select value={department} onChange={(e) => setDepartment(e.target.value)}>
+                {allDepartments.map((d) => <option key={d}>{d}</option>)}
+              </select>
+            </div>
+          )}
+
+          <div className="table-scroll">
+            <table>
+              <thead><tr><th>Staff</th><th>Category</th><th>Department(s)</th><th>Period</th><th>Morning</th><th>Evening</th><th>Night</th><th>Sign In</th><th>Sign Out</th><th>Rules</th></tr></thead>
+              <tbody>
+                {(visibleEntries.length ? visibleEntries.slice(0, 120) : visibleStaff.map((person, index) => ({
+                  id: `preview-${person.id}`, name: person.name, category: person.category || "Staff", departments: person.departments || [person.department], period: person.category === "Student" ? "Weekly" : "Monthly", shifts: Object.fromEntries(shifts.map((sh) => [sh, eligibleShifts(person).includes(sh) ? cycleDuty(sh, index) : "—"])), rules: "Morning 6/1 • Evening 5/2 • Night 4/3"
+                }))).map((entry) => (
+                  <tr key={entry.id}>
+                    <td>{entry.name}</td><td>{entry.category}</td><td>{(entry.departments || []).join(", ")}</td><td>{entry.period}</td>
+                    {shifts.map((sh) => <td key={sh}><span className="shift-badge">{entry.shifts?.[sh] || "—"}</span></td>)}
+                    <td>{[...attendance].reverse().find((a) => a.staffId === entry.staffId && a.date === entry.date)?.signIn || "—"}</td>
+                    <td>{[...attendance].reverse().find((a) => a.staffId === entry.staffId && a.date === entry.date)?.signOut || "—"}</td>
+                    <td>{entry.rules}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
-      {view === "attendance" && canManageAttendanceHere && (
-        <div className="panel"><div className="panel-header"><div><h2>Staff Sign In / Sign Out</h2><p>ICT and Super Admin can record attendance for any staff, even when the staff member is not physically present.</p></div></div><div className="table-scroll"><table><thead><tr><th>Staff</th><th>Staff Number</th><th>Department(s)</th><th>Today</th><th>Sign In</th><th>Sign Out</th><th>Status</th><th>Action</th></tr></thead><tbody>{staff.map((person) => { const record=[...attendance].reverse().find((a)=>a.staffId===person.staffId&&a.date===todayKey); return <tr key={person.id}><td>{person.name}</td><td>{person.staffId}</td><td>{(person.departments||[person.department]).join(", ")}</td><td>{todayKey}</td><td>{record?.signIn||"—"}</td><td>{record?.signOut||"—"}</td><td>{record?.dutyStatus||"Not Signed In"}</td><td><div className="table-actions"><button className="small-button" onClick={()=>createOrUpdateAttendance(person,"in")}>Sign In</button><button className="small-button" onClick={()=>createOrUpdateAttendance(person,"out")}>Sign Out</button></div></td></tr>;})}</tbody></table></div></div>
+      {view === "attendance" && (
+        <div className="panel">
+          <div className="panel-header"><div><h2>Staff Sign In / Sign Out</h2><p>Duty attendance is separate from system Logout.</p></div></div>
+          <div className="table-scroll"><table>
+            <thead><tr><th>Staff</th><th>Category</th><th>Department</th><th>Today</th><th>Sign In</th><th>Sign Out</th><th>Duty Status</th><th>Action</th></tr></thead>
+            <tbody>{staff.map((person) => {
+              const record = [...attendance].reverse().find((a) => a.staffId === person.staffId && a.date === todayKey);
+              return <tr key={person.id}>
+                <td>{person.name}</td><td>{person.category || "Staff"}</td><td>{person.department}</td><td>{todayKey}</td><td>{record?.signIn || "—"}</td><td>{record?.signOut || "—"}</td><td>{record?.dutyStatus || "Not Signed In"}</td>
+                <td><div className="table-actions"><button className="small-button" onClick={() => signIn(person)}>Sign In</button><button className="small-button" onClick={() => signOut(person)}>Sign Out</button></div></td>
+              </tr>;
+            })}</tbody>
+          </table></div>
+        </div>
       )}
 
-      {view === "setup" && canManageSetup && (
-        <div className="panel"><div className="panel-header"><div><h2>Staff Roster Setup</h2><p>Primary department is required. Select two or more departments when the staff member works in multiple departments.</p></div></div><div className="table-scroll"><table><thead><tr><th>Name</th><th>Staff Number</th><th>Category</th><th>Department(s)</th><th>Marital Status</th><th>Allowed Shifts</th><th>Action</th></tr></thead><tbody>{staff.map((person)=><tr key={person.id}><td>{person.name}</td><td>{person.staffId}</td><td>{person.category||"Staff"}</td><td>{(person.departments||[person.department]).join(", ")}</td><td>{person.maritalStatus||"Single"}</td><td>{(person.allowedShifts||shifts).join(", ")}</td><td><button className="small-button" onClick={()=>openSetup(person)}>Setup</button></td></tr>)}</tbody></table></div></div>
+      {view === "setup" && (
+        <div className="panel">
+          <div className="panel-header"><div><h2>Staff Roster Setup</h2><p>Assign category and department(s), then set marital status and allowed shifts.</p></div></div>
+          <div className="table-scroll"><table>
+            <thead><tr><th>Name</th><th>Category</th><th>Department(s)</th><th>Marital Status</th><th>Allowed Shifts</th><th>Action</th></tr></thead>
+            <tbody>{staff.map((person) => <tr key={person.id}><td>{person.name}</td><td>{person.category || "Staff"}</td><td>{(person.departments || [person.department]).join(", ")}</td><td>{person.maritalStatus || "Single"}</td><td>{(person.allowedShifts || shifts).join(", ")}</td><td><button className="small-button" onClick={() => openSetup(person)}>Setup</button></td></tr>)}</tbody>
+          </table></div>
+        </div>
       )}
 
-      <div className="panel" style={{ marginTop: 18 }}><h3>Roster Rules</h3><div className="shift-rules"><div><strong>Staff + Volunteers</strong><span>Monthly roster</span></div><div><strong>Students</strong><span>Weekly roster</span></div><div><strong>Morning</strong><span>6 duty days → 1 off</span></div><div><strong>Evening</strong><span>5 duty days → 2 off</span></div><div><strong>Night</strong><span>4 duty days → 3 off</span></div><div><strong>Married Staff</strong><span>Morning + Evening only</span></div><div><strong>HOD</strong><span>Morning + Evening + Night</span></div></div></div>
+      <div className="panel" style={{ marginTop: 18 }}>
+        <h3>Roster Rules</h3>
+        <div className="shift-rules">
+          <div><strong>Staff + Volunteers</strong><span>Monthly roster</span></div>
+          <div><strong>Students</strong><span>Weekly roster</span></div>
+          <div><strong>Morning</strong><span>6 duty days → 1 off</span></div>
+          <div><strong>Evening</strong><span>5 duty days → 2 off</span></div>
+          <div><strong>Night</strong><span>4 duty days → 3 off</span></div>
+          <div><strong>Married Staff</strong><span>Morning + Evening only</span></div>
+          <div><strong>HOD</strong><span>Morning + Evening + Night</span></div>
+        </div>
+      </div>
 
-      {setupOpen && <Modal title={`Roster Setup — ${staff.find((p)=>p.staffId===selectedStaffId)?.name||"Staff"}`} onClose={()=>setSetupOpen(false)}><div className="form-grid"><FormField label="Category"><select value={setup.category} onChange={(e)=>setSetup({...setup,category:e.target.value})}>{categories.map((c)=><option key={c}>{c}</option>)}</select></FormField><FormField label="Marital Status"><select value={setup.maritalStatus} onChange={(e)=>setSetup({...setup,maritalStatus:e.target.value})}><option>Single</option><option>Married</option></select></FormField></div><label className="permission-item" style={{marginBottom:14}}><input type="checkbox" checked={setup.isHOD} onChange={(e)=>setSetup({...setup,isHOD:e.target.checked})}/> <span>HOD — always Morning + Evening + Night</span></label><div className="field"><label>Department(s) — click two or more when needed</label><div className="button-row">{[...departments,...rosterOnlyDepartments].filter((d)=>!['General Cashier','In-Charge'].includes(d)).map((d)=><button type="button" key={d} className={`small-button ${setup.departments.includes(d)?'primary':''}`} onClick={()=>setSetup({...setup,departments:setup.departments.includes(d)?setup.departments.filter((x)=>x!==d):[...setup.departments,d]})}>{d}</button>)}</div></div><div className="field"><label>Allowed Shifts</label><div className="button-row">{shifts.map((sh)=><button type="button" key={sh} className={`small-button ${setup.allowedShifts.includes(sh)?'primary':''}`} onClick={()=>setSetup({...setup,allowedShifts:setup.allowedShifts.includes(sh)?setup.allowedShifts.filter((x)=>x!==sh):[...setup.allowedShifts,sh]})}>{sh}</button>)}</div></div><div className="modal-actions"><button className="button secondary" onClick={()=>setSetupOpen(false)}>Cancel</button><button className="button primary" onClick={saveSetup}>Save Setup</button></div></Modal>}
+      {setupOpen && (
+        <Modal title={`Roster Setup — ${staff.find((p) => p.staffId === selectedStaffId)?.name || "Staff"}`} onClose={() => setSetupOpen(false)}>
+          <div className="form-grid">
+            <FormField label="Category"><select value={setup.category} onChange={(e) => setSetup({ ...setup, category: e.target.value })}>{categories.map((c) => <option key={c}>{c}</option>)}</select></FormField>
+            <FormField label="Marital Status"><select value={setup.maritalStatus} onChange={(e) => setSetup({ ...setup, maritalStatus: e.target.value })}><option>Single</option><option>Married</option></select></FormField>
+          </div>
+          <label className="permission-item" style={{ marginBottom: 14 }}><input type="checkbox" checked={setup.isHOD} onChange={(e) => setSetup({ ...setup, isHOD: e.target.checked })} /> <span>HOD — always Morning + Evening + Night</span></label>
+          <div className="field"><label>Department(s)</label><div className="button-row">{departments.filter((d) => !["General Cashier", "In-Charge"].includes(d)).map((d) => <button type="button" key={d} className={`small-button ${setup.departments.includes(d) ? "primary" : ""}`} onClick={() => setSetup({ ...setup, departments: setup.departments.includes(d) ? setup.departments.filter((x) => x !== d) : [...setup.departments, d] })}>{d}</button>)}</div></div>
+          <div className="field"><label>Allowed Shifts</label><div className="button-row">{shifts.map((sh) => <button type="button" key={sh} className={`small-button ${setup.allowedShifts.includes(sh) ? "primary" : ""}`} onClick={() => setSetup({ ...setup, allowedShifts: setup.allowedShifts.includes(sh) ? setup.allowedShifts.filter((x) => x !== sh) : [...setup.allowedShifts, sh] })}>{sh}</button>)}</div></div>
+          <div className="modal-actions"><button className="button secondary" onClick={() => setSetupOpen(false)}>Cancel</button><button className="button primary" onClick={saveSetup}>Save Setup</button></div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -4192,9 +4222,24 @@ function SMSNotificationsPage({ patients = [], messages = [], setMessages, curre
 }
 
 function OutpatientPage({ patients = [], visits = [], setVisits, transactions = [], setTransactions, currentUser, showMessage, logAudit }) {
-  const [name, setName] = useState(""); const [phone, setPhone] = useState(""); const [service, setService] = useState(""); const department = currentUser?.department || "Outpatient Services"; const [amount, setAmount] = useState(0); const [paymentStatus, setPaymentStatus] = useState("Pending");
-  const save = () => { if(!name.trim() || !service.trim()) return showMessage?.("Cika sunan patient da service."); const visitNo=`OP-${Date.now()}`; const visit={id:Date.now(),visitNo,patientName:name.trim(),phone,service:service.trim(),department,amount:Number(amount||0),paymentStatus,paymentMethod:paymentStatus==="FREE"?"FREE":"Cash",date:new Date().toLocaleString(),createdBy:currentUser?.name||"System"}; setVisits(prev=>[visit,...prev]); if(Number(amount||0)>0){setTransactions(prev=>[{id:`TRX-${Date.now()}`,transactionNo:`TRX-${Date.now()}`,department,patientName:name.trim(),card:"OUTPATIENT",service:service.trim(),amount:Number(amount||0),paymentMethod:paymentStatus==="FREE"?"FREE":"Cash",paymentStatus,cashier:currentUser?.name||"Outpatient",date:new Date().toLocaleString()},...prev]);} logAudit?.("Outpatient Visit","Outpatient Services",`${visitNo} — ${service.trim()}`); showMessage?.(`Outpatient visit ${visitNo} an ajiye.`); setName(""); setPhone(""); setService(""); setAmount(0); };
-  return <div><PageHeader title="Outpatient Services" subtitle="Visits/transactions for patients who do not require a full hospital admission profile" icon="O" /><div className="card"><h2>New Outpatient Visit</h2><div className="form-grid"><FormField label="Patient Name"><input value={name} onChange={e=>setName(e.target.value)} placeholder="Patient name" /></FormField><FormField label="Phone"><input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Phone number" /></FormField><FormField label="Department"><input value={department} readOnly /></FormField><FormField label="Service"><input value={service} onChange={e=>setService(e.target.value)} placeholder="Service / test / medicine" /></FormField><FormField label="Amount"><input type="number" min="0" value={amount} onChange={e=>setAmount(e.target.value)} /></FormField><FormField label="Payment Status"><select value={paymentStatus} onChange={e=>setPaymentStatus(e.target.value)}><option>Pending</option><option>Paid</option><option>FREE</option></select></FormField></div><button className="button primary" onClick={save}>Create Outpatient Visit</button></div><div className="card"><h2>Outpatient History</h2><div className="table-scroll"><table><thead><tr><th>Visit #</th><th>Patient</th><th>Department</th><th>Service</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>{visits.length?visits.map(v=><tr key={v.id}><td>{v.visitNo}</td><td>{v.patientName}</td><td>{v.department}</td><td>{v.service}</td><td>₦{Number(v.amount||0).toLocaleString()}</td><td>{v.paymentStatus}</td><td>{v.date}</td></tr>):<tr><td colSpan="7">No outpatient visit.</td></tr>}</tbody></table></div></div></div>;
+  const department = currentUser?.department || "";
+  const serviceCatalog = {
+    "Records Unit":["Card Registration","File Opening","Card + File"],
+    "Nursing Unit":["Vital Signs","Nursing Assessment","Injection","Wound Care","Other"],
+    "Consultant Room":["Consultation","Follow-up","Other"],
+    "Laboratory Unit":["Malaria Test","Full Blood Count (FBC)","Urinalysis","Blood Group","Widal Test","Pregnancy Test","Other"],
+    "Pharmacy Unit":["Paracetamol 500mg","Amoxicillin 500mg","Metronidazole 400mg","Other"],
+    "Ultrasound Room":["Abdominal Ultrasound","Pelvic Ultrasound","Obstetric Ultrasound","Other"],
+    "Male Ward":["Ward Service","Bed Service","Other"], "Female Ward":["Ward Service","Bed Service","Other"], "Maternity Ward":["Antenatal Service","Delivery Service","Postnatal Service","Other"], "Child Ward":["Child Ward Service","Other"], "Labour Room":["Labour Monitoring","Delivery Service","Other"],
+    "Immunization Unit":["BCG","OPV","Pentavalent","Measles","Yellow Fever","Other"],
+    "Family Planning Unit":["Counselling","Contraceptive Service","Implant","IUCD","Injectable","Other"],
+    "Adolescent Unit":["Adolescent Counselling","Health Education","Follow-up","Mental Wellbeing Check","Other"]
+  };
+  const services=serviceCatalog[department]||["Other"];
+  const [name,setName]=useState(""); const [phone,setPhone]=useState(""); const [service,setService]=useState(services[0]||"Other"); const [amount,setAmount]=useState(0); const [paymentStatus,setPaymentStatus]=useState("Pending");
+  const save=()=>{ if(!department||department==="General Cashier") return showMessage?.("Outpatient yana aiki ne na department na staff."); if(!name.trim()||!service) return showMessage?.("Cika sunan patient da service."); const visitNo=`OP-${Date.now()}`; const visit={id:Date.now(),visitNo,patientName:name.trim(),phone,department,service,amount:Number(amount||0),paymentStatus,paymentMethod:paymentStatus==="FREE"?"FREE":"Cash",date:new Date().toLocaleString(),createdBy:currentUser?.name||"System"}; setVisits(prev=>[visit,...prev]); if(Number(amount||0)>0){setTransactions(prev=>[{id:`TRX-${Date.now()}`,transactionNo:`TRX-${Date.now()}`,department,patientName:name.trim(),card:"OUTPATIENT",service,amount:Number(amount||0),paymentMethod:paymentStatus==="FREE"?"FREE":"Cash",paymentStatus,cashier:currentUser?.name||department,date:new Date().toLocaleString()},...prev]);} logAudit?.("Outpatient Visit",department,`${visitNo} — ${service}`); showMessage?.(`Outpatient ${visitNo} an ajiye a ${department}.`); setName("");setPhone("");setAmount(0);setPaymentStatus("Pending");setService(services[0]||"Other"); };
+  const ownVisits=visits.filter(v=>v.department===department);
+  return <div><PageHeader title="Outpatient Services" subtitle={`Ayyukan outpatient na ${department} kawai`} icon="O"/><div className="card"><h2>New Outpatient Visit</h2><div className="form-grid"><FormField label="Patient Name"><input value={name} onChange={e=>setName(e.target.value)} placeholder="Patient name"/></FormField><FormField label="Phone"><input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Phone number"/></FormField><FormField label="Department"><input value={department} readOnly /></FormField><FormField label="Service"><select value={service} onChange={e=>setService(e.target.value)}>{services.map(x=><option key={x}>{x}</option>)}</select></FormField><FormField label="Amount"><input type="number" min="0" value={amount} onChange={e=>setAmount(e.target.value)}/></FormField><FormField label="Payment Status"><select value={paymentStatus} onChange={e=>setPaymentStatus(e.target.value)}><option>Pending</option><option>Paid</option><option>FREE</option></select></FormField></div><button className="button primary" onClick={save}>Create Outpatient Visit</button></div><div className="card"><h2>Outpatient History — {department}</h2><div className="table-scroll"><table><thead><tr><th>Visit #</th><th>Patient</th><th>Department</th><th>Service</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>{ownVisits.length?ownVisits.map(v=><tr key={v.id}><td>{v.visitNo}</td><td>{v.patientName}</td><td>{v.department}</td><td>{v.service}</td><td>₦{Number(v.amount||0).toLocaleString()}</td><td>{v.paymentStatus}</td><td>{v.date}</td></tr>):<tr><td colSpan="7">No outpatient visit in this department.</td></tr>}</tbody></table></div></div></div>;
 }
 
 function ReceptionPage({ queue = [], setQueue, currentUser, showMessage }) {
