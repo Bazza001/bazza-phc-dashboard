@@ -513,6 +513,7 @@ function App() {
 
     if (
       !staffForm.name.trim() ||
+      !staffForm.username.trim() ||
       !staffForm.password.trim()
     ) {
       showMessage("Cika dukkan muhimman bayanai.");
@@ -922,6 +923,11 @@ function App() {
               patients={patients}
               setPatients={setPatients}
               showMessage={showMessage}
+              currentUser={currentUser}
+              staff={staff}
+              openAddStaff={openAddStaff}
+              openEditStaff={openEditStaff}
+              deleteStaff={deleteStaff}
             />
           )}
 
@@ -1549,7 +1555,7 @@ function DashboardPage({ currentUser, patients, staff, attendance = [], setAtten
   );
 }
 
-function ICTPage({ patients, setPatients, showMessage }) {
+function ICTPage({ patients, setPatients, showMessage, currentUser, staff = [], openAddStaff, openEditStaff, deleteStaff }) {
   const [form, setForm] = useState({
     surname: "",
     otherNames: "",
@@ -1581,155 +1587,73 @@ function ICTPage({ patients, setPatients, showMessage }) {
     };
 
     setPatients((prev) => [...prev, newPatient]);
-
-    setForm({
-      surname: "",
-      otherNames: "",
-      age: "",
-      address: "",
-      phone: "",
-      sex: "Female",
-      spouse: "",
-    });
-
+    setForm({ surname: "", otherNames: "", age: "", address: "", phone: "", sex: "Female", spouse: "" });
     showMessage(`An yi registration. Card Number: ${newPatient.card}`);
   };
 
+  const canManageStaff = currentUser?.role === "Super Admin" || currentUser?.role === "ICT Staff";
+  const ownDepartmentStaff = staff.filter((person) => (person.departments || [person.department]).includes("ICT Centre"));
+
   return (
     <div>
-      <PageHeader
-        title="ICT Centre"
-        subtitle="Patient registration and central information technology services"
-        icon="▣"
-      />
+      <PageHeader title="ICT Centre" subtitle="Patient registration, staff management and central information technology services" icon="▣" />
 
       <div className="stats-grid">
         <StatCard title="Patients" value={patients.length} icon="♙" />
         <StatCard title="New Today" value="12" icon="+" />
-        <StatCard title="SMS Sent" value="38" icon="✉" />
+        <StatCard title="ICT Staff" value={ownDepartmentStaff.length} icon="♟" />
         <StatCard title="System Status" value="Online" icon="●" />
       </div>
 
-      <div className="panel">
-        <div className="panel-header">
-          <div>
-            <h2>Register New Patient</h2>
-            <p>ICT creates the shared Patient/Card Number.</p>
+      {canManageStaff && (
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <h2>ICT Staff Management</h2>
+              <p>Add and manage hospital staff from ICT. Username is generated from the staff name.</p>
+            </div>
+            <button className="button primary" onClick={openAddStaff}>+ Add Staff</button>
+          </div>
+
+          <div className="table-scroll">
+            <table>
+              <thead><tr><th>Staff Number</th><th>Name</th><th>Username</th><th>Primary Department</th><th>Department(s)</th><th>Role</th><th>Action</th></tr></thead>
+              <tbody>
+                {ownDepartmentStaff.length ? ownDepartmentStaff.map((person) => (
+                  <tr key={person.id}>
+                    <td>{person.staffId}</td>
+                    <td>{person.name}</td>
+                    <td>{person.username}</td>
+                    <td>{person.department}</td>
+                    <td>{(person.departments || [person.department]).join(", ")}</td>
+                    <td>{person.role}</td>
+                    <td><div className="table-actions"><button className="small-button" onClick={() => openEditStaff(person)}>Edit</button>{person.role !== "Super Admin" && <button className="small-button" onClick={() => deleteStaff(person)}>Delete</button>}</div></td>
+                  </tr>
+                )) : <tr><td colSpan="7">No ICT staff found.</td></tr>}
+              </tbody>
+            </table>
           </div>
         </div>
+      )}
 
+      <div className="panel">
+        <div className="panel-header"><div><h2>Register New Patient</h2><p>ICT creates the shared Patient/Card Number.</p></div></div>
         <form onSubmit={registerPatient}>
           <div className="form-grid">
-            <FormField label="Surname">
-              <input
-                value={form.surname}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    surname: e.target.value,
-                  })
-                }
-                placeholder="Surname"
-              />
-            </FormField>
-
-            <FormField label="Other Names">
-              <input
-                value={form.otherNames}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    otherNames: e.target.value,
-                  })
-                }
-                placeholder="Other names"
-              />
-            </FormField>
-
-            <FormField label="Age">
-              <input
-                value={form.age}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    age: e.target.value,
-                  })
-                }
-                placeholder="Age"
-              />
-            </FormField>
-
-            <FormField label="Address">
-              <input
-                value={form.address}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    address: e.target.value,
-                  })
-                }
-                placeholder="Residential address"
-              />
-            </FormField>
-
-            <FormField label="Phone Number">
-              <input
-                value={form.phone}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    phone: e.target.value,
-                  })
-                }
-                placeholder="Phone number"
-              />
-            </FormField>
-
-            <FormField label="Sex / Gender">
-              <select
-                value={form.sex}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    sex: e.target.value,
-                  })
-                }
-              >
-                <option>Female</option>
-                <option>Male</option>
-              </select>
-            </FormField>
-
-            <FormField label="Spouse Name (if applicable)">
-              <input
-                value={form.spouse}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    spouse: e.target.value,
-                  })
-                }
-                placeholder="Spouse name"
-              />
-            </FormField>
+            <FormField label="Surname"><input value={form.surname} onChange={(e)=>setForm({...form,surname:e.target.value})} placeholder="Surname" /></FormField>
+            <FormField label="Other Names"><input value={form.otherNames} onChange={(e)=>setForm({...form,otherNames:e.target.value})} placeholder="Other names" /></FormField>
+            <FormField label="Age"><input value={form.age} onChange={(e)=>setForm({...form,age:e.target.value})} placeholder="Age" /></FormField>
+            <FormField label="Address"><input value={form.address} onChange={(e)=>setForm({...form,address:e.target.value})} placeholder="Residential address" /></FormField>
+            <FormField label="Phone Number"><input value={form.phone} onChange={(e)=>setForm({...form,phone:e.target.value})} placeholder="Phone number" /></FormField>
+            <FormField label="Sex / Gender"><select value={form.sex} onChange={(e)=>setForm({...form,sex:e.target.value})}><option>Female</option><option>Male</option></select></FormField>
+            <FormField label="Spouse Name (if applicable)"><input value={form.spouse} onChange={(e)=>setForm({...form,spouse:e.target.value})} placeholder="Spouse name" /></FormField>
           </div>
-
-          <div className="modal-actions left">
-            <button className="button primary" type="submit">
-              Register Patient
-            </button>
-          </div>
+          <div className="modal-actions left"><button className="button primary" type="submit">Register Patient</button></div>
         </form>
       </div>
 
       <div className="panel recent-panel">
-        <div className="panel-header">
-          <div>
-            <h2>Patient Registry</h2>
-            <p>Search and view registered patients.</p>
-          </div>
-        </div>
-
+        <div className="panel-header"><div><h2>Patient Registry</h2><p>Search and view registered patients.</p></div></div>
         <PatientTable patients={patients} />
       </div>
     </div>
@@ -3018,7 +2942,6 @@ function RosterPage({
         <button className={`button ${view === "department" ? "primary" : "secondary"}`} onClick={() => setView("department")}>Department Roster</button>
         {canManageAttendanceHere && <button className={`button ${view === "attendance" ? "primary" : "secondary"}`} onClick={() => setView("attendance")}>Sign In / Sign Out</button>}
         {canManageSetup && <button className={`button ${view === "setup" ? "primary" : "secondary"}`} onClick={() => setView("setup")}>Staff Roster Setup</button>}
-        {canManageSetup && <button className="button primary" onClick={openAddStaff}>+ Add Staff</button>}
       </div>
 
       {(view === "general" || view === "department") && (
@@ -4268,183 +4191,10 @@ function SMSNotificationsPage({ patients = [], messages = [], setMessages, curre
   return <div><PageHeader title="SMS / Notifications" subtitle="Patient messages using phone number saved by ICT" icon="✉" /><div className="card"><h2>Send Patient SMS</h2><div className="form-grid"><FormField label="Patient"><select value={card} onChange={e=>setCard(e.target.value)}><option value="">Select patient</option>{patients.map(p=><option key={p.id} value={p.card}>{p.name} — {p.card} — {p.phone || p.phoneNumber || "No phone"}</option>)}</select></FormField><FormField label="Template"><select value={template} onChange={e=>setTemplate(e.target.value)}>{templates.map(t=><option key={t}>{t}</option>)}</select></FormField><FormField label="Additional Message"><textarea rows="4" value={extra} onChange={e=>setExtra(e.target.value)} placeholder="Additional message..." /></FormField></div><button className="button primary" onClick={send}>Prepare SMS</button></div><div className="card"><h2>SMS History</h2><div className="table-scroll"><table><thead><tr><th>Patient</th><th>Phone</th><th>Template</th><th>Message</th><th>Date</th><th>Sender</th></tr></thead><tbody>{messages.length ? messages.map(m=><tr key={m.id}><td>{m.patientName}<br/>{m.card}</td><td>{m.phone}</td><td>{m.template}</td><td>{m.message || "—"}</td><td>{m.date}</td><td>{m.sender}</td></tr>) : <tr><td colSpan="6">No SMS history.</td></tr>}</tbody></table></div></div></div>;
 }
 
-function OutpatientPage({
-  patients = [],
-  visits = [],
-  setVisits,
-  transactions = [],
-  setTransactions,
-  currentUser,
-  showMessage,
-  logAudit,
-}) {
-  const department = currentUser?.department || currentUser?.departments?.[0] || "";
-
-  const serviceOptions = {
-    "ICT Centre": ["Patient Registration", "Card Number Service", "Patient Profile Update", "Other"],
-    "Records Unit": ["Card", "File", "Card + File", "Patient Record Update", "Other"],
-    "Nursing Unit": ["Nursing Assessment", "Vital Signs", "Wound Care", "Patient Education", "Other"],
-    "Consultant Room": ["General Consultation", "Follow-up Consultation", "Other"],
-    "Laboratory Unit": ["Malaria Test", "Full Blood Count (FBC)", "Urinalysis", "Blood Group", "Widal Test", "Pregnancy Test", "Other"],
-    "Pharmacy Unit": ["Prescription Dispensing", "Over-the-Counter Medicine", "Other"],
-    "Ultrasound Room": ["Abdominal Ultrasound", "Pelvic Ultrasound", "Obstetric Ultrasound", "Other"],
-    "Male Ward": ["Ward Review", "Nursing Service", "Other"],
-    "Female Ward": ["Ward Review", "Nursing Service", "Other"],
-    "Maternity Ward": ["Antenatal Review", "Postnatal Review", "Maternity Service", "Other"],
-    "Child Ward": ["Child Ward Review", "Nursing Service", "Other"],
-    "Labour Room": ["Labour Assessment", "Labour Monitoring", "Delivery Service", "Other"],
-    "Immunization Unit": ["BCG", "OPV", "Pentavalent", "Measles", "Yellow Fever", "Other"],
-    "Family Planning Unit": ["Counselling", "Contraceptive Service", "Implant", "IUCD", "Injectable", "Other"],
-    "Adolescent Unit": ["Adolescent Counselling", "Health Education", "Follow-up", "Mental Wellbeing Check", "Other"],
-  };
-
-  const services = serviceOptions[department] || ["General Service", "Other"];
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [service, setService] = useState(services[0] || "");
-  const [otherService, setOtherService] = useState("");
-  const [amount, setAmount] = useState(0);
-  const [paymentStatus, setPaymentStatus] = useState("Pending");
-
-  useEffect(() => {
-    setService(services[0] || "");
-    setOtherService("");
-  }, [department]);
-
-  const ownVisits = visits.filter((v) => v.department === department);
-  const selectedService = service === "Other" ? otherService.trim() : service;
-
-  const save = () => {
-    if (!department) return showMessage?.("An kasa department na staff ba.");
-    if (!name.trim()) return showMessage?.("Cika sunan patient.");
-    if (!selectedService) return showMessage?.("Zaɓi service ɗin wannan department.");
-
-    const visitNo = `OP-${Date.now()}`;
-    const numericAmount = Number(amount || 0);
-    const visit = {
-      id: Date.now(),
-      visitNo,
-      patientName: name.trim(),
-      phone: phone.trim(),
-      service: selectedService,
-      department,
-      amount: numericAmount,
-      paymentStatus,
-      paymentMethod: paymentStatus === "FREE" ? "FREE" : "Cash",
-      date: new Date().toLocaleString(),
-      createdBy: currentUser?.name || "System",
-    };
-
-    setVisits((prev) => [visit, ...prev]);
-
-    if (numericAmount > 0) {
-      setTransactions((prev) => [
-        {
-          id: `TRX-${Date.now()}`,
-          transactionNo: `TRX-${Date.now()}`,
-          department,
-          patientName: name.trim(),
-          card: "OUTPATIENT",
-          service: selectedService,
-          amount: numericAmount,
-          paymentMethod: paymentStatus === "FREE" ? "FREE" : "Cash",
-          paymentStatus,
-          cashier: currentUser?.name || "Outpatient",
-          date: new Date().toLocaleString(),
-        },
-        ...prev,
-      ]);
-    }
-
-    logAudit?.("Outpatient Visit", "Outpatient Services", `${visitNo} — ${selectedService} — ${department}`);
-    showMessage?.(`Outpatient visit ${visitNo} an ajiye a ${department}.`);
-
-    setName("");
-    setPhone("");
-    setService(services[0] || "");
-    setOtherService("");
-    setAmount(0);
-    setPaymentStatus("Pending");
-  };
-
-  return (
-    <div>
-      <PageHeader
-        title={`Outpatient Services — ${department || "Department"}`}
-        subtitle="Wannan department yana ganin kuma yana yin outpatient na kansa kawai. Ba a zaɓar department daga nan."
-        icon="O"
-      />
-
-      <div className="card">
-        <h2>New Outpatient Visit</h2>
-        <p className="muted">
-          Department: <strong>{department || "—"}</strong>
-        </p>
-
-        <div className="form-grid">
-          <FormField label="Patient Name">
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Patient name" />
-          </FormField>
-
-          <FormField label="Phone">
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone number" />
-          </FormField>
-
-          <FormField label="Service / Item">
-            <select value={service} onChange={(e) => setService(e.target.value)}>
-              {services.map((item) => <option key={item}>{item}</option>)}
-            </select>
-          </FormField>
-
-          {service === "Other" && (
-            <FormField label="Other Service">
-              <input value={otherService} onChange={(e) => setOtherService(e.target.value)} placeholder="Rubuta service na wannan department" />
-            </FormField>
-          )}
-
-          <FormField label="Amount">
-            <input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          </FormField>
-
-          <FormField label="Payment Status">
-            <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)}>
-              <option>Pending</option>
-              <option>Paid</option>
-              <option>FREE</option>
-            </select>
-          </FormField>
-        </div>
-
-        <button className="button primary" onClick={save}>Create Outpatient Visit</button>
-      </div>
-
-      <div className="card">
-        <h2>Outpatient History — {department || "Department"}</h2>
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr><th>Visit #</th><th>Patient</th><th>Department</th><th>Service</th><th>Amount</th><th>Status</th><th>Date</th></tr>
-            </thead>
-            <tbody>
-              {ownVisits.length ? ownVisits.map((v) => (
-                <tr key={v.id}>
-                  <td>{v.visitNo}</td>
-                  <td>{v.patientName}</td>
-                  <td>{v.department}</td>
-                  <td>{v.service}</td>
-                  <td>₦{Number(v.amount || 0).toLocaleString()}</td>
-                  <td>{v.paymentStatus}</td>
-                  <td>{v.date}</td>
-                </tr>
-              )) : (
-                <tr><td colSpan="7">No outpatient visit na wannan department.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
+function OutpatientPage({ patients = [], visits = [], setVisits, transactions = [], setTransactions, currentUser, showMessage, logAudit }) {
+  const [name, setName] = useState(""); const [phone, setPhone] = useState(""); const [service, setService] = useState(""); const department = currentUser?.department || "Outpatient Services"; const [amount, setAmount] = useState(0); const [paymentStatus, setPaymentStatus] = useState("Pending");
+  const save = () => { if(!name.trim() || !service.trim()) return showMessage?.("Cika sunan patient da service."); const visitNo=`OP-${Date.now()}`; const visit={id:Date.now(),visitNo,patientName:name.trim(),phone,service:service.trim(),department,amount:Number(amount||0),paymentStatus,paymentMethod:paymentStatus==="FREE"?"FREE":"Cash",date:new Date().toLocaleString(),createdBy:currentUser?.name||"System"}; setVisits(prev=>[visit,...prev]); if(Number(amount||0)>0){setTransactions(prev=>[{id:`TRX-${Date.now()}`,transactionNo:`TRX-${Date.now()}`,department,patientName:name.trim(),card:"OUTPATIENT",service:service.trim(),amount:Number(amount||0),paymentMethod:paymentStatus==="FREE"?"FREE":"Cash",paymentStatus,cashier:currentUser?.name||"Outpatient",date:new Date().toLocaleString()},...prev]);} logAudit?.("Outpatient Visit","Outpatient Services",`${visitNo} — ${service.trim()}`); showMessage?.(`Outpatient visit ${visitNo} an ajiye.`); setName(""); setPhone(""); setService(""); setAmount(0); };
+  return <div><PageHeader title="Outpatient Services" subtitle="Visits/transactions for patients who do not require a full hospital admission profile" icon="O" /><div className="card"><h2>New Outpatient Visit</h2><div className="form-grid"><FormField label="Patient Name"><input value={name} onChange={e=>setName(e.target.value)} placeholder="Patient name" /></FormField><FormField label="Phone"><input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Phone number" /></FormField><FormField label="Department"><input value={department} readOnly /></FormField><FormField label="Service"><input value={service} onChange={e=>setService(e.target.value)} placeholder="Service / test / medicine" /></FormField><FormField label="Amount"><input type="number" min="0" value={amount} onChange={e=>setAmount(e.target.value)} /></FormField><FormField label="Payment Status"><select value={paymentStatus} onChange={e=>setPaymentStatus(e.target.value)}><option>Pending</option><option>Paid</option><option>FREE</option></select></FormField></div><button className="button primary" onClick={save}>Create Outpatient Visit</button></div><div className="card"><h2>Outpatient History</h2><div className="table-scroll"><table><thead><tr><th>Visit #</th><th>Patient</th><th>Department</th><th>Service</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>{visits.length?visits.map(v=><tr key={v.id}><td>{v.visitNo}</td><td>{v.patientName}</td><td>{v.department}</td><td>{v.service}</td><td>₦{Number(v.amount||0).toLocaleString()}</td><td>{v.paymentStatus}</td><td>{v.date}</td></tr>):<tr><td colSpan="7">No outpatient visit.</td></tr>}</tbody></table></div></div></div>;
 }
 
 function ReceptionPage({ queue = [], setQueue, currentUser, showMessage }) {
