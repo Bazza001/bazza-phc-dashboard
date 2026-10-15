@@ -1787,7 +1787,7 @@ function RecordsPage({ patients, setPatients, showMessage, setTransactions, tran
   const results = patients.filter((patient) => {
     const q = search.toLowerCase().trim();
 
-    if (!q || patient.admissionApproved !== true) return false;
+    if (!q) return false;
 
     return (
       String(patient.card || "").toLowerCase().includes(q) ||
@@ -1801,11 +1801,6 @@ function RecordsPage({ patients, setPatients, showMessage, setTransactions, tran
       showMessage("Da farko nemo patient.");
       return;
     }
-    if (selectedPatient.admissionApproved !== true) {
-      showMessage("Records ba zai yi transaction ko kammala patient file ba sai Consultant ya amince da admission.");
-      return;
-    }
-
     if (!service) {
       showMessage("Zaɓi Card, File ko Card + File.");
       return;
@@ -1884,7 +1879,7 @@ function RecordsPage({ patients, setPatients, showMessage, setTransactions, tran
 
       <div className="card">
         <h2>Search Patient</h2>
-        <p>Nemo mara lafiya ne bayan Consultant ya amince da admission. Records ba zai kammala file ko yin transaction na wannan patient kafin amincewar Consultant ba.</p>
+        <p>Nemo mara lafiya da ICT ya riga ya yi wa rajista. Records zai iya kammala bayanan outpatient; inpatient sai Consultant ya amince kuma ya sanya ward da gado.</p>
 
         <input
           className="search"
@@ -2020,7 +2015,7 @@ function RecordsPage({ patients, setPatients, showMessage, setTransactions, tran
 function RecordsIntakePanel({ patients = [], setPatients, visits = [], setVisits, setTransactions, currentUser, showMessage }) {
   const [patientId, setPatientId] = useState("");
   const [patientSearch, setPatientSearch] = useState("");
-  const [visitType, setVisitType] = useState("Inpatient");
+  const [visitType, setVisitType] = useState("Outpatient");
   const [service, setService] = useState("General Consultation");
   const [amount, setAmount] = useState(0);
   const [paymentStatus, setPaymentStatus] = useState("Pending");
@@ -2033,70 +2028,91 @@ function RecordsIntakePanel({ patients = [], setPatients, visits = [], setVisits
   const [nextOfKin, setNextOfKin] = useState("");
   const [nextOfKinPhone, setNextOfKinPhone] = useState("");
   const [relationship, setRelationship] = useState("");
+  const [caregiverName, setCaregiverName] = useState("");
+  const [caregiverPhone, setCaregiverPhone] = useState("");
+  const [caregiverRelationship, setCaregiverRelationship] = useState("");
   const [allergies, setAllergies] = useState("");
   const [medicalHistory, setMedicalHistory] = useState("");
-  const [intendedWard, setIntendedWard] = useState("Male Ward");
 
-  const eligibleAdmissions = patients.filter((item) => item.admissionApproved === true && item.recordsCompleted !== true && ["Approved - Awaiting Records", "Awaiting Records", "Approved"].includes(item.admissionStatus || item.admission?.status));
-  const selectedPatient = eligibleAdmissions.find((item) => String(item.id) === String(patientId));
+  const hasAssignedBed = (item) => Boolean(item.admissionBed || item.admission?.bed || item.bed);
+  const eligibleAdmissions = patients.filter((item) =>
+    item.admissionApproved === true && item.recordsCompleted !== true && hasAssignedBed(item)
+  );
+  const selectedPatient = patients.find((item) => String(item.id) === String(patientId));
   const recordsVisits = visits.filter((visit) => visit.department === "Records Unit");
-  const wardOptions = ["Male Ward", "Female Ward", "Maternity Ward", "Child Ward", "Labour Room"];
-  const patientSearchResults = eligibleAdmissions.filter((item) => {
+  const patientSearchPool = visitType === "Inpatient" ? eligibleAdmissions : patients;
+  const patientSearchResults = patientSearchPool.filter((item) => {
     const q = patientSearch.trim().toLowerCase();
     if (!q) return false;
-    return [item.card, item.name, item.phone, item.id].some((value) => String(value || "").toLowerCase().includes(q));
+    return [item.card, item.name, item.phone, item.phoneNumber, item.id].some((value) => String(value || "").toLowerCase().includes(q));
   }).slice(0, 12);
 
   const selectPatient = (id) => {
-    setPatientId(id);
-    const chosen = patients.find((item) => String(item.id) === String(id));
-    setPatientSearch(chosen ? `${chosen.card || ""} ${chosen.name || ""}`.trim() : "");
     const person = patients.find((item) => String(item.id) === String(id));
-    setAge(person?.age || "");
-    setAddress(person?.address || "");
-    setPhone(person?.phone && person.phone !== "N/A" ? person.phone : "");
-    setMaritalStatus(person?.maritalStatus || "");
-    setOccupation(person?.occupation || "");
-    setNextOfKin(person?.nextOfKin || "");
-    setNextOfKinPhone(person?.nextOfKinPhone || "");
-    setRelationship(person?.nextOfKinRelationship || "");
-    setAllergies(person?.allergies || "");
-    setMedicalHistory(person?.medicalHistory || "");
+    if (!person) return;
+    setPatientId(id);
+    setPatientSearch(`${person.card || ""} ${person.name || ""}`.trim());
+    setAge(person.age || "");
+    setAddress(person.address || "");
+    setPhone(person.phone && person.phone !== "N/A" ? person.phone : person.phoneNumber || "");
+    setMaritalStatus(person.maritalStatus || "");
+    setOccupation(person.occupation || "");
+    setNextOfKin(person.nextOfKin || "");
+    setNextOfKinPhone(person.nextOfKinPhone || "");
+    setRelationship(person.nextOfKinRelationship || "");
+    setCaregiverName(person.caregiverName || person.attendantName || "");
+    setCaregiverPhone(person.caregiverPhone || person.attendantPhone || "");
+    setCaregiverRelationship(person.caregiverRelationship || person.attendantRelationship || "");
+    setAllergies(person.allergies || "");
+    setMedicalHistory(person.medicalHistory || "");
     setReason("");
-    setVisitType("Inpatient");
-    setIntendedWard(chosen?.admissionWard || chosen?.admission?.ward || "Male Ward");
+  };
+
+  const changeVisitType = (type) => {
+    setVisitType(type);
+    setPatientId("");
+    setPatientSearch("");
   };
 
   const resetForm = () => {
-    setPatientId(""); setPatientSearch(""); setVisitType("Inpatient"); setService("General Consultation");
-    setAmount(0); setPaymentStatus("Pending"); setReason(""); setAddress("");
-    setPhone(""); setAge(""); setMaritalStatus(""); setOccupation("");
-    setNextOfKin(""); setNextOfKinPhone(""); setRelationship("");
-    setAllergies(""); setMedicalHistory(""); setIntendedWard("Male Ward");
+    setPatientId(""); setPatientSearch(""); setVisitType("Outpatient"); setService("General Consultation");
+    setAmount(0); setPaymentStatus("Pending"); setReason(""); setAddress(""); setPhone(""); setAge("");
+    setMaritalStatus(""); setOccupation(""); setNextOfKin(""); setNextOfKinPhone(""); setRelationship("");
+    setCaregiverName(""); setCaregiverPhone(""); setCaregiverRelationship(""); setAllergies(""); setMedicalHistory("");
   };
 
   const saveRecordsIntake = () => {
-    if (!selectedPatient || selectedPatient.admissionApproved !== true) return showMessage("Records ba zai kammala file ba sai Consultant ya amince da admission.");
+    if (!selectedPatient) return showMessage("Da farko nemo mara lafiya da ICT ya yi wa rajista.");
+    if (visitType === "Inpatient") {
+      if (selectedPatient.admissionApproved !== true) return showMessage("Inpatient sai Consultant ya amince da admission.");
+      if (!hasAssignedBed(selectedPatient)) return showMessage("Inpatient zai bayyana a Records bayan Consultant ya sanya ward da bed.");
+      if (selectedPatient.recordsCompleted === true) return showMessage("An riga an kammala Records file na wannan admission.");
+    }
     if (!age.trim()) return showMessage("Cika shekarun mara lafiya.");
     if (!address.trim()) return showMessage("Cika adireshin mara lafiya.");
     if (!phone.trim()) return showMessage("Cika lambar wayar mara lafiya.");
     if (!reason.trim()) return showMessage("Rubuta dalilin zuwa asibiti.");
-    if (!intendedWard) return showMessage("Zaɓi ward ɗin da Consultant ya bayar.");
+    if (!caregiverName.trim() && visitType === "Inpatient") return showMessage("Rubuta sunan mai kula da mara lafiya / wanda ya raka shi.");
 
     const now = new Date();
-    const visitNo = `VIS-${now.getTime()}`;
+    const visitNo = `${visitType === "Inpatient" ? "IP" : "OP"}-${now.getTime()}`;
     const numericAmount = Math.max(0, Number(amount) || 0);
+    const assignedWard = selectedPatient.admissionWard || selectedPatient.admission?.ward || "";
+    const assignedBed = selectedPatient.admissionBed || selectedPatient.admission?.bed || selectedPatient.bed || "";
+    const visitStatus = visitType === "Inpatient" ? "Records Completed — Ready for Ward" : "Outpatient Visit Recorded";
     const visit = {
       id: now.getTime(), visitNo, patientId: selectedPatient.id,
       patientName: selectedPatient.name, card: selectedPatient.card || "",
       phone: phone.trim(), department: "Records Unit", visitType,
-      intendedWard: selectedPatient.admissionWard || selectedPatient.admission?.ward || intendedWard,
+      intendedWard: visitType === "Inpatient" ? assignedWard : "Outpatient",
+      bed: visitType === "Inpatient" ? assignedBed : "",
       service: service.trim() || "General Consultation", reason: reason.trim(),
       amount: numericAmount, paymentStatus,
       paymentMethod: paymentStatus === "FREE" ? "FREE" : "Cash",
       notes: medicalHistory.trim(), allergies: allergies.trim(),
-      date: now.toLocaleString(), createdBy: currentUser?.name || "Records Staff",
-      status: "Awaiting Ward Admission"
+      caregiverName: caregiverName.trim(), caregiverPhone: caregiverPhone.trim(), caregiverRelationship: caregiverRelationship.trim(),
+      nextOfKin: nextOfKin.trim(), nextOfKinPhone: nextOfKinPhone.trim(), nextOfKinRelationship: relationship.trim(),
+      date: now.toLocaleString(), createdBy: currentUser?.name || "Records Staff", status: visitStatus
     };
 
     setPatients?.((previous) => previous.map((person) => String(person.id) === String(selectedPatient.id) ? {
@@ -2104,15 +2120,14 @@ function RecordsIntakePanel({ patients = [], setPatients, visits = [], setVisits
       age: age.trim(), address: address.trim(), phone: phone.trim(),
       maritalStatus: maritalStatus.trim(), occupation: occupation.trim(),
       nextOfKin: nextOfKin.trim(), nextOfKinPhone: nextOfKinPhone.trim(),
-      nextOfKinRelationship: relationship.trim(), allergies: allergies.trim(),
-      medicalHistory: medicalHistory.trim(), recordsCompleted: true,
-      recordsCompletedAt: now.toLocaleString(), lastVisitType: visitType,
-      admissionApproved: true,
-      admissionWard: person.admissionWard || person.admission?.ward || intendedWard,
-      admissionStatus: "Awaiting Ward Admission",
-      recordsCompleted: true,
-      recordsCompletedAt: now.toLocaleString(),
-      status: "Awaiting Ward Admission"
+      nextOfKinRelationship: relationship.trim(), caregiverName: caregiverName.trim(),
+      caregiverPhone: caregiverPhone.trim(), caregiverRelationship: caregiverRelationship.trim(),
+      allergies: allergies.trim(), medicalHistory: medicalHistory.trim(),
+      recordsProfileCompleted: true, recordsProfileCompletedAt: now.toLocaleString(),
+      ...(visitType === "Inpatient" ? {
+        recordsCompleted: true, recordsCompletedAt: now.toLocaleString(), lastVisitType: "Inpatient",
+        admissionStatus: "Records Completed — Ready for Ward", status: "Records Completed — Ready for Ward"
+      } : { lastVisitType: "Outpatient", lastRecordsVisitAt: now.toLocaleString() })
     } : person));
 
     setVisits?.((previous) => [visit, ...previous]);
@@ -2122,33 +2137,35 @@ function RecordsIntakePanel({ patients = [], setPatients, visits = [], setVisits
         department: "Records Unit", patientId: selectedPatient.id,
         card: selectedPatient.card || "", patientName: selectedPatient.name,
         service: visit.service, amount: numericAmount,
-        paymentMethod: "Cash", paymentStatus,
-        cashier: currentUser?.name || "Records Staff", date: now.toLocaleString(),
-        visitNo, visitType
+        paymentMethod: paymentStatus === "FREE" ? "FREE" : "Cash", paymentStatus,
+        cashier: currentUser?.name || "Records Staff", date: now.toLocaleString(), visitNo, visitType
       }, ...previous]);
     }
-
-    showMessage(`An kammala inpatient file na ${selectedPatient.name}. An tura shi ${selectedPatient.admissionWard || selectedPatient.admission?.ward || intendedWard} domin ward ta tabbatar da admission da ba shi gado.`);
+    showMessage(visitType === "Inpatient"
+      ? `An kammala file na ${selectedPatient.name}. Ward: ${assignedWard}; Bed: ${assignedBed}.`
+      : `An kammala bayanan outpatient na ${selectedPatient.name}.`);
     resetForm();
   };
 
   return (
     <div className="card" style={{ marginTop: 18 }}>
-      <h2>Records Unit — Complete Patient File & Visit</h2>
-      <p>Records zai iya kammala inpatient file ne kawai bayan Consultant ya amince da admission. ICT ne kawai ke ƙirƙirar Patient/Card Number. Bayan Records ya kammala bayanai, ward za ta duba gado mai available.</p>
-      <div className="access-box"><strong>Admissions Awaiting Records</strong><span>{eligibleAdmissions.length} patient(s) approved by Consultant and waiting for Records completion.</span></div>
+      <h2>Records Unit — Complete Patient Details & Visit</h2>
+      <p>Da zarar ICT ya yi rajistar farko, Records zai iya kammala bayanan mara lafiya da outpatient visit. Inpatient kuwa sai Consultant ya amince da admission kuma ya sanya ward da bed kafin ya bayyana a Records.</p>
       <div className="form-grid">
-        <FormField label="Search Consultant-Approved Patient by Card Number, Name or Phone">
+        <FormField label="Visit Type">
+          <select value={visitType} onChange={(e) => changeVisitType(e.target.value)}><option value="Outpatient">Outpatient</option><option value="Inpatient">Inpatient — Consultant approved with bed</option></select>
+        </FormField>
+        <FormField label="Search ICT-Registered Patient by Card, Name or Phone">
           <input value={patientSearch} onChange={(event) => { setPatientSearch(event.target.value); if (patientId) setPatientId(""); }} placeholder="Misali: BZ-P001, Aisha Musa, ko lambar waya" />
         </FormField>
       </div>
+      {visitType === "Inpatient" && <div className="access-box"><strong>Admissions Awaiting Records</strong><span>{eligibleAdmissions.length} patient(s) Consultant ya amince, kuma an sanya musu bed.</span></div>}
       {patientSearch.trim() && !selectedPatient && <div style={{ marginTop: 10, marginBottom: 16 }}>
-        {patientSearchResults.length ? patientSearchResults.map((item) => <button key={item.id} type="button" className="secondary" style={{ display: "block", width: "100%", textAlign: "left", marginBottom: 8 }} onClick={() => selectPatient(item.id)}><strong>{item.card || "No Card"}</strong> — {item.name} — {item.phone || "No phone"}</button>) : <p>Babu mara lafiya da ya dace. Records na iya zaɓar waɗanda Consultant ya riga ya amince da admission kawai.</p>}
+        {patientSearchResults.length ? patientSearchResults.map((item) => <button key={item.id} type="button" className="secondary" style={{ display: "block", width: "100%", textAlign: "left", marginBottom: 8 }} onClick={() => selectPatient(item.id)}><strong>{item.card || "No Card"}</strong> — {item.name} — {item.phone || item.phoneNumber || "No phone"}{visitType === "Inpatient" ? ` — ${item.admissionWard || item.admission?.ward || "Ward not set"} / ${item.admissionBed || item.admission?.bed || item.bed || "Bed not set"}` : ""}</button>) : <p>{visitType === "Inpatient" ? "Babu inpatient da Consultant ya amince kuma ya sanya masa bed tukuna." : "Ba a sami mara lafiya ba. ICT ne kawai ke ƙirƙirar Patient/Card Number."}</p>}
       </div>}
-      {selectedPatient && <div className="access-box"><strong>Patient selected</strong><span>{selectedPatient.card || "No Card"} — {selectedPatient.name}</span><button type="button" className="secondary" onClick={() => { setPatientId(""); setPatientSearch(""); }}>Change Patient</button></div>}
       {selectedPatient && <>
-        <div className="access-box"><strong>Patient Card Number</strong><span>{selectedPatient.card || "Not assigned"}</span></div>
-        <div className="access-box"><strong>Patient Name</strong><span>{selectedPatient.name}</span></div>
+        <div className="access-box"><strong>Patient</strong><span>{selectedPatient.card || "No Card"} — {selectedPatient.name}</span><button type="button" className="secondary" onClick={() => { setPatientId(""); setPatientSearch(""); }}>Change Patient</button></div>
+        {visitType === "Inpatient" && <div className="access-box"><strong>Consultant Admission</strong><span>{selectedPatient.admissionWard || selectedPatient.admission?.ward || "Ward not set"} — Bed {selectedPatient.admissionBed || selectedPatient.admission?.bed || selectedPatient.bed || "Not assigned"}</span></div>}
         <h3>Complete Patient Details</h3>
         <div className="form-grid">
           <FormField label="Age"><input value={age} onChange={(e) => setAge(e.target.value)} placeholder="Age" /></FormField>
@@ -2158,22 +2175,22 @@ function RecordsIntakePanel({ patients = [], setPatients, visits = [], setVisits
           <FormField label="Occupation"><input value={occupation} onChange={(e) => setOccupation(e.target.value)} placeholder="Occupation" /></FormField>
           <FormField label="Next of Kin / Relative"><input value={nextOfKin} onChange={(e) => setNextOfKin(e.target.value)} placeholder="Full name" /></FormField>
           <FormField label="Next of Kin Phone"><input value={nextOfKinPhone} onChange={(e) => setNextOfKinPhone(e.target.value)} placeholder="Phone number" /></FormField>
-          <FormField label="Relationship"><input value={relationship} onChange={(e) => setRelationship(e.target.value)} placeholder="e.g. Spouse, Parent" /></FormField>
+          <FormField label="Next of Kin Relationship"><input value={relationship} onChange={(e) => setRelationship(e.target.value)} placeholder="Spouse, Parent, etc." /></FormField>
+          <FormField label="Person Caring for / Accompanying Patient"><input value={caregiverName} onChange={(e) => setCaregiverName(e.target.value)} placeholder="Full name of caregiver" /></FormField>
+          <FormField label="Caregiver Phone"><input value={caregiverPhone} onChange={(e) => setCaregiverPhone(e.target.value)} placeholder="Caregiver phone number" /></FormField>
+          <FormField label="Caregiver Relationship"><input value={caregiverRelationship} onChange={(e) => setCaregiverRelationship(e.target.value)} placeholder="Relative, spouse, parent..." /></FormField>
           <FormField label="Known Allergies"><input value={allergies} onChange={(e) => setAllergies(e.target.value)} placeholder="None known / list allergies" /></FormField>
           <FormField label="Medical History (if known)"><input value={medicalHistory} onChange={(e) => setMedicalHistory(e.target.value)} placeholder="Relevant history" /></FormField>
-          <FormField label="Reason for Visit"><input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason / presenting complaint" /></FormField>
-          <FormField label="Service"><input value={service} onChange={(e) => setService(e.target.value)} placeholder="General consultation" /></FormField>
-          <FormField label="Visit Type"><input value="Inpatient — Consultant approved" readOnly /></FormField>
-          <FormField label="Consultant-Approved Ward"><input value={selectedPatient.admissionWard || selectedPatient.admission?.ward || intendedWard} readOnly /></FormField>
+          <FormField label="Reason for Visit / Admission"><input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Presenting complaint" /></FormField>
+          <FormField label="Service / Consultation"><input value={service} onChange={(e) => setService(e.target.value)} placeholder="General consultation" /></FormField>
           <FormField label="Amount (₦)"><input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} /></FormField>
           <FormField label="Payment Status"><select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)}><option>Pending</option><option>Paid</option><option>FREE</option></select></FormField>
         </div>
-        <button className="button primary" onClick={saveRecordsIntake}>Complete Inpatient File & Send to Ward</button>
-        <p style={{ marginTop: 10 }}>Records ba ya amincewa da admission kuma ba ya ba da gado. Bayan kammala file, ward ɗin zai tabbatar da gado mai available sannan ya yi assignment.</p>
+        <button className="button primary" onClick={saveRecordsIntake}>{visitType === "Inpatient" ? "Complete Inpatient File" : "Complete Records & Save Outpatient Visit"}</button>
       </>}
       <h3 style={{ marginTop: 22 }}>Patient Visit / Records History ({recordsVisits.length})</h3>
-      <div className="table-scroll"><table><thead><tr><th>Visit No.</th><th>Patient</th><th>Card</th><th>Type</th><th>Ward</th><th>Reason</th><th>Status</th><th>Date</th></tr></thead>
-        <tbody>{recordsVisits.length ? recordsVisits.map((visit) => <tr key={visit.id}><td>{visit.visitNo}</td><td>{visit.patientName}</td><td>{visit.card || "—"}</td><td>{visit.visitType || "Outpatient"}</td><td>{visit.intendedWard || "—"}</td><td>{visit.reason || visit.service || "—"}</td><td>{visit.status || visit.paymentStatus || "—"}</td><td>{visit.date}</td></tr>) : <tr><td colSpan="8">Babu visit history a Records Unit tukuna.</td></tr>}</tbody>
+      <div className="table-scroll"><table><thead><tr><th>Visit No.</th><th>Patient</th><th>Card</th><th>Type</th><th>Ward / Bed</th><th>Caregiver</th><th>Reason</th><th>Status</th><th>Date</th></tr></thead>
+        <tbody>{recordsVisits.length ? recordsVisits.map((visit) => <tr key={visit.id}><td>{visit.visitNo}</td><td>{visit.patientName}</td><td>{visit.card || "—"}</td><td>{visit.visitType || "Outpatient"}</td><td>{visit.visitType === "Inpatient" ? `${visit.intendedWard || "—"} / ${visit.bed || "—"}` : "—"}</td><td>{visit.caregiverName || "—"}</td><td>{visit.reason || visit.service || "—"}</td><td>{visit.status || visit.paymentStatus || "—"}</td><td>{visit.date}</td></tr>) : <tr><td colSpan="9">Babu visit history a Records Unit tukuna.</td></tr>}</tbody>
       </table></div>
     </div>
   );
@@ -4615,11 +4632,46 @@ function OutpatientPage({ patients = [], visits = [], setVisits, transactions = 
     "Family Planning Unit":["Counselling","Contraceptive Service","Implant","IUCD","Injectable","Other"],
     "Adolescent Unit":["Adolescent Counselling","Health Education","Follow-up","Mental Wellbeing Check","Other"]
   };
-  const services=serviceCatalog[department]||["Other"];
-  const [name,setName]=useState(""); const [phone,setPhone]=useState(""); const [service,setService]=useState(services[0]||"Other"); const [amount,setAmount]=useState(0); const [paymentStatus,setPaymentStatus]=useState("Pending");
-  const save=()=>{ if(!department||department==="General Cashier") return showMessage?.("Outpatient yana aiki ne na department na staff."); if(!name.trim()||!service) return showMessage?.("Cika sunan patient da service."); const visitNo=`OP-${Date.now()}`; const visit={id:Date.now(),visitNo,patientName:name.trim(),phone,department,service,amount:Number(amount||0),paymentStatus,paymentMethod:paymentStatus==="FREE"?"FREE":"Cash",date:new Date().toLocaleString(),createdBy:currentUser?.name||"System"}; setVisits(prev=>[visit,...prev]); if(Number(amount||0)>0){setTransactions(prev=>[{id:`TRX-${Date.now()}`,transactionNo:`TRX-${Date.now()}`,department,patientName:name.trim(),card:"OUTPATIENT",service,amount:Number(amount||0),paymentMethod:paymentStatus==="FREE"?"FREE":"Cash",paymentStatus,cashier:currentUser?.name||department,date:new Date().toLocaleString()},...prev]);} logAudit?.("Outpatient Visit",department,`${visitNo} — ${service}`); showMessage?.(`Outpatient ${visitNo} an ajiye a ${department}.`); setName("");setPhone("");setAmount(0);setPaymentStatus("Pending");setService(services[0]||"Other"); };
-  const ownVisits=visits.filter(v=>v.department===department);
-  return <div><PageHeader title="Outpatient Services" subtitle={`Ayyukan outpatient na ${department} kawai`} icon="O"/><div className="card"><h2>New Outpatient Visit</h2><div className="form-grid"><FormField label="Patient Name"><input value={name} onChange={e=>setName(e.target.value)} placeholder="Patient name"/></FormField><FormField label="Phone"><input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Phone number"/></FormField><FormField label="Department"><input value={department} readOnly /></FormField><FormField label="Service"><select value={service} onChange={e=>setService(e.target.value)}>{services.map(x=><option key={x}>{x}</option>)}</select></FormField><FormField label="Amount"><input type="number" min="0" value={amount} onChange={e=>setAmount(e.target.value)}/></FormField><FormField label="Payment Status"><select value={paymentStatus} onChange={e=>setPaymentStatus(e.target.value)}><option>Pending</option><option>Paid</option><option>FREE</option></select></FormField></div><button className="button primary" onClick={save}>Create Outpatient Visit</button></div><div className="card"><h2>Outpatient History — {department}</h2><div className="table-scroll"><table><thead><tr><th>Visit #</th><th>Patient</th><th>Department</th><th>Service</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>{ownVisits.length?ownVisits.map(v=><tr key={v.id}><td>{v.visitNo}</td><td>{v.patientName}</td><td>{v.department}</td><td>{v.service}</td><td>₦{Number(v.amount||0).toLocaleString()}</td><td>{v.paymentStatus}</td><td>{v.date}</td></tr>):<tr><td colSpan="7">No outpatient visit in this department.</td></tr>}</tbody></table></div></div></div>;
+  const services = serviceCatalog[department] || ["Other"];
+  const [patientSearch, setPatientSearch] = useState("");
+  const [selectedPatientId, setSelectedPatientId] = useState("");
+  const [service, setService] = useState(services[0] || "Other");
+  const [amount, setAmount] = useState(0);
+  const [paymentStatus, setPaymentStatus] = useState("Pending");
+  const selectedPatient = patients.find(p => String(p.id) === String(selectedPatientId));
+  const filteredPatients = patients.filter(p => {
+    const q = patientSearch.trim().toLowerCase();
+    return q && [p.name,p.card,p.phone,p.phoneNumber].some(v => String(v || "").toLowerCase().includes(q));
+  }).slice(0, 10);
+  const save = () => {
+    if (!department || department === "General Cashier") return showMessage?.("Outpatient yana aiki ne na department na staff.");
+    if (!selectedPatient) return showMessage?.("Nemo patient da ICT ya riga ya yi wa registration, sannan ka zaɓe shi.");
+    if (!service) return showMessage?.("Zaɓi service.");
+    const now = new Date();
+    const visitNo = `OP-${now.getTime()}`;
+    const visit = { id: now.getTime(), visitNo, patientId: selectedPatient.id, patientName: selectedPatient.name, card: selectedPatient.card || "", phone: selectedPatient.phone || selectedPatient.phoneNumber || "", department, service, amount: Number(amount || 0), paymentStatus, paymentMethod: paymentStatus === "FREE" ? "FREE" : "Cash", date: now.toLocaleString(), createdBy: currentUser?.name || "System", visitType: "Outpatient" };
+    setVisits(prev => [visit, ...prev]);
+    if (Number(amount || 0) > 0 && paymentStatus !== "FREE") setTransactions(prev => [{ id: `TRX-${now.getTime()}`, transactionNo: `TRX-${now.getTime()}`, department, patientId: selectedPatient.id, patientName: selectedPatient.name, card: selectedPatient.card || "", service, amount: Number(amount || 0), paymentMethod: "Cash", paymentStatus, cashier: currentUser?.name || department, date: now.toLocaleString(), visitNo }, ...prev]);
+    logAudit?.("Outpatient Visit", department, `${visitNo} — ${selectedPatient.name} — ${service}`);
+    showMessage?.(`Outpatient ${visitNo} na ${selectedPatient.name} an ajiye a ${department}.`);
+    setPatientSearch(""); setSelectedPatientId(""); setAmount(0); setPaymentStatus("Pending"); setService(services[0] || "Other");
+  };
+  const ownVisits = visits.filter(v => v.department === department);
+  return <div><PageHeader title="Outpatient Services" subtitle={`Ayyukan outpatient na ${department} kawai`} icon="O"/>
+    <div className="card"><h2>New Outpatient Visit</h2><p className="muted">Zaɓi mara lafiya da ICT ya riga ya ba Patient/Card Number. Wannan sashen ba ya ƙirƙirar sabon patient.</p>
+      <div className="form-grid">
+        <FormField label="Search ICT-Registered Patient by Name, Card or Phone"><input value={patientSearch} onChange={e=>{setPatientSearch(e.target.value);setSelectedPatientId("");}} placeholder="Name / BZ-P001 / Phone"/></FormField>
+        <FormField label="Department"><input value={department} readOnly/></FormField>
+        <FormField label="Service"><select value={service} onChange={e=>setService(e.target.value)}>{services.map(x=><option key={x}>{x}</option>)}</select></FormField>
+        <FormField label="Amount (₦)"><input type="number" min="0" value={amount} onChange={e=>setAmount(e.target.value)}/></FormField>
+        <FormField label="Payment Status"><select value={paymentStatus} onChange={e=>setPaymentStatus(e.target.value)}><option>Pending</option><option>Paid</option><option>FREE</option></select></FormField>
+      </div>
+      {patientSearch.trim() && !selectedPatient && <div className="search-results">{filteredPatients.length ? filteredPatients.map(p=><button key={p.id} type="button" className="result-item" onClick={()=>{setSelectedPatientId(String(p.id));setPatientSearch(`${p.card || ""} — ${p.name}`);}}>{p.card || "No Card"} — {p.name} — {p.phone || p.phoneNumber || "No phone"}</button>) : <p className="muted">Ba a sami patient ba. Da fatan ICT ya fara rajistar mara lafiya.</p>}</div>}
+      {selectedPatient && <div className="selected-patient"><strong>{selectedPatient.name}</strong> — {selectedPatient.card || "No Card"} — {selectedPatient.phone || selectedPatient.phoneNumber || "No phone"} <button className="small-button" onClick={()=>{setSelectedPatientId("");setPatientSearch("");}}>Change</button></div>}
+      <button className="button primary" onClick={save}>Create Outpatient Visit</button>
+    </div>
+    <div className="card"><h2>Outpatient History — {department}</h2><div className="table-scroll"><table><thead><tr><th>Visit #</th><th>Patient</th><th>Card</th><th>Department</th><th>Service</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>{ownVisits.length?ownVisits.map(v=><tr key={v.id}><td>{v.visitNo}</td><td>{v.patientName}</td><td>{v.card || "—"}</td><td>{v.department}</td><td>{v.service}</td><td>₦{Number(v.amount||0).toLocaleString()}</td><td>{v.paymentStatus}</td><td>{v.date}</td></tr>):<tr><td colSpan="8">No outpatient visit in this department.</td></tr>}</tbody></table></div></div>
+  </div>;
 }
 
 function ReceptionPage({ queue = [], setQueue, currentUser, showMessage }) {
@@ -4698,6 +4750,7 @@ function ConsultantPage({
   const [selectedUltrasound, setSelectedUltrasound] = useState("");
   const [ultrasoundNotes, setUltrasoundNotes] = useState("");
   const [admissionWard, setAdmissionWard] = useState("Male Ward");
+  const [admissionBed, setAdmissionBed] = useState("");
 
   const medicines = [
     "Paracetamol 500mg",
@@ -4766,6 +4819,7 @@ function ConsultantPage({
     setSelectedPatient(patient);
     setSearch(getPatientName(patient));
     setAdmissionWard(patient.admissionWard || patient.admission?.ward || "Male Ward");
+    setAdmissionBed(patient.admissionBed || patient.admission?.bed || "");
     setConsultationNote(patient.consultation?.notes || "");
     setDiagnosis(patient.consultation?.diagnosis || "");
     setSelectedTests([]);
@@ -4815,10 +4869,12 @@ function ConsultantPage({
     if (!consultationNote.trim() && !diagnosis.trim()) {
       return showMessage?.("Da fatan za a rubuta consultation notes ko diagnosis kafin admission.");
     }
+    if (!admissionBed.trim()) return showMessage?.("Shigar da bed number da aka tabbatar yana available a ward kafin admission.");
     const now = new Date();
     const admission = {
       approved: true,
       ward: admissionWard,
+      bed: admissionBed.trim(),
       status: "Approved - Awaiting Records",
       approvedBy: "Consultant Room",
       approvedAt: now.toLocaleString(),
@@ -4827,11 +4883,11 @@ function ConsultantPage({
     };
     setPatients?.((previous) => previous.map((patient) =>
       String(patient.id) === String(selectedPatient.id)
-        ? { ...patient, admissionApproved: true, admissionWard, admissionStatus: admission.status, admissionApprovedAt: admission.approvedAt, admissionApprovedBy: admission.approvedBy, admission, status: "Awaiting Records" }
+        ? { ...patient, admissionApproved: true, admissionWard, admissionBed: admissionBed.trim(), admissionStatus: admission.status, admissionApprovedAt: admission.approvedAt, admissionApprovedBy: admission.approvedBy, admission, status: "Awaiting Records" }
         : patient
     ));
-    setSelectedPatient((previous) => previous ? { ...previous, admissionApproved: true, admissionWard, admissionStatus: admission.status, admissionApprovedAt: admission.approvedAt, admissionApprovedBy: admission.approvedBy, admission, status: "Awaiting Records" } : previous);
-    showMessage?.(`An amince da admission na ${getPatientName(selectedPatient)}. Yanzu Records Unit za ta iya kammala inpatient file.`);
+    setSelectedPatient((previous) => previous ? { ...previous, admissionApproved: true, admissionWard, admissionBed: admissionBed.trim(), admissionStatus: admission.status, admissionApprovedAt: admission.approvedAt, admissionApprovedBy: admission.approvedBy, admission, status: "Awaiting Records" } : previous);
+    showMessage?.(`An amince da admission na ${getPatientName(selectedPatient)} zuwa ${admissionWard}, Bed ${admissionBed}. Yanzu Records Unit za ta kammala inpatient file.`);
   };
 
   const sendToLaboratory = () => {
@@ -5104,12 +5160,15 @@ function ConsultantPage({
 
           <div className="panel" style={{ marginTop: 20 }}>
             <h2 style={{ marginTop: 0 }}>Inpatient Admission Decision</h2>
-            <p style={{ marginTop: 0, color: "#71808d" }}>Consultant ne kawai zai amince da admission. Bayan amincewa, mara lafiya zai bayyana a Records Unit domin a kammala inpatient file kafin ward ta ba shi gado.</p>
+            <p style={{ marginTop: 0, color: "#71808d" }}>Consultant ne kawai zai amince da admission. Dole ya tabbatar da ward da bed mai available; bayan haka patient zai bayyana a Records domin a cika sauran bayanansa.</p>
             <div className="form-grid">
               <FormField label="Ward Recommended by Consultant">
                 <select value={admissionWard} onChange={(e) => setAdmissionWard(e.target.value)}>
                   <option>Male Ward</option><option>Female Ward</option><option>Maternity Ward</option><option>Child Ward</option><option>Labour Room</option>
                 </select>
+              </FormField>
+              <FormField label="Bed Number (confirm available bed in selected ward)">
+                <input value={admissionBed} onChange={(e) => setAdmissionBed(e.target.value)} placeholder="e.g. M-01, F-01, MT-01, C-01, LR-01" />
               </FormField>
               <FormField label="Admission Status">
                 <input value={selectedPatient.admissionStatus || (selectedPatient.admissionApproved ? "Approved - Awaiting Records" : "Not Approved")} readOnly />
