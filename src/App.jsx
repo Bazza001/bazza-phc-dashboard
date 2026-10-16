@@ -976,6 +976,8 @@ function App() {
               setVisits={setOutpatientVisits}
               transactions={transactions}
               setTransactions={setTransactions}
+              labRequests={labRequests}
+              setLabRequests={setLabRequests}
               currentUser={currentUser}
               showMessage={showMessage}
               logAudit={logAudit}
@@ -4455,7 +4457,105 @@ function SMSNotificationsPage({ patients = [], messages = [], setMessages, curre
   return <div><PageHeader title="SMS / Notifications" subtitle="Patient messages using phone number saved by ICT" icon="✉" /><div className="card"><h2>Send Patient SMS</h2><div className="form-grid"><FormField label="Patient"><select value={card} onChange={e=>setCard(e.target.value)}><option value="">Select patient</option>{patients.map(p=><option key={p.id} value={p.card}>{p.name} — {p.card} — {p.phone || p.phoneNumber || "No phone"}</option>)}</select></FormField><FormField label="Template"><select value={template} onChange={e=>setTemplate(e.target.value)}>{templates.map(t=><option key={t}>{t}</option>)}</select></FormField><FormField label="Additional Message"><textarea rows="4" value={extra} onChange={e=>setExtra(e.target.value)} placeholder="Additional message..." /></FormField></div><button className="button primary" onClick={send}>Prepare SMS</button></div><div className="card"><h2>SMS History</h2><div className="table-scroll"><table><thead><tr><th>Patient</th><th>Phone</th><th>Template</th><th>Message</th><th>Date</th><th>Sender</th></tr></thead><tbody>{messages.length ? messages.map(m=><tr key={m.id}><td>{m.patientName}<br/>{m.card}</td><td>{m.phone}</td><td>{m.template}</td><td>{m.message || "—"}</td><td>{m.date}</td><td>{m.sender}</td></tr>) : <tr><td colSpan="6">No SMS history.</td></tr>}</tbody></table></div></div></div>;
 }
 
-function OutpatientPage({ patients = [], visits = [], setVisits, transactions = [], setTransactions, currentUser, showMessage, logAudit }) {
+function LaboratoryOutpatientPage({ patients = [], requests = [], setRequests, transactions = [], setTransactions, currentUser, showMessage, logAudit }) {
+  const tests = {
+    "Malaria Test": 1500,
+    "Full Blood Count (FBC)": 3000,
+    "Urinalysis": 1000,
+    "Blood Group": 1000,
+    "Widal Test": 2000,
+    "Pregnancy Test": 1000,
+    "Other": 0,
+  };
+  const [patientSearch, setPatientSearch] = useState("");
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [test, setTest] = useState("Malaria Test");
+  const [amount, setAmount] = useState(1500);
+  const [paymentStatus, setPaymentStatus] = useState("Pending");
+  const [paymentMethod, setPaymentMethod] = useState("Cash");
+  const [selectedRequestId, setSelectedRequestId] = useState("");
+  const [resultText, setResultText] = useState("");
+  const [otherTest, setOtherTest] = useState("");
+  const filteredPatients = patients.filter((p) => {
+    const q = patientSearch.trim().toLowerCase();
+    return q && [p.name, p.card, p.cardNumber, p.phone, p.phoneNumber].some((v) => String(v || "").toLowerCase().includes(q));
+  }).slice(0, 10);
+  const selectedRequest = requests.find((r) => String(r.id) === String(selectedRequestId));
+  const isConsultantReferral = (r) => r?.requestType === "Consultant Referral" || Boolean(r?.consultationNote) || (r?.consultant && r.consultant !== "Direct Outpatient");
+  const directRequests = requests.filter((r) => !isConsultantReferral(r));
+  const referralRequests = requests.filter(isConsultantReferral);
+  const createDirectRequest = () => {
+    if (!selectedPatient) return showMessage?.("Search for and select a patient registered by ICT.");
+    const finalTest = test === "Other" ? otherTest.trim() : test;
+    if (!finalTest) return showMessage?.("Enter the laboratory test required.");
+    const now = new Date().toLocaleString();
+    const request = {
+      id: `LAB-OP-${Date.now()}`,
+      patientId: selectedPatient.id,
+      card: selectedPatient.card || selectedPatient.cardNumber || "",
+      patientName: selectedPatient.name || "",
+      patientPhone: selectedPatient.phone || selectedPatient.phoneNumber || "",
+      test: finalTest,
+      requestType: "Direct Outpatient",
+      consultant: "Direct Outpatient",
+      status: "New",
+      paymentStatus,
+      paymentMethod,
+      amount: Number(amount || tests[test] || 0),
+      result: "",
+      date: now,
+      createdBy: currentUser?.name || "Laboratory Staff",
+    };
+    setRequests?.((prev) => [request, ...prev]);
+    if (setTransactions && Number(request.amount) > 0 && paymentStatus !== "Free") {
+      setTransactions((prev) => [{ id: `TRX-${Date.now()}`, transactionNo: `TRX-${Date.now()}`, department: "Laboratory Unit", patientId: selectedPatient.id, card: request.card, patientName: request.patientName, service: finalTest, amount: request.amount, paymentMethod, paymentStatus, cashier: currentUser?.name || "Laboratory Staff", date: now }, ...prev]);
+    }
+    logAudit?.("Direct Outpatient Lab Request", "Laboratory Unit", `${request.patientName} — ${finalTest}`);
+    showMessage?.("Direct outpatient laboratory request saved. Enter the result when testing is complete.");
+    setPatientSearch(""); setSelectedPatient(null); setTest("Malaria Test"); setAmount(1500); setOtherTest(""); setPaymentStatus("Pending"); setPaymentMethod("Cash");
+  };
+  const openRequest = (request) => { setSelectedRequestId(String(request.id)); setResultText(request.result || ""); };
+  const saveResult = (sendConsultant = false) => {
+    if (!selectedRequest) return showMessage?.("Select a laboratory request first.");
+    if (!resultText.trim()) return showMessage?.("Enter the laboratory result before saving.");
+    const referral = isConsultantReferral(selectedRequest);
+    const status = referral && sendConsultant ? "Sent to Consultant" : "Result Ready";
+    const updated = { ...selectedRequest, result: resultText.trim(), status, resultDate: new Date().toLocaleString(), resultBy: currentUser?.name || "Laboratory Staff" };
+    setRequests?.((prev) => prev.map((r) => String(r.id) === String(selectedRequest.id) ? updated : r));
+    logAudit?.("Laboratory Result Saved", "Laboratory Unit", `${updated.patientName} — ${updated.test} — ${status}`);
+    showMessage?.(referral && sendConsultant ? "Result saved and sent to Consultant Room." : "Laboratory result saved and ready to print.");
+  };
+  const printResult = (request) => {
+    if (!request?.result) return showMessage?.("Save the laboratory result before printing.");
+    const printWindow = window.open("", "_blank", "width=800,height=900");
+    if (!printWindow) return showMessage?.("Please allow pop-ups to print the laboratory result.");
+    const esc = (v) => String(v ?? "—").replace(/[&<>\"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[c]));
+    printWindow.document.write(`<!doctype html><html><head><title>Laboratory Result</title><style>body{font-family:Arial,sans-serif;padding:32px;color:#111}.head{text-align:center;border-bottom:2px solid #222;padding-bottom:14px;margin-bottom:20px}h1{font-size:22px;margin:0 0 6px}.sub{font-size:13px}.row{display:flex;gap:12px;padding:9px 0;border-bottom:1px solid #ddd}.label{font-weight:bold;width:160px}.result{white-space:pre-wrap;border:1px solid #aaa;padding:16px;min-height:100px;margin-top:8px}.foot{margin-top:36px;display:flex;justify-content:space-between;font-size:12px}@media print{button{display:none}}</style></head><body><div class="head"><h1>BAZZA PRIMARY HEALTH CARE, SOKOTO</h1><div class="sub">LABORATORY RESULT REPORT</div></div><div class="row"><span class="label">Patient Name</span><span>${esc(request.patientName)}</span></div><div class="row"><span class="label">Patient/Card Number</span><span>${esc(request.card)}</span></div><div class="row"><span class="label">Test</span><span>${esc(request.test)}</span></div><div class="row"><span class="label">Request Type</span><span>${esc(isConsultantReferral(request) ? "Consultant Referral" : "Direct Outpatient")}</span></div><div class="row"><span class="label">Consultant / Referrer</span><span>${esc(isConsultantReferral(request) ? (request.consultant || "Consultant Room") : "Not referred")}</span></div><div class="row"><span class="label">Date</span><span>${esc(request.resultDate || request.date)}</span></div><h3>Laboratory Findings / Result</h3><div class="result">${esc(request.result)}</div><div class="foot"><span>Result entered by: ${esc(request.resultBy || currentUser?.name || "Laboratory Staff")}</span><span>Authorized signature: __________________</span></div><script>window.onload=()=>window.print()</script></body></html>`);
+    printWindow.document.close();
+  };
+  return <div>
+    <PageHeader title="Laboratory Outpatient Services" subtitle="Record direct outpatient tests, process Consultant referrals, save results and print reports." icon="O" />
+    <div className="card"><h2>Direct Outpatient — New Laboratory Test</h2><p className="muted">For patients who come directly to the Laboratory. Select an existing ICT patient record. This page does not create a new Patient/Card Number.</p>
+      <div className="form-grid"><FormField label="Search Patient by Name, Card or Phone"><input value={patientSearch} onChange={(e)=>{setPatientSearch(e.target.value);setSelectedPatient(null);}} placeholder="Name / Card Number / Phone" /></FormField>
+      <FormField label="Laboratory Test"><select value={test} onChange={(e)=>{setTest(e.target.value);setAmount(tests[e.target.value] || 0);}}>{Object.keys(tests).map((t)=><option key={t}>{t}</option>)}</select></FormField>
+      {test === "Other" && <FormField label="Specify Test"><input value={otherTest} onChange={(e)=>setOtherTest(e.target.value)} placeholder="Enter test name" /></FormField>}
+      <FormField label="Amount (₦)"><input type="number" min="0" value={amount} onChange={(e)=>setAmount(e.target.value)} /></FormField>
+      <FormField label="Payment Status"><select value={paymentStatus} onChange={(e)=>setPaymentStatus(e.target.value)}><option>Pending</option><option>Paid</option><option>Free</option></select></FormField>
+      <FormField label="Payment Method"><select value={paymentMethod} onChange={(e)=>setPaymentMethod(e.target.value)}><option>Cash</option><option>POS</option><option>Bank Transfer</option></select></FormField></div>
+      {patientSearch.trim() && !selectedPatient && <div className="search-results">{filteredPatients.length ? filteredPatients.map((p)=><button type="button" key={p.id} className="result-item" onClick={()=>{setSelectedPatient(p);setPatientSearch(`${p.card || p.cardNumber || ""} — ${p.name}`);}}>{p.card || p.cardNumber || "No Card"} — {p.name} — {p.phone || p.phoneNumber || "No phone"}</button>) : <p className="muted">Patient not found. Please ask ICT to register the patient.</p>}</div>}
+      {selectedPatient && <div className="selected-patient"><strong>{selectedPatient.name}</strong> — {selectedPatient.card || selectedPatient.cardNumber || "No Card"} <button type="button" className="small-button" onClick={()=>{setSelectedPatient(null);setPatientSearch("");}}>Change</button></div>}
+      <button className="button primary" onClick={createDirectRequest}>Save Direct Outpatient Test</button>
+    </div>
+    <div className="card"><h2>Consultant Referrals</h2><p className="muted">These patients were sent by the Consultant. Complete the requested test, save the result, send it back to the Consultant, and print a report when required.</p><div className="table-scroll"><table><thead><tr><th>Patient</th><th>Card</th><th>Test</th><th>Consultant Notes</th><th>Status</th><th>Date</th><th>Action</th></tr></thead><tbody>{referralRequests.length ? referralRequests.map((r)=><tr key={r.id}><td>{r.patientName}</td><td>{r.card || "—"}</td><td>{r.test || r.testName}</td><td>{r.consultationNote || r.notes || "—"}</td><td>{r.status}</td><td>{r.date || "—"}</td><td><button className="small-button" onClick={()=>openRequest(r)}>Open Result</button>{r.result && <> <button className="small-button" onClick={()=>printResult(r)}>Print Result</button></>}</td></tr>) : <tr><td colSpan="7">No Consultant referrals are waiting for the Laboratory.</td></tr>}</tbody></table></div></div>
+    <div className="card"><h2>Direct Outpatient Laboratory History</h2><div className="table-scroll"><table><thead><tr><th>Patient</th><th>Card</th><th>Test</th><th>Payment</th><th>Status</th><th>Result</th><th>Date</th><th>Action</th></tr></thead><tbody>{directRequests.length ? directRequests.map((r)=><tr key={r.id}><td>{r.patientName}</td><td>{r.card || "—"}</td><td>{r.test || r.testName}</td><td>{r.paymentStatus || "—"}</td><td>{r.status}</td><td>{r.result ? "Saved" : "Pending"}</td><td>{r.date || "—"}</td><td><button className="small-button" onClick={()=>openRequest(r)}>Open Result</button>{r.result && <> <button className="small-button" onClick={()=>printResult(r)}>Print Result</button></>}</td></tr>) : <tr><td colSpan="8">No direct outpatient laboratory tests have been recorded yet.</td></tr>}</tbody></table></div></div>
+    {selectedRequest && <div className="card"><div className="page-head"><div><h2>Enter Laboratory Result</h2><p>{selectedRequest.patientName} • {selectedRequest.card || "No Card"} • {selectedRequest.test || selectedRequest.testName}</p></div><button className="small-button" onClick={()=>{setSelectedRequestId("");setResultText("");}}>Close</button></div><div className="selected-patient"><strong>Request type:</strong> {isConsultantReferral(selectedRequest) ? "Consultant Referral — result must be sent to Consultant" : "Direct Outpatient — result can be given to the patient"}</div><FormField label="Laboratory Result / Findings"><textarea rows="6" value={resultText} onChange={(e)=>setResultText(e.target.value)} placeholder="Enter the laboratory findings and result..." /></FormField><div className="button-row"><button className="button primary" onClick={()=>saveResult(false)}>Save Result</button>{isConsultantReferral(selectedRequest) && <button className="button secondary" onClick={()=>saveResult(true)}>Save & Send to Consultant</button>}<button className="button secondary" onClick={()=>printResult({...selectedRequest,result:resultText.trim(),resultDate:selectedRequest.resultDate || new Date().toLocaleString(),resultBy:currentUser?.name || "Laboratory Staff"})}>Print Result</button></div></div>}
+  </div>;
+}
+
+function OutpatientPage({ patients = [], visits = [], setVisits, transactions = [], setTransactions, labRequests = [], setLabRequests, currentUser, showMessage, logAudit }) {
+  if (currentUser?.department === "Laboratory Unit") {
+    return <LaboratoryOutpatientPage patients={patients} requests={labRequests} setRequests={setLabRequests} transactions={transactions} setTransactions={setTransactions} currentUser={currentUser} showMessage={showMessage} logAudit={logAudit} />;
+  }
   const department = currentUser?.department || "";
   const serviceCatalog = {
     "Records Unit":["Card Registration","File Opening","Card + File"],
